@@ -1161,7 +1161,7 @@ $('#drawer').addEventListener('click', e=>{
 // ---------- estimate editor ----------
 let EI=null, E=null, CALC={type:'swing'};
 let EST_RO=false, EST_BD=false;
-function openEst(i){ SEC_OPEN={}; MAT_OPEN=new Set(); EI=i; const it=draft.items[i]; EST_RO = isLocked() || !canEditDraft(); E=structuredClone(it.estimate || newEstimate(sheetFor(it.description))); E.sheet=E.sheet||'WC'; CALC={type:(SHEET_CALCS[E.sheet]||[]).includes(CALC.type)?CALC.type:calcFor(E.sheet), gd:E.gdTasks?structuredClone(E.gdTasks):undefined, rent:CALC.rent, fuel:CALC.fuel, dep:CALC.dep, mix:CALC.mix, open:['PW','GD'].includes(E.sheet)}; renderEst(); $('#est').hidden=false; }
+function openEst(i){ SEC_OPEN={}; MAT_OPEN=new Set(); EI=i; const it=draft.items[i]; EST_RO = isLocked() || !canEditDraft(); E=structuredClone(it.estimate || newEstimate(sheetFor(it.description))); E.sheet=E.sheet||'WC'; CALC={type:(SHEET_CALCS[E.sheet]||[]).includes(CALC.type)?CALC.type:calcFor(E.sheet), gd:E.gdTasks?structuredClone(E.gdTasks):undefined, rent:CALC.rent, fuel:CALC.fuel, dep:CALC.dep, mix:CALC.mix, open:['PW','GD'].includes(E.sheet)}; renderEst(); const sc=$('#est .estbody'); if(sc) sc.scrollTop=0; $('#est').hidden=false; }
 function closeEst(){ $('#est').hidden=true; EI=null; E=null; }
 const SECS = [['materials','Materials','Markup on cost; sales tax applies to material cost'],['rentals','Subcontractors / rentals','Billed to the client with markup (pass-through)'],['equipment','PFBS equipment','Your own equipment, e.g. depreciation per use'],['misc','Miscellaneous','Shipping, fuel, other costs']];
 let SEC_OPEN={};
@@ -1180,7 +1180,13 @@ function rowsHTML(sec){
     <td class="r num" id="et-${sec}-${i}"></td><td><button type="button" class="x" data-erm="${sec}.${i}" aria-label="Remove row">×</button></td></tr>
     ${det&&open?`<tr class="matdet"><td colspan="6"><div class="matgrid"><label class="f">Supplier<input data-e="${sec}.${i}.supplier" value="${esc(r.supplier||'')}" placeholder="e.g. Home Depot, Grainger"></label><label class="f">Part / SKU #<input data-e="${sec}.${i}.sku" value="${esc(r.sku||'')}"></label><label class="f">Link<input data-e="${sec}.${i}.link" type="url" value="${esc(r.link||'')}" placeholder="https://…"></label>${safeLink(r.link)?`<a class="btn ghost small" href="${esc(safeLink(r.link))}" target="_blank" rel="noopener" style="align-self:end">Open ↗</a>`:''}</div></td></tr>`:''}`; }).join('');
 }
-function renderEst(){
+function renderEst(){ // keep the scroll position when the estimate redraws
+  const sc=$('#est .estbody'), top=sc?sc.scrollTop:0, af=document.activeElement?.dataset?.e;
+  renderEstInner();
+  const sc2=$('#est .estbody'); if(sc2) sc2.scrollTop=top;
+  if(af){ const el=document.querySelector(`#est [data-e="${af}"]`); if(el) el.focus({preventScroll:true}); }
+}
+function renderEstInner(){
   const it=draft.items[EI], roles=S.est.labor.map(r=>r[0]);
   $('#est').innerHTML = `
   <div class="esthead"><div><b id="estTitle">Estimate</b><div class="sub">${esc(it.description||'Line '+(EI+1))} · per visit</div></div>
@@ -1430,7 +1436,7 @@ $('#est').addEventListener('click', e=>{
     else E[sec].push({desc:'',unit:'',qty:1,markup: sec==='materials'?S.est.matMarkup : sec==='rentals'?S.est.rentMarkup : sec==='equipment'?S.est.equipMarkup : 0});
     renderEst(); return; }
   if(t.dataset.erm){ const [sec,i]=t.dataset.erm.split('.'); E[sec].splice(+i,1); renderEst(); return; }
-  if(t.dataset.matdet!=null){ const i=+t.dataset.matdet; MAT_OPEN.has(i)?MAT_OPEN.delete(i):MAT_OPEN.add(i); SEC_OPEN.materials=true; renderEst(); return; }
+  if(t.dataset.matdet!=null){ const i=+t.dataset.matdet, opening=!MAT_OPEN.has(i); opening?MAT_OPEN.add(i):MAT_OPEN.delete(i); SEC_OPEN.materials=true; renderEst(); if(opening) document.querySelector(`#est [data-e="materials.${i}.supplier"]`)?.focus({preventScroll:true}); return; }
   if(t.id==='gdAdd'){ CALC.gd.push({task:'',qty:1,hrs:'',parts:''}); CALC.open=true; renderEst(); return; }
   if(t.dataset.gdrm!=null){ CALC.gd.splice(+t.dataset.gdrm,1); if(!CALC.gd.length) CALC.gd.push({task:'',qty:1,hrs:'',parts:''}); CALC.open=true; renderEst(); return; }
   if(t.id==='caAdd'){ CALC.areas.push({name:'',l:'',w:''}); CALC.open=true; renderEst(); return; }
