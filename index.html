@@ -183,6 +183,10 @@ label.f.inline{display:flex;align-items:center;gap:6px}label.f.inline input{widt
 .fubox{border:1px solid var(--line);border-radius:var(--radius);padding:10px;margin:0 0 10px;background:var(--bg)}
 .rephtml{overflow-x:auto}
 @media (prefers-color-scheme: dark){ .rephtml{background:#fff;color:#1A1F33;padding:12px;border-radius:6px} }
+.phgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.phcard{border:1px solid var(--line);border-radius:var(--radius);padding:8px;display:grid;gap:6px;background:var(--surface)}
+.phcard img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px;background:var(--hover)}
+.phcanvas{width:100%;height:auto;touch-action:none;cursor:crosshair;border-radius:4px;display:block}
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
@@ -286,6 +290,7 @@ td input,td select{padding:5px 8px}
 <div class="toast" id="toast" role="status" hidden></div>
 <div class="estwrap" id="est" hidden role="dialog" aria-modal="true" aria-labelledby="estTitle"></div>
 <div class="estwrap" id="rep" hidden role="dialog" aria-modal="true" aria-label="Monthly report"></div>
+<div class="estwrap" id="pho" hidden role="dialog" aria-modal="true" aria-label="Photo"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -312,11 +317,11 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos'};
 const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -627,6 +632,7 @@ function drawDrawer(){
       <div id="calc1">${calc1(p)}</div>
       <label class="f">Proposal clarifications <span class="note" style="margin:0;font-weight:400">one per line</span><textarea data-k="clarifications" id="f-clarifications" rows="3" ${dis} placeholder="Leave blank to use your standard clarifications">${esc(p.clarifications??'')}</textarea></label>
     </fieldset>
+    <fieldset><legend>Photos on the proposal</legend><div id="phBox">${photosHTML(p, ed)}</div></fieldset>
     <fieldset><legend>Lead</legend><div class="grid2">
       ${sel('Client type','clientType',S.clientTypes.map(c=>c[0]))}
       ${sel('Lead source','leadSource',S.leadSources)}
@@ -757,6 +763,72 @@ $('#drawer').addEventListener('change', e=>{
   if(t.dataset.lis!=null){ const li=draft.leadInfo||(draft.leadInfo={}); const set=new Set(li.services||[]); t.checked?set.add(t.dataset.lis):set.delete(t.dataset.lis); li.services=[...set]; t.closest('.chip')?.classList.toggle('on',t.checked); }
   if(t.dataset.li){ const li=draft.leadInfo||(draft.leadInfo={}); li[t.dataset.li]=t.value; }
 });
+
+// ---------- photos (stored in Supabase Storage, printed on the client PDF) ----------
+const PH_BUCKET='proposal-photos', PHURL={};
+function photosHTML(p, ed){
+  if(isNew) return '<div class="note" style="margin:0">Save the proposal first, then add site photos. They print on the client PDF after the scope.</div>';
+  const P2=p.photos||[];
+  setTimeout(loadThumbs,0);
+  return `${P2.length?`<div class="phgrid">${P2.map((ph,i)=>`<div class="phcard"><img data-ph="${i}" alt="${esc(ph.caption||'Site photo')}" ${PHURL[ph.path]?`src="${PHURL[ph.path]}"`:''}>
+      <input data-phc="${i}" value="${esc(ph.caption||'')}" placeholder="Caption (optional)" aria-label="Photo caption" ${ed?'':'disabled'}>
+      ${ed?`<div class="toolbar" style="margin:0;justify-content:space-between">${i>0?`<button type="button" class="btn ghost small" data-phup="${i}">Move up</button>`:'<span></span>'}<button type="button" class="btn ghost small" data-phdel="${i}">Remove</button></div>`:''}</div>`).join('')}</div>`:'<div class="note" style="margin:0 0 8px">No photos. Add a site photo and mark the work area; it prints on the client PDF.</div>'}
+    ${ed?`<label class="btn ghost small" style="display:inline-block;margin-top:8px">+ Add photo<input type="file" id="phFile" accept="image/*" hidden></label>`:''}`;
+}
+async function loadThumbs(){
+  for(const img of document.querySelectorAll('#phBox img[data-ph]')){ const ph=(draft?.photos||[])[+img.dataset.ph]; if(!ph) continue;
+    if(!PHURL[ph.path]){ const {data,error}=await sb.storage.from(PH_BUCKET).download(ph.path); if(error||!data) continue; PHURL[ph.path]=URL.createObjectURL(data); }
+    img.src=PHURL[ph.path]; }
+}
+async function savePhotos(){
+  const {error}=await sb.from('proposals').update({photos:draft.photos}).eq('num',draft.num);
+  if(error){ toast(/column|schema/i.test(error.message)?'Run database update 008 to turn on photos.':error.message); return false; }
+  const o=P.find(x=>x.num===draft.num); if(o) o.photos=structuredClone(draft.photos); return true;
+}
+let PH=null; // photo being marked up: {img, boxes, drag}
+function openPhotoEditor(file){
+  const url=URL.createObjectURL(file), im=new Image();
+  im.onload=()=>{ const max=1600, k=Math.min(1, max/Math.max(im.width,im.height)); const cv=document.createElement('canvas'); cv.width=Math.round(im.width*k); cv.height=Math.round(im.height*k); cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height); URL.revokeObjectURL(url);
+    PH={base:cv, boxes:[], drag:null}; renderPhotoEditor(); $('#pho').hidden=false; };
+  im.onerror=()=>toast('Could not open that image.'); im.src=url;
+}
+function renderPhotoEditor(){
+  $('#pho').innerHTML=`<div class="esthead"><div><b>Mark the work area</b><div class="sub">Drag on the photo to draw a red box. Draw as many as you need.</div></div><button class="btn ghost small" id="phCancel">Cancel</button></div>
+    <div class="estbody" style="display:block"><div class="card"><canvas id="phCanvas" class="phcanvas"></canvas>
+    <label class="f" style="margin-top:8px">Caption (optional)<input id="phCap" placeholder="e.g. Pressure wash area: lobby entry and sidewalk"></label>
+    <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="phUndo">Undo box</button><button type="button" class="btn ghost small" id="phClear">Clear boxes</button><span style="flex:1"></span><button type="button" class="btn" id="phSave">Add photo</button></div></div></div>`;
+  drawPhoto();
+}
+function drawPhoto(){ const cv=$('#phCanvas'); if(!cv||!PH) return; cv.width=PH.base.width; cv.height=PH.base.height; const g=cv.getContext('2d'); g.drawImage(PH.base,0,0);
+  g.strokeStyle='#E01E1E'; g.lineWidth=Math.max(4, cv.width/220); for(const b of [...PH.boxes, ...(PH.drag?[PH.drag]:[])]) g.strokeRect(b.x,b.y,b.w,b.h); }
+function phPoint(e){ const cv=$('#phCanvas'), r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*cv.width/r.width, y:(e.clientY-r.top)*cv.height/r.height}; }
+$('#pho').addEventListener('pointerdown', e=>{ if(e.target.id!=='phCanvas'||!PH) return; e.preventDefault(); e.target.setPointerCapture(e.pointerId); const p0=phPoint(e); PH.start=p0; PH.drag={x:p0.x,y:p0.y,w:0,h:0}; });
+$('#pho').addEventListener('pointermove', e=>{ if(!PH?.drag||e.target.id!=='phCanvas') return; const p1=phPoint(e), a=PH.start; PH.drag={x:Math.min(a.x,p1.x), y:Math.min(a.y,p1.y), w:Math.abs(p1.x-a.x), h:Math.abs(p1.y-a.y)}; drawPhoto(); });
+$('#pho').addEventListener('pointerup', e=>{ if(!PH?.drag) return; if(PH.drag.w>8&&PH.drag.h>8) PH.boxes.push(PH.drag); PH.drag=null; drawPhoto(); });
+$('#pho').addEventListener('click', async e=>{ const t=e.target.closest('button'); if(!t||!PH) return;
+  if(t.id==='phCancel'){ PH=null; $('#pho').hidden=true; }
+  if(t.id==='phUndo'){ PH.boxes.pop(); drawPhoto(); }
+  if(t.id==='phClear'){ PH.boxes=[]; drawPhoto(); }
+  if(t.id==='phSave'){ t.disabled=true; t.textContent='Uploading…'; drawPhoto();
+    const blob=await new Promise(r=>$('#phCanvas').toBlob(r,'image/jpeg',0.85)); const path=`${draft.num}/${Date.now()}.jpg`;
+    const {error}=await sb.storage.from(PH_BUCKET).upload(path, blob, {contentType:'image/jpeg'});
+    if(error){ t.disabled=false; t.textContent='Add photo'; toast(/bucket|not found/i.test(error.message)?'Run database update 008 to turn on photos.':error.message); return; }
+    PHURL[path]=URL.createObjectURL(blob); draft.photos=[...(draft.photos||[]), {path, caption:$('#phCap').value.trim()}];
+    if(await savePhotos()) toast('Photo added. It prints on the client PDF.');
+    PH=null; $('#pho').hidden=true; $('#phBox').innerHTML=photosHTML(draft, canEditDraft()); }
+});
+$('#drawer').addEventListener('change', async e=>{
+  if(e.target.id==='phFile' && e.target.files[0]){ openPhotoEditor(e.target.files[0]); e.target.value=''; }
+  if(e.target.dataset.phc!=null){ draft.photos[+e.target.dataset.phc].caption=e.target.value.trim(); savePhotos(); }
+});
+$('#drawer').addEventListener('click', async e=>{ const t=e.target.closest('button'); if(!t||!draft) return;
+  if(t.dataset.phdel!=null){ if(!t.dataset.armed){ t.dataset.armed='1'; t.textContent='Confirm remove'; return; } const i=+t.dataset.phdel, ph=draft.photos[i]; draft.photos.splice(i,1); if(await savePhotos()) sb.storage.from(PH_BUCKET).remove([ph.path]); $('#phBox').innerHTML=photosHTML(draft, canEditDraft()); }
+  if(t.dataset.phup!=null){ const i=+t.dataset.phup; [draft.photos[i-1],draft.photos[i]]=[draft.photos[i],draft.photos[i-1]]; await savePhotos(); $('#phBox').innerHTML=photosHTML(draft, canEditDraft()); }
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#pho').hidden){ e.stopImmediatePropagation(); PH=null; $('#pho').hidden=true; } }, true);
+async function photoData(path){ const {data,error}=await sb.storage.from(PH_BUCKET).download(path); if(error||!data) return null;
+  const url=await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(data); });
+  const dims=await new Promise(r=>{ const im=new Image(); im.onload=()=>r({w:im.width,h:im.height}); im.onerror=()=>r(null); im.src=url; }); return dims?{url,...dims}:null; }
 
 // ---------- follow-up email ----------
 function fuFallback(p){ const step=fuStep(p)||1, first=(p.contactName||'').trim().split(/\s+/)[0]||'there', place=p.property||p.client, scope=(p.items||[]).filter(i=>i.type!=='Add-on'&&i.description).slice(0,3).map(i=>i.description).join(', ')||'the work', sent=parse(p.dateSent)?.toLocaleDateString('en-US',{month:'long',day:'numeric'});
@@ -1359,6 +1431,17 @@ async function makePdf(p){
     clar.forEach((c,i)=>{ const ls=doc.splitTextToSize(`${i+1}. ${c}`,W); if(y+ls.length*10>740){ doc.addPage(); y=60; } doc.text(ls,L0,y); y+=ls.length*10+2; });
     y+=12;
   }
+  const photos=(p.photos||[]).filter(x=>x&&x.path);
+  if(photos.length){
+    let first=true;
+    for(const ph of photos){ const d=await photoData(ph.path); if(!d) continue;
+      const maxH=330, w=Math.min(W, d.w*(maxH/d.h)), h=w*d.h/d.w, cap=ph.caption?doc.splitTextToSize(ph.caption,W):[];
+      if(y+(first?14:0)+h+cap.length*10+10>740){ doc.addPage(); y=60; }
+      if(first){ doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text('SITE PHOTOS',L0,y); y+=8; first=false; }
+      doc.addImage(d.url,'JPEG',L0+(W-w)/2,y,w,h); y+=h+4;
+      if(cap.length){ doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(60); doc.text(cap,L0,y+8); y+=cap.length*10+4; }
+      y+=12; doc.setTextColor(0); }
+  }
   if(y>720){ doc.addPage(); y=60; }
   doc.setDrawColor(190); doc.setLineWidth(0.7); doc.rect(L0,y,W,22); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
   doc.text('WINDOW WASHING  •  PRESSURE WASHING  •  SOLAR PANEL CLEANING  •  JANITORIAL SERVICES  •  GATES & DOORS',306,y+14,{align:'center'});
@@ -1406,36 +1489,55 @@ async function makeEstimatePdf(p, pairs){
   let y=0;
   pairs.forEach(([it,e],k)=>{
     if(k>0) doc.addPage(); head(); y=84;
-    const c=estCalc(e), price=num(it.amount);
+    const c=estCalc(e), price=num(it.amount)??c.total, lo=laborOnly(e), perUnit=!!(SHEETS[e.sheet]?.unit && (e.units||[]).length);
+    const mcost=lo?c.laborCost:c.cost, profit=price-mcost, m=price?profit/price:0, tgt=num(S.est.targetMargin)||0.45, floor=S.marginFloor;
     doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(`${p.num||'New proposal'}${(p.rev||1)>1?' Rev '+p.rev:''}  ·  ${p.client||''}`,L0,y); y+=13;
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-    [`Property: ${p.property||'—'}`,`Line: ${it.description||'—'}${it.frequency?'  ·  '+it.frequency:''}${num(it.qty)>1?'  ·  qty '+it.qty:''}`,`Estimator: ${p.sentBy||'—'}  ·  Printed ${fmtLong(iso(today()))}  ·  Amounts are per visit`].forEach(t=>{ doc.text(t,L0,y); y+=11; });
-    y+=6;
+    [`Property: ${p.property||'—'}  ·  Line: ${it.description||'—'}${it.frequency?'  ·  '+it.frequency:''}${num(it.qty)>1?'  ·  qty '+it.qty:''}`,`Estimator: ${p.sentBy||'—'}  ·  Printed ${fmtLong(iso(today()))}  ·  Amounts are per visit${e.sheet&&e.sheet!=='WC'?'  ·  '+e.sheet+' bid sheet':''}`].forEach(t=>{ doc.text(t,L0,y); y+=11; });
+    y+=4;
+    // key numbers
+    const tiles=[['PRICE',usd(price)],[lo?'WAGES':'JOB COST',usd(mcost)],[lo?'PROFIT (PRICE − WAGES)':'GROSS PROFIT',usd(profit)],['MARGIN',pct(m)]];
+    const good=[46,125,79], warn=[138,97,0], bad=[179,38,30], mc = m>=tgt?good : m>=floor?warn : bad, mbg = m>=tgt?[227,242,232] : m>=floor?[255,241,204] : [251,228,226];
+    const tw=(R0-L0-18)/4, th=46;
+    tiles.forEach(([lab,val],i)=>{ const x=L0+i*(tw+6), last=i===3;
+      doc.setFillColor(...(last?mbg:[238,240,246])); doc.setDrawColor(...(last?mc:[200,205,220])); doc.setLineWidth(last?1.2:0.6); doc.roundedRect(x,y,tw,th,4,4,'FD');
+      doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...(last?mc:[92,99,120])); doc.text(lab,x+9,y+14);
+      doc.setFontSize(15); doc.setTextColor(...(last?mc:NAVY)); doc.text(val,x+9,y+35); });
+    y+=th+8; doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0);
+    const status = m>=tgt?`Healthy: at or above the ${pct(tgt)} target.` : m>=floor?`Getting thin: below the ${pct(tgt)} target. ${pct(tgt)} would be ${money(Math.ceil(mcost/(1-tgt)))}.` : `Below the ${pct(floor)} floor: needs owner approval. ${pct(tgt)} would be ${money(Math.ceil(mcost/(1-tgt)))}.`;
+    doc.setTextColor(...mc); doc.setFont('helvetica','bold'); doc.text(status,L0,y); doc.setFont('helvetica','normal'); doc.setTextColor(0); y+=12;
+    if(c.crew.techs){ doc.text('Crew: '+crewText(c),L0,y); y+=12; }
+    if(Math.abs(price-c.total)>=1){ doc.setTextColor(92,99,120); doc.text(`Estimate total ${usd(c.total)}; line price used ${usd(price)}.`,L0,y); doc.setTextColor(0); y+=12; }
+    y+=8;
     const R=v=>({content:v,styles:{halign:'right'}});
-    tbl('PRICED BY UNIT'+(e.sheet&&e.sheet!=='WC'?' ('+e.sheet+' BID SHEET)':''),['Description','Qty','Rate','Total'], (e.units||[]).filter(r=>n(r.qty)).map(r=>[r.desc||'', R(fmtH(n(r.qty))), R(usd(r.rate)), R(usd(n(r.qty)*n(r.rate)))]));
-    tbl('LABOR',['Role','Hours','Bill rate','Total','Wage','Wage cost'], (e.labor||[]).filter(r=>n(r.hours)).map(r=>[r.role, R(fmtH(n(r.hours))), R(usd(r.rate)), R(usd(n(r.hours)*n(r.rate))), R(r.role==='Administration'?'—':usd(wageOf(r))), R(usd(n(r.hours)*wageOf(r)))]),
-      ['Total', R(fmtH(c.techHours)+' tech'), '', R(usd(c.laborPrice)), '', R(usd(c.wages))]);
+    const admin=(e.labor||[]).filter(r=>roleKind(r.role)==='admin'&&n(r.hours)), crew=(e.labor||[]).filter(r=>roleKind(r.role)!=='admin'&&n(r.hours));
+    if(perUnit){
+      tbl('PRICE',['Description','Qty','Rate','Total'], [...(e.units||[]).filter(r=>n(r.qty)).map(r=>[r.tier?`${r.desc||''} · ${r.tier}`:(r.desc||''), R(fmtH(n(r.qty))), R(usd(r.rate)), R(usd(n(r.qty)*n(r.rate)))]),
+        ...admin.map(r=>[r.role, R(fmtH(n(r.hours))+' hr'), R(usd(r.rate)), R(usd(n(r.hours)*n(r.rate)))])], ['Labor price','','',R(usd(c.laborPrice))]);
+      tbl('CREW (ACTUAL LABOR)',['Role','Hours','Wage','Wage cost'], crew.map(r=>[r.role, R(fmtH(n(r.hours))), R(usd(wageOf(r))), R(usd(n(r.hours)*wageOf(r)))]), ['Total', R(fmtH(c.techHours)+' hrs'), '', R(usd(c.wages))]);
+    } else {
+      tbl('LABOR',['Role','Hours','Bill rate','Total','Wage','Wage cost'], [...admin,...crew].map(r=>[r.role, R(fmtH(n(r.hours))), R(usd(r.rate)), R(usd(n(r.hours)*n(r.rate))), R(roleKind(r.role)==='admin'?'—':usd(wageOf(r))), R(usd(n(r.hours)*wageOf(r)))]),
+        ['Total', R(fmtH(c.techHours)+' tech'), '', R(usd(c.laborPrice)), '', R(usd(c.wages))]);
+    }
     const line=(sec)=>(e[sec]||[]).filter(r=>n(r.unit)*n(r.qty)).map(r=>[r.desc||'', R(usd(r.unit)), R(fmtH(n(r.qty))), R(usd(n(r.unit)*n(r.qty))), R(pct(n(r.markup))), R(usd(n(r.unit)*n(r.qty)*(1+n(r.markup))))]);
     const H=['Description','Unit cost','Qty','Cost','Markup','Price'];
     tbl('MATERIALS', H, line('materials'), ['Sales tax '+(Math.round(n(e.taxRate)*10000)/100)+'% on cost','','','','',R(usd(c.tax))]);
     tbl('SUBCONTRACTORS / RENTALS (PASS-THROUGH)', H, line('rentals'));
     tbl('PFBS EQUIPMENT', H, line('equipment'));
     tbl('MISCELLANEOUS', H, line('misc'));
-    if(y>560){ doc.addPage(); head(); y=84; }
-    const gpp=c.total?c.gp/c.total:null, priceGP=price!=null?price-c.cost:null, tgt=num(S.est.targetMargin)||0.45;
-    const rows=[['Labor',usd(c.laborPrice)],['Materials + tax',usd(c.matP+c.tax)],['Subs / rentals',usd(c.rentP)],['PFBS equipment',usd(c.eqP)],['Miscellaneous',usd(c.miscP)],['ESTIMATE TOTAL',usd(c.total)],
-      ...(price!=null?[['Line price used',usd(price)]]:[]),
-      ['Job cost',usd(c.cost)],['  Labor cost'+(c.burden?' (incl. '+pct(c.burden)+' burden)':''),usd(c.laborCost)],['  Materials + tax',usd(c.mat+c.tax)],['  Lifts / subs (your cost)',usd(c.rent)],['  Equipment + misc',usd(c.eq+c.misc)],
-      ['GROSS PROFIT'+(price!=null?' (at line price)':''),usd(priceGP??c.gp)],['Margin',pct((priceGP??c.gp)/((price??c.total)||1))],['Labor profit (labor only)',usd(c.laborProfit)],['Pass-through',usd(c.pass)],
-      ['Wages % of price',pct(c.laborCost/((price??c.total)||1))], ...(laborOnly(e)?[['PROFIT, LABOR ONLY (SP SHEET)',usd((price??c.total)-c.laborCost)],['Labor-only margin',pct(((price??c.total)-c.laborCost)/((price??c.total)||1))]]:[])];
-    doc.autoTable({startY:y, margin:{left:L0,right:612-(L0+270)}, body:rows, theme:'plain', styles:{font:'helvetica',fontSize:8.5,cellPadding:2.5},
-      columnStyles:{1:{halign:'right'}}, didParseCell:d=>{ if(/TOTAL|GROSS PROFIT|PROFIT, LABOR/.test(d.row.raw[0])) d.cell.styles.fontStyle='bold'; } });
-    let y2=y; doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...NAVY); doc.text('CREW PLAN',L0+300,y2+8); doc.setTextColor(0); doc.setFont('helvetica','normal');
-    const cl=doc.splitTextToSize(c.crew.techs?crewText(c):'No tech hours entered.',220); doc.text(cl,L0+300,y2+22); y2+=22+cl.length*11+8;
-    doc.setFont('helvetica','bold'); doc.setTextColor(...NAVY); doc.text('MARGIN CHECK',L0+300,y2); doc.setFont('helvetica','normal'); doc.setTextColor(0); y2+=14;
-    const mcost=laborOnly(e)?c.laborCost:c.cost, m=((price??c.total)-mcost)/((price??c.total)||1), floor=S.marginFloor, need=Math.ceil(mcost/(1-tgt));
-    [`Margin ${pct(m)}: ${m>=tgt?'healthy':m>=floor?'getting thin':'below the '+pct(floor)+' floor'}`, `Target ${pct(tgt)}+ would be ${money(need)}`].forEach(t=>{ doc.text(t,L0+300,y2); y2+=11; });
-    if(m<floor){ doc.setTextColor(...RED); doc.text('Needs owner approval before sending.',L0+300,y2); doc.setTextColor(0); }
+    if(y>600){ doc.addPage(); head(); y=84; }
+    // summary: only lines that have money, key rows highlighted
+    const rows=[['Labor',c.laborPrice],['Materials + tax',c.matP+c.tax],['Subs / rentals',c.rentP],['PFBS equipment',c.eqP],['Miscellaneous',c.miscP]].filter(r=>Math.abs(r[1])>=0.005).map(r=>[r[0],usd(r[1])]);
+    rows.push(['PRICE', usd(price)]);
+    const costRows=[['Labor cost'+(c.burden?' (incl. '+pct(c.burden)+' burden)':''),c.laborCost],['Materials + tax',c.mat+c.tax],['Lifts / subs (your cost)',c.rent],['Equipment + misc',c.eq+c.misc]].filter(r=>Math.abs(r[1])>=0.005).map(r=>['  '+r[0],usd(r[1])]);
+    rows.push(['JOB COST',usd(c.cost)],...costRows);
+    if(lo) rows.push(['PROFIT (PRICE − WAGES)',usd(price-c.laborCost)],['Gross profit after all costs',usd(price-c.cost)]);
+    else rows.push(['GROSS PROFIT',usd(price-c.cost)],['Labor profit (labor only)',usd(c.laborProfit)]);
+    rows.push(['MARGIN',pct(m)]);
+    if(c.pass) rows.push(['Pass-through',usd(c.pass)]);
+    doc.autoTable({startY:y, margin:{left:L0,right:612-(L0+300)}, body:rows, theme:'plain', styles:{font:'helvetica',fontSize:8.5,cellPadding:3},
+      columnStyles:{1:{halign:'right'}}, didParseCell:d=>{ const k=d.row.raw[0];
+        if(/^(PRICE|JOB COST|GROSS PROFIT|PROFIT \(|MARGIN)/.test(k)){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor = k==='MARGIN'?mbg : /PROFIT/.test(k)?[227,242,232]:[238,240,246]; if(k==='MARGIN') d.cell.styles.textColor=mc; } } });
   });
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120); doc.text(`PF Building Services · internal estimate · ${p.num||''} · page ${i} of ${pages}`,306,775,{align:'center'}); }
   const place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40);
