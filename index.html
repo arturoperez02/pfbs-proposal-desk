@@ -597,6 +597,7 @@ function drawDrawer(){
   <div class="dhead"><div class="t"><b id="dTitle" class="num">${isNew?'New proposal':esc(p.num)}</b><div class="sub">${isNew?(newLead?'New lead · the PFBS number is assigned when you save.':'The PFBS number is assigned when you save.'):esc(p.client||'')+' · '+esc(p.property||'')}</div></div>
     <button class="btn ghost small" id="closeD">Close</button></div>
   <div class="dbody">
+    <div id="emBox" class="fubox" hidden></div>
     ${review}
     <fieldset><legend>Status</legend>
       <div class="stages">${STATUSES.map(s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`).join('')}</div>
@@ -669,7 +670,7 @@ function drawDrawer(){
   </div>
   <div class="dfoot"><span class="msg" id="dmsg">${ed?'':'View only'}</span>
     <button class="btn ghost" id="cancelD">Cancel</button>
-    ${isNew?'':`<button class="btn ghost" id="estPdfD">Estimate PDF</button><button class="btn ghost" id="pdfD">Download PDF</button>`}
+    ${isNew?'':`<button class="btn ghost" id="estPdfD">Estimate PDF</button><button class="btn ghost" id="pdfD">Download PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
     <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save changes'}</button></div>`;
 }
 function setStatus(st){
@@ -829,6 +830,52 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#pho').hidd
 async function photoData(path){ const {data,error}=await sb.storage.from(PH_BUCKET).download(path); if(error||!data) return null;
   const url=await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(data); });
   const dims=await new Promise(r=>{ const im=new Image(); im.onload=()=>r({w:im.width,h:im.height}); im.onerror=()=>r(null); im.src=url; }); return dims?{url,...dims}:null; }
+
+// ---------- email the proposal to the client ----------
+function proposalEmail(p){
+  const first=(p.contactName||'').trim().split(/\s+/)[0]||'there', place=p.property||p.client||'your property';
+  const L=countedItems(p), scope=L.filter(i=>i.type!=='Add-on'&&i.description).slice(0,3).map(i=>i.description).join(', ')||'the requested services';
+  const per=L.reduce((s,i)=>s+(num(i.amount)||0),0)||num(p.amount), freqs=[...new Set(L.map(i=>i.frequency).filter(Boolean))];
+  const addons=(p.items||[]).filter(i=>i.type==='Add-on'&&!i.accepted).length;
+  const subject=`Proposal ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''} – ${place}`;
+  const body=`Hi ${first},
+
+Thank you for the opportunity to provide a proposal for ${scope} at ${place}. Attached is proposal ${p.num}${(p.rev||1)>1?' (revision '+p.rev+')':''} for your review.
+
+Total: ${usd(per)}${freqs.length===1?' ('+freqs[0].toLowerCase()+')':' per visit'}.${addons?` Optional add-ons are listed separately in the proposal.`:''}
+
+To approve, sign the last page and send it back, or simply reply to this email. Please let me know if you have any questions or would like to adjust the scope.
+
+Thank you,
+${p.sentBy||me?.name||'PF Building Services'}
+PF Building Services
+(510) 359-5181`;
+  return {to:p.contactEmail||'', subject, body};
+}
+async function emailOpen(){
+  const box=$('#emBox'); if(!box) return;
+  const pre=PRELOCK.includes(draft.status) && !canReview();
+  const e=proposalEmail(draft);
+  box.hidden=false;
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Email the proposal</b><button type="button" class="btn ghost small" id="emClose">Close</button></div>
+    ${pre?'<div class="note" style="color:var(--warn)">This proposal has not been reviewed yet. Send it for review before emailing the client.</div>':''}
+    <label class="f">To<input id="emTo" type="email" value="${esc(e.to)}" placeholder="client@company.com"></label>
+    <label class="f">Subject<input id="emSubj" value="${esc(e.subject)}"></label>
+    <label class="f">Message<textarea id="emBody" rows="11">${esc(e.body)}</textarea></label>
+    <div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn small" data-emsend="owa">Open in Outlook</button><button type="button" class="btn ghost small" data-emsend="mailto">Open in mail app</button><button type="button" class="btn ghost small" data-emsend="copy">Copy text</button></div>
+    ${pre?'':`    <div class="note">The PDF just downloaded${spOn()&&/sharepoint\.com/.test(draft.folderLink||'')?' and saved to SharePoint':''}. Attach it to the email (email links can't attach files), then send.</div>`}`;
+  box.scrollIntoView({block:'start', behavior:'smooth'});
+  if(!pre) makePdf(draft);
+}
+async function emailSend(kind){
+  const to=$('#emTo').value.trim(), subj=$('#emSubj').value, body=$('#emBody').value, enc=encodeURIComponent;
+  if(kind==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(subj)}&body=${enc(body)}`,'_blank','noopener');
+  else if(kind==='mailto') location.href=`mailto:${enc(to)}?subject=${enc(subj)}&body=${enc(body)}`;
+  else { try{ await navigator.clipboard.writeText(`To: ${to}\nSubject: ${subj}\n\n${body}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } return; }
+  if(await addActivity(draft.num,'note',`Proposal emailed to ${to||'client'}: ${subj}`)) loadActivity(draft.num);
+}
+$('#drawer').addEventListener('click', e=>{ const t=e.target.closest('button'); if(!t||!draft) return;
+  if(t.id==='emailD') emailOpen(); else if(t.id==='emClose') $('#emBox').hidden=true; else if(t.dataset.emsend) emailSend(t.dataset.emsend); });
 
 // ---------- follow-up email ----------
 function fuFallback(p){ const step=fuStep(p)||1, first=(p.contactName||'').trim().split(/\s+/)[0]||'there', place=p.property||p.client, scope=(p.items||[]).filter(i=>i.type!=='Add-on'&&i.description).slice(0,3).map(i=>i.description).join(', ')||'the work', sent=parse(p.dateSent)?.toLocaleDateString('en-US',{month:'long',day:'numeric'});
