@@ -355,24 +355,24 @@ function guessService(d){ for(const [svc,re] of SVC_WORDS) if(re.test(d||'')) re
 // Bid sheets: numbers copied from the Excel workbooks (WC, SP, PW, G&D). Shared numbers (tax, markups) come from Settings.
 const SHEETS = {
   WC: {label:'Window cleaning (WC)'},
-  SP: {label:'Solar panel cleaning (SP)', unit:{desc:'Solar panels', per:'panel', rates:[3,4,5,10,12,15]}, wages:{'Expert/Chair':32,'Apprentice':25},
+  SP: {label:'Solar panel cleaning (SP)', unit:{desc:'Solar panels', per:'panel', rates:[3,4,5,10,12,15]}, wages:{expert:32,apprentice:25},
        materials:[['Tucker pole resin',77],['Rubber and soap',5]], equipment:[['3400 pressure washer',10],['Solar cleaning brush',35]],
        misc:[['Shipping',0,0,0.15],['Gas',35,0,0],['Other costs',10,0,0]]},
-  PW: {label:'Pressure washing (PW)', unit:{desc:'Pressure washing', per:'sq ft', rates:[0.10,0.12,0.15,0.25,0.30]}, wages:{'Expert/Chair':32,'Apprentice':32},
+  PW: {label:'Pressure washing (PW)', unit:{desc:'Pressure washing', per:'sq ft', rates:[0.10,0.12,0.15,0.25,0.30]}, wages:{expert:32,apprentice:32},
        materials:[['Tucker pole resin',77],['Rubber and soap',5]], equipment:[],
        misc:[['Shipping',0,0,0.15],['Gas',0,1,0.15],['Other costs',10,1,0]], monthly:true},
-  GD: {label:'Gates & doors (G&D)', bill:155, wages:{'Expert/Chair':45,'Apprentice':28}, materials:[], equipment:[],
+  GD: {label:'Gates & doors (G&D)', bill:155, wages:{expert:45,apprentice:28}, materials:[], equipment:[],
        misc:[['Shipping',0,0,0.15],['Fuel',0,1,0.15],['Other costs',10,1,0]]}
 };
 function sheetFor(desc){ const g=guessService(desc); return g==='Solar Panel Cleaning'?'SP' : g==='Pressure Wash'?'PW' : g==='Gates & Doors'?'GD' : 'WC'; }
 function newEstimate(sheet='WC'){
   const E=S.est, T=SHEETS[sheet]||SHEETS.WC, adminRate=(E.labor.find(r=>r[0]==='Administration')||[0,45])[1];
   if(sheet==='SP' || sheet==='PW') return { sheet, units:[{desc:T.unit.desc, qty:0, rate:T.unit.rates[0]}],
-    labor:[{role:'Administration', hours:1, rate:adminRate},{role:'Expert/Chair', hours:0, rate:0, wage:T.wages['Expert/Chair']}],
+    labor:[{role:'Administration', hours:1, rate:adminRate},{role:expertRole()[0], hours:0, rate:0, wage:T.wages.expert}],
     materials:T.materials.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.matMarkup})), taxRate:E.taxRate, rentals:[],
     equipment:T.equipment.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.equipMarkup})),
     misc:T.misc.map(m=>({desc:m[0], unit:m[1], qty:m[2], markup:m[3]})) };
-  if(sheet==='GD') return { sheet, labor:[{role:'Administration', hours:1, rate:adminRate},{role:'Expert/Chair', hours:0, rate:T.bill, wage:T.wages['Expert/Chair']}],
+  if(sheet==='GD') return { sheet, labor:[{role:'Administration', hours:1, rate:adminRate},{role:expertRole()[0], hours:0, rate:T.bill, wage:T.wages.expert}],
     materials:[], taxRate:E.taxRate, rentals:[], equipment:[], misc:T.misc.map(m=>({desc:m[0], unit:m[1], qty:m[2], markup:m[3]})) };
   return { sheet:'WC', labor: E.labor.filter(r=>r[0]!=='Apprentice').map((r,i)=>({role:r[0], hours: r[0]==='Administration'?1:0, rate:r[1]})),
            materials: E.materials.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.matMarkup})),
@@ -381,6 +381,9 @@ function newEstimate(sheet='WC'){
            misc: E.misc.map(m=>({desc:m[0], unit:0, qty:0, markup:m[1]})) };
 }
 const costRate = role => { const r=S.est.labor.find(x=>x[0]===role); return r ? num(r[2])||0 : 0; };
+const roleKind = name => /apprent/i.test(name||'') ? 'apprentice' : /admin/i.test(name||'') ? 'admin' : 'expert';
+const expertRole = () => S.est.labor.find(r=>/expert|chair|lead|tech/i.test(r[0]) && !/apprent|admin/i.test(r[0])) || S.est.labor.find(r=>roleKind(r[0])!=='admin') || S.est.labor[0];
+const sheetWage = (T,role) => T.wages?.[roleKind(role)] ?? '';
 const wageOf = r => (r && r.wage!=null && r.wage!=='' && num(r.wage)!=null) ? num(r.wage) : costRate(r?.role);
 function estCalc(e){
   const n=v=>num(v)||0, line=r=>{ const c=n(r.unit)*n(r.qty); return {cost:c, price:c*(1+n(r.markup))}; };
@@ -904,7 +907,7 @@ function estPerVisit(p){
 function jobCompare(p){
   const V=(p.actuals||[]).filter(v=>v && (num(v.techs)||num(v.hpt)||v.date)); if(!V.length) return null;
   const est=estPerVisit(p), price=num(p.amount)||0, n=V.length, burden=num(S.est.burden)||0;
-  const wage = est && est.hrs ? est.labor/est.hrs : costRate('Expert/Chair')*(1+burden);
+  const wage = est && est.hrs ? est.labor/est.hrs : costRate(expertRole()[0])*(1+burden);
   const estCostPV = est ? est.cost : (num(p.gp)!=null ? price-num(p.gp) : null);
   let actHrs=0, actCost=0;
   for(const v of V){ const h=(num(v.techs)||0)*(num(v.hpt)||0) + (num(v.extraHrs)||0); actHrs+=h;
@@ -1151,13 +1154,13 @@ $('#est').addEventListener('change', e=>{
   if(t.dataset.c==='type'){ CALC.type=t.value; CALC.open=true; renderEst(); }
   else if(t.dataset.c==='rig'){ CALC.rig=t.value; $('#calcOut').innerHTML=calcOut().html; }
   else if(t.dataset.e && t.tagName==='SELECT'){ const [a,i,f]=t.dataset.e.split('.'); E[a][+i][f]=t.value; const r=S.est.labor.find(x=>x[0]===t.value), T=SHEETS[E.sheet]||{}, L=E[a][+i];
-    if(f==='role' && r){ if(t.value==='Administration'){ L.rate=r[1]; L.wage=''; } else if(T.unit){ L.rate=0; L.wage=T.wages[t.value]??''; } else if(T.bill){ L.rate=T.bill; L.wage=T.wages[t.value]??''; } else { L.rate=r[1]; L.wage=''; } } renderEst(); }
+    if(f==='role' && r){ if(t.value==='Administration'){ L.rate=r[1]; L.wage=''; } else if(T.unit){ L.rate=0; L.wage=sheetWage(T,t.value); } else if(T.bill){ L.rate=T.bill; L.wage=sheetWage(T,t.value); } else { L.rate=r[1]; L.wage=''; } } renderEst(); }
 });
 $('#est').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='estClose'){ closeEst(); return; }
   if(t.dataset.eadd){ const sec=t.dataset.eadd;
-    if(sec==='labor'){ const r=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0], T=SHEETS[E.sheet]||{}; E.labor.push(T.unit?{role:r[0],hours:0,rate:0,wage:T.wages[r[0]]??''}:T.bill?{role:r[0],hours:0,rate:T.bill,wage:T.wages[r[0]]??''}:{role:r[0],hours:0,rate:r[1]}); }
+    if(sec==='labor'){ const r=expertRole(), T=SHEETS[E.sheet]||{}; E.labor.push(T.unit?{role:r[0],hours:0,rate:0,wage:sheetWage(T,r[0])}:T.bill?{role:r[0],hours:0,rate:T.bill,wage:sheetWage(T,r[0])}:{role:r[0],hours:0,rate:r[1]}); }
     else if(sec==='units'){ E.units=[...(E.units||[]), {desc:'', qty:0, rate:''}]; }
     else E[sec].push({desc:'',unit:'',qty:1,markup: sec==='materials'?S.est.matMarkup : sec==='rentals'?S.est.rentMarkup : sec==='equipment'?S.est.equipMarkup : 0});
     renderEst(); return; }
@@ -1167,10 +1170,10 @@ $('#est').addEventListener('click', e=>{
   if(t.id==='depApply'){ const per=Math.round(depPer()*100)/100; if(!per){ toast('Fill in the cost, life and uses first.'); return; } E.equipment.push({desc:CALC.dep.desc||'Equipment',unit:per,qty:1,markup:S.est.equipMarkup}); renderEst(); toast('Equipment line added'); return; }
   if(t.id==='calcApply' || t.id==='calcAdd'){ const o=calcOut(); if(!o.per || !o.techs){ toast('Fill in the calculator first.'); return; }
     if(o.qty!=null && (E.units||[]).length && t.id==='calcApply'){ E.units[0].qty=Math.round(o.qty*100)/100; }
-    const T=SHEETS[E.sheet]||{}, add=t.id==='calcAdd', hrs=Math.round(o.per*100)/100, ex0=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0], ex=T.unit?[ex0[0],0]:T.bill?[ex0[0],T.bill]:ex0;
+    const T=SHEETS[E.sheet]||{}, add=t.id==='calcAdd', hrs=Math.round(o.per*100)/100, ex0=expertRole(), ex=T.unit?[ex0[0],0]:T.bill?[ex0[0],T.bill]:ex0;
     const keep=E.labor.filter(r=>r.role==='Administration'), techs=E.labor.filter(r=>r.role!=='Administration');
     const count=Math.max(o.techs, add?techs.length:0), lines=[];
-    for(let k=0;k<count;k++){ const prev=techs[k]; const base=add?(num(prev?.hours)||0):0; lines.push({role:prev?.role||ex[0], hours:Math.round((base+(k<o.techs?hrs:0))*100)/100, rate:prev?.rate??ex[1], wage:prev?.wage??(T.wages?.[ex[0]]??'')}); }
+    for(let k=0;k<count;k++){ const prev=techs[k]; const base=add?(num(prev?.hours)||0):0; lines.push({role:prev?.role||ex[0], hours:Math.round((base+(k<o.techs?hrs:0))*100)/100, rate:prev?.rate??ex[1], wage:prev?.wage??sheetWage(T,ex[0])}); }
     E.labor=[...keep,...lines]; CALC.open=true; renderEst(); toast(add?`Added ${fmtH(hrs)} hrs to ${o.techs} tech line${o.techs===1?'':'s'}`:`Set ${o.techs} tech line${o.techs===1?'':'s'} to ${fmtH(hrs)} hrs`); return; }
   if(t.id==='rentApply'){ const tot=rentTotal(); if(!tot){ toast('Fill in the rental first.'); return; } E.rentals.push({desc:CALC.rent.desc||'Rental',unit:Math.round(tot*100)/100,qty:1,markup:S.est.rentMarkup}); renderEst(); toast('Rental line added'); return; }
   if(t.id==='fuelApply'){ const rt=Math.round(fuelRT()*100)/100; let f=E.misc.find(r=>/fuel|gas/i.test(r.desc)); if(!f){ f={desc:'Fuel',unit:0,qty:0,markup:0}; E.misc.push(f); } f.unit=rt; f.qty=num(CALC.fuel.trips)||1; renderEst(); toast('Fuel cost set'); return; }
