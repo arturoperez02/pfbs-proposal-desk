@@ -121,6 +121,7 @@ legend{font-family:var(--display);font-size:17px;color:var(--ink);margin-bottom:
 .btn.wide{width:100%;padding:12px}
 .emailrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.emailrow input{flex:1 1 200px}
 details summary{cursor:pointer;color:var(--muted);font-size:14px}
+.hl td{background:var(--gold-soft)!important;transition:background .6s}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
 td input,td select{padding:5px 8px}
 
@@ -192,13 +193,11 @@ td input,td select{padding:5px 8px}
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
 <script>
-// ===================== CONFIGURATION =====================
-// Paste these from Supabase → Project Settings → API.
-// The anon key is meant to be public; the database's security rules protect the data.
-const SUPABASE_URL = 'https://igerptqlkbxmmajixlao.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlnZXJwdHFsa2J4bW1haml4bGFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1NzkzNTgsImV4cCI6MjEwNzE1NTM1OH0.v9KLRc9DUbxt9NVeOiODegs91fHi89I89nEq7rLtzYE';
-// =========================================================
+// Your Supabase keys live in config.js (next to this file), so updating this file never touches them.
+const SUPABASE_URL = window.PFBS_CONFIG?.SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = window.PFBS_CONFIG?.SUPABASE_ANON_KEY || '';
 (() => {
 const STATUSES = ['Estimating','Needs Review','Sent','Follow-up','Approved','Scheduled','Invoiced','Paid','Declined','Expired','Withdrawn'];
 const WON = ['Approved','Scheduled','Invoiced','Paid'], LOST = ['Declined','Expired'], OPEN = ['Sent','Follow-up'], PRE = ['Estimating','Needs Review'];
@@ -215,7 +214,7 @@ const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...
 const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ let v=p[f]; if(v==='') v=null; if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
-let filter='Open', query='';
+let filter='Open', query='', highlight=null;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = v => (v==null||v===''||isNaN(v)) ? '—' : '$' + Math.round(Number(v)).toLocaleString('en-US');
@@ -276,7 +275,7 @@ function renderPipeline(){
   const list=P.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   $('#rows').innerHTML = list.length ? list.map(p=>{
     const d=daysOpen(p), f=followUp(p);
-    return `<tr data-id="${esc(p.num)}" tabindex="0"><td class="pnum num">${esc(p.num)}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
+    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">${P.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
   $('#newBtn').hidden = !canCreate();
 }
@@ -377,7 +376,12 @@ async function save(){
                     : await sb.from('proposals').update(row).eq('num', orig.num).select().single();
   if(res.error){ btn.disabled=false; $('#dmsg').textContent = res.error.message || 'Could not save. Try again.'; return; }
   toast(isNew ? `Created ${res.data.num}` : `Saved ${res.data.num}`);
+  const saved=fromRow(res.data);
+  highlight=saved.num; query=''; $('#q').value='';
+  const fit=FILTERS.find(([n,f])=>n!=='All' && f(saved)); filter = fit ? fit[0] : 'All';
   closeDrawer(); await loadProposals();
+  document.querySelector(`tr[data-id="${saved.num}"]`)?.scrollIntoView({block:'center', behavior:'smooth'});
+  clearTimeout(save.t); save.t=setTimeout(()=>{ highlight=null; document.querySelectorAll('tr.hl').forEach(r=>r.classList.remove('hl')); }, 6000);
 }
 function refreshCalcs(){ const a=$('#calc1'), b=$('#calc2'); if(a) a.innerHTML=calc1(draft); if(b) b.innerHTML=calc2(draft); }
 $('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
