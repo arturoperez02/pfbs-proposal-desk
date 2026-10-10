@@ -193,6 +193,12 @@ label.f.inline{display:flex;align-items:center;gap:6px}label.f.inline input{widt
 input.in-bill{background:var(--info-bg);border-color:color-mix(in srgb,var(--info) 35%,var(--line))}
 input.in-wage{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 35%,var(--line))}
 input.in-wage:disabled{background:transparent}
+.flow{list-style:none;margin:0 0 16px;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;counter-reset:f}
+.flow li{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;position:relative}
+.flow li:not(:last-child)::after{content:'→';position:absolute;right:-10px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:700;background:var(--bg);line-height:1;padding:2px 0}
+.fnum{flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:700;font-size:13px}
+.fcount{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--hover);font-size:12px;font-weight:700;text-align:center}
+@media (max-width:720px){.flow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.flow li::after{display:none}}
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
@@ -1743,12 +1749,15 @@ function renderLeads(){
       <div class="note" style="margin:0 0 8px">Buildings and contacts BD is working on before there's a request. Log each call, email or visit and set the next touch date. When they ask for a price, click <b>Convert to lead</b>.</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="prosChips">${Object.keys(F).map(k=>`<button class="chip" data-pf="${k}" aria-pressed="${k===prosFilter}">${k} <span class="c">${PROS.filter(F[k]).length}</span></button>`).join('')}</div>
       ${!prosOK?'<div class="note" style="color:var(--warn)">Run database update 007 to turn on prospects.</div>':''}
-      <div class="tablewrap"><table><thead><tr><th>Company</th><th class="hide-sm">Property</th><th class="hide-sm">Contact</th><th>Stage</th><th class="hide-sm">Last touch</th><th>Next touch</th>${isManager()?'<th class="hide-sm">BD rep</th>':''}</tr></thead><tbody id="prosRows">
-      ${list.length?list.map(x=>`<tr data-pid="${x.id}" tabindex="0"><td><b>${esc(x.company)}</b></td><td class="hide-sm wrap">${esc(x.property)}</td><td class="hide-sm">${esc(x.contact_name)}${x.contact_title?` <span class="note" style="margin:0">· ${esc(x.contact_title)}</span>`:''}</td><td><span class="pill ${x.stage==='Converted'?'p-won':x.stage==='Not now'?'p-neutral':x.stage==='New'?'p-lead':'p-review'}">${esc(x.stage)}</span>${x.converted_num?` <span class="note" style="margin:0">${esc(x.converted_num)}</span>`:''}</td><td class="hide-sm num">${fmtD(x.last_touch)}</td><td class="num">${x.next_touch?`<span class="${touchDue(x)?'flag warn':''}">${fmtD(x.next_touch)}${touchDue(x)?' · due':''}</span>`:(touchDue(x)?'<span class="flag warn">Set a date</span>':'—')}</td>${isManager()?`<td class="hide-sm">${esc(x.bd_rep)}</td>`:''}</tr>`).join('')
-        : `<tr><td colspan="7" class="empty">${prosFilter==='To contact'?'Nobody to contact today.':'No prospects here yet.'} Add one with + Prospect.</td></tr>`}
+      <div class="tablewrap"><table><thead><tr><th>Company</th><th class="hide-sm">Property</th><th class="hide-sm">Contact</th><th>Stage</th><th class="hide-sm">Last touch</th><th>Next touch</th>${isManager()?'<th class="hide-sm">BD rep</th>':''}<th></th></tr></thead><tbody id="prosRows">
+      ${list.length?list.map(x=>`<tr data-pid="${x.id}" tabindex="0"><td><b>${esc(x.company)}</b></td><td class="hide-sm wrap">${esc(x.property)}</td><td class="hide-sm">${esc(x.contact_name)}${x.contact_title?` <span class="note" style="margin:0">· ${esc(x.contact_title)}</span>`:''}</td><td><span class="pill ${x.stage==='Converted'?'p-won':x.stage==='Not now'?'p-neutral':x.stage==='New'?'p-lead':'p-review'}">${esc(x.stage)}</span>${x.converted_num?` <span class="note" style="margin:0">${esc(x.converted_num)}</span>`:''}</td><td class="hide-sm num">${fmtD(x.last_touch)}</td><td class="num">${x.next_touch?`<span class="${touchDue(x)?'flag warn':''}">${fmtD(x.next_touch)}${touchDue(x)?' · due':''}</span>`:(touchDue(x)?'<span class="flag warn">Set a date</span>':'—')}</td>${isManager()?`<td class="hide-sm">${esc(x.bd_rep)}</td>`:''}<td class="r">${x.stage!=='Converted'&&canLead()?`<button type="button" class="btn ghost small" data-conv="${x.id}">Convert to lead</button>`:''}</td></tr>`).join('')
+        : `<tr><td colspan="8" class="empty">${prosFilter==='To contact'?'Nobody to contact today.':'No prospects here yet.'} Add one with + Prospect.</td></tr>`}
       </tbody></table></div></div>`;
   }
-  $('#leadsBody').innerHTML = `<div class="card"><h3>Leads waiting for an estimate (${leads.length})</h3>
+  const activeP=PROS.filter(x=>!['Converted','Not now'].includes(x.stage)).length, estN=P.filter(p=>PRE.includes(p.status)).length, outN=P.filter(p=>outcome(p)==='Open').length;
+  const steps=[['Prospect','BD works the building: calls, visits, next touch.', canProspect()?activeP:null],['Lead','They ask for a price. BD converts it and assigns an estimator.', leads.length],['Estimate','The estimator walks the site and prices it.', estN],['Proposal','Review, send, follow up, win.', outN]];
+  $('#leadsBody').innerHTML = `<ol class="flow">${steps.map(([t,d,n],i)=>`<li><div class="fnum">${i+1}</div><div><b>${t}</b>${n!=null?` <span class="fcount">${n}</span>`:''}<div class="note" style="margin:2px 0 0">${d}</div></div></li>`).join('')}</ol>
+  <div class="card"><h3>Leads waiting for an estimate (${leads.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>PFBS #</th><th>Client</th><th class="hide-sm">Property</th><th class="hide-sm">Services</th><th class="hide-sm">Walkthrough</th><th class="hide-sm">BD rep</th><th>Estimator</th><th class="r">Days waiting</th></tr></thead><tbody>${leadRows}</tbody></table></div>
     <div class="note">Red after 3 days. The estimator opens the lead and clicks <b>Start estimate</b>, which turns it into a proposal with these services as lines.</div></div>${pros}`;
 }
@@ -1802,11 +1811,14 @@ $('#drawer').addEventListener('click', async e=>{
     if(!PR.next_touch || parse(PR.next_touch)<=today()){ const n=new Date(today()); n.setDate(n.getDate()+7); PR.next_touch=iso(n); }
     if(await saveProspect(false)){ drawProspect(); toast(`Logged. Next touch ${fmtD(PR.next_touch)}`); } }
   if(t.id==='prDel'){ if(!t.dataset.armed){ t.dataset.armed='1'; t.textContent='Confirm delete'; return; } const {error}=await sb.from('prospects').delete().eq('id',PR.id); if(error){ toast(error.message); return; } closeDrawer(); loadProspects(); }
-  if(t.id==='prConvert'){ if(!(await saveProspect(false))) return; const x=PR; PR=null;
-    await openDrawer(null,{lead:true}); Object.assign(draft,{client:x.company, property:x.property||'', contactName:x.contact_name||'', contactPhone:x.phone||'', contactEmail:x.email||'', siteAddress:x.address||'', bdRep:x.bd_rep||draft.bdRep, leadSource:S.leadSources.find(v=>/bd/i.test(v))||draft.leadSource||'', clientType:S.clientTypes[0]?.[0]||'', notes:x.notes||'', _fromProspect:x.id}); drawDrawer(); $('#dmsg').textContent='Add what they need and assign an estimator, then create the lead.'; }
+  if(t.id==='prConvert'){ if(!(await saveProspect(false))) return; const x=PR; PR=null; await convertProspect(x); }
 });
+async function convertProspect(x){
+    await openDrawer(null,{lead:true}); Object.assign(draft,{client:x.company, property:x.property||'', contactName:x.contact_name||'', contactPhone:x.phone||'', contactEmail:x.email||'', siteAddress:x.address||'', bdRep:x.bd_rep||draft.bdRep, leadSource:S.leadSources.find(v=>/bd/i.test(v))||draft.leadSource||'', clientType:S.clientTypes[0]?.[0]||'', notes:x.notes||'', _fromProspect:x.id}); drawDrawer(); $('#dmsg').textContent='Add what they need and assign an estimator, then create the lead.'; $('#scrim').hidden=false; $('#drawer').hidden=false;
+}
 $('#leadsBody').addEventListener('click', e=>{
   const c=e.target.closest('[data-pf]'); if(c){ prosFilter=c.dataset.pf; renderLeads(); return; }
+  const cv=e.target.closest('[data-conv]'); if(cv){ const x=PROS.find(p=>p.id===+cv.dataset.conv); if(x) convertProspect(x); return; }
   const r=e.target.closest('tr[data-id]'); if(r){ openDrawer(r.dataset.id); return; }
   const q=e.target.closest('tr[data-pid]'); if(q) openProspect(+q.dataset.pid);
 });
@@ -1834,6 +1846,14 @@ function rowsTable(head, list, cells, empty){
   return `<div class="tablewrap"><table><thead><tr>${head.map((h,i)=>`<th class="${/^(Amount|Days|GP|Rate|Commission)/.test(h)?'r':''}${i>1&&!/^(Amount|Commission)/.test(h)?' hide-sm':''}">${h}</th>`).join('')}</tr></thead><tbody>${
     list.length ? list.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}">${cells(p).map((c,i)=>`<td class="${/^(Amount|Days|GP|Rate|Commission)/.test(head[i])?'r num':''}${i>1&&!/^(Amount|Commission)/.test(head[i])?' hide-sm':''}">${c}</td>`).join('')}</tr>`).join('')
     : `<tr><td colspan="${head.length}" class="empty">${empty}</td></tr>`}</tbody></table></div>`;
+}
+function funnelHTML(mine, per){
+  const rep=salesRep, pros=PROS.filter(x=>x.bd_rep===rep && inPer(x.created_at,per)), conv=pros.filter(x=>x.converted_num);
+  const leads=mine.filter(p=>inPer(leadDate(p),per)), sent=leads.filter(p=>p.quotedAt || !PRELOCK.includes(p.status) && p.status!=='Withdrawn'), won=sent.filter(p=>outcome(p)==='Won');
+  const rows=[['Prospects added',pros.length,null],['Became leads',conv.length,pros.length],['Leads logged',leads.length,null],['Proposal sent',sent.length,leads.length],['Won',won.length,sent.length]];
+  const max=Math.max(1,...rows.map(r=>r[1]));
+  return rows.map(([l,n,of],i)=>`${i===2?'<div style="height:6px"></div>':''}<div class="stage"><div><b>${l}</b></div><div class="track"><div class="fill ${l==='Won'?'done':''}" style="width:${(n?Math.max(3,n/max*100):0).toFixed(1)}%"></div></div><div class="r">${n}${of!=null?` <span class="note" style="margin:0">· ${of?pct(n/of):'—'}</span>`:''}</div></div>`).join('')
+    + `<div class="note">Prospects and leads started ${PER_LABEL[per]}, and how far they've gotten. The % is the share that made it past the line above.</div>`;
 }
 function renderSales(){
   const mgr=isManager(), names=bdNames();
@@ -1883,6 +1903,7 @@ function renderSales(){
       ${goalBar('Leads this month', leadsMonth, g.leads, 'month', v=>String(v))}
       ${goalBar('Won this quarter', wonQ, g.won, 'quarter', money)}
       <div class="note">The line on each bar is where you should be today to hit the goal. ${role()==='Owner'?'Set goals on the Settings tab (BD goals).':'The owner sets goals.'}</div></div>
+    <div class="card"><h3>Conversion</h3>${funnelHTML(mine, per)}</div>
     <div class="card"><h3>Pipeline</h3>${stage}
       <div class="note">Lead, Estimating and Sent are right now. Won is ${L}. Amounts include approved change orders.</div></div>
   </div>
