@@ -187,6 +187,12 @@ label.f.inline{display:flex;align-items:center;gap:6px}label.f.inline input{widt
 .phcard{border:1px solid var(--line);border-radius:var(--radius);padding:8px;display:grid;gap:6px;background:var(--surface)}
 .phcard img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px;background:var(--hover)}
 .phcanvas{width:100%;height:auto;touch-action:none;cursor:crosshair;border-radius:4px;display:block}
+.th-bill,.th-wage{white-space:nowrap}.thsub{display:block;font-size:10px;font-weight:600;text-transform:none;letter-spacing:0;margin-top:1px}
+.th-bill .thsub,.key-bill{color:var(--info)}.th-wage .thsub,.key-wage{color:var(--warn)}
+.key-bill,.key-wage{font-weight:700}
+input.in-bill{background:var(--info-bg);border-color:color-mix(in srgb,var(--info) 35%,var(--line))}
+input.in-wage{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 35%,var(--line))}
+input.in-wage:disabled{background:transparent}
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
@@ -1111,31 +1117,31 @@ function renderEst(){
       <div class="tablewrap"><table class="et"><thead><tr><th>${SHEETS[E.sheet]?.unit?.tiers?'Access':'Priced by unit'}</th><th>${SHEETS[E.sheet]?.unit?.tiers?'Panels':'Qty'}</th><th>Rate ($/unit)</th><th class="r">Total</th><th></th></tr></thead><tbody>
       ${E.units.map((r,i)=>`<tr><td>${SHEETS[E.sheet]?.unit?.tiers ? `<select data-tier="${i}" aria-label="Access">${(S.est.spRates||[]).map(t=>`<option value="${esc(t[0])}" ${t[0]===r.tier?'selected':''}>${esc(t[0])} · $${t[1]}</option>`).join('')}<option value="" ${r.tier?'':'selected'}>Custom rate</option></select>` : `<input data-e="units.${i}.desc" value="${esc(r.desc||'')}" aria-label="Description">`}</td>
         <td><input data-e="units.${i}.qty" type="number" step="any" inputmode="decimal" value="${esc(r.qty??'')}" aria-label="Quantity"></td>
-        <td><input data-e="units.${i}.rate" type="number" step="any" inputmode="decimal" list="unitRates" value="${esc(r.rate??'')}" aria-label="Rate per unit"></td>
+        <td><input class="in-bill" data-e="units.${i}.rate" type="number" step="any" inputmode="decimal" list="unitRates" value="${esc(r.rate??'')}" aria-label="Rate per unit, what the client pays"></td>
         <td class="r num" id="et-units-${i}"></td><td>${SHEETS[E.sheet]?.unit?.single?'':`<button type="button" class="x" data-erm="units.${i}" aria-label="Remove row">×</button>`}</td></tr>`).join('')}
       ${E.labor.map((r,i)=>roleKind(r.role)!=='admin'?'':`<tr><td>${esc(r.role)} <span class="note" style="margin:0">(hours × $/hr)</span></td>
         <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Administration hours"></td>
-        <td><input data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Administration rate"></td>
+        <td><input class="in-bill" data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Administration rate"></td>
         <td class="r num" id="et-labor-${i}"></td><td></td></tr>`).join('')}
       </tbody></table></div>${SHEETS[E.sheet]?.unit?.tiers?`<div class="gpline" id="spHint" style="margin:6px 0 0">${spHint()}</div>`:''}<datalist id="unitRates">${(SHEETS[E.sheet]?.unit?.rates||[]).map(v=>`<option value="${v}">`).join('')}</datalist></section>
     <section class="card"><h3>Crew (actual labor)</h3>
       <div class="note" style="margin:0 0 6px">Hours you expect × wage. Your cost, not the price.</div>
-      <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Wage ($/hr)</th><th class="r">Wage cost</th><th></th></tr></thead><tbody>
+      <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th class="th-wage">Wage ($/hr)<span class="thsub">we pay the tech</span></th><th class="r">Wage cost</th><th></th></tr></thead><tbody>
       ${E.labor.map((r,i)=>roleKind(r.role)==='admin'?'':`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.filter(x=>roleKind(x)!=='admin').map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
         <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Hours"></td>
-        <td><input data-e="labor.${i}.wage" type="number" step="any" inputmode="decimal" value="${esc(r.wage??'')}" placeholder="${esc(costRate(r.role))}" aria-label="Wage per hour"></td>
+        <td><input class="in-wage" data-e="labor.${i}.wage" type="number" step="any" inputmode="decimal" value="${esc(r.wage??'')}" placeholder="${esc(costRate(r.role))}" aria-label="Wage, what we pay the tech per hour"></td>
         <td class="r num" id="et-labor-${i}"></td><td><button type="button" class="x" data-erm="labor.${i}" aria-label="Remove row">×</button></td></tr>`).join('')}
       </tbody></table></div>
       <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Tech</button></div>
 ` : `<section class="card"><h3>Labor</h3>
-      <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Bill rate ($/hr)</th><th>Wage ($/hr)</th><th class="r">Total</th><th></th></tr></thead><tbody>
+      <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th class="th-bill">Bill rate ($/hr)<span class="thsub">client pays</span></th><th class="th-wage">Wage ($/hr)<span class="thsub">we pay the tech</span></th><th class="r">Total billed</th><th></th></tr></thead><tbody>
       ${E.labor.map((r,i)=>`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
         <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Hours"></td>
-        <td><input data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Bill rate"></td>
-        <td><input data-e="labor.${i}.wage" type="number" step="any" inputmode="decimal" value="${esc(r.wage??'')}" placeholder="${esc(costRate(r.role))}" aria-label="Wage per hour" ${r.role==='Administration'?'disabled':''}></td>
+        <td><input class="in-bill" data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Bill rate, what the client pays per hour"></td>
+        <td><input class="in-wage" data-e="labor.${i}.wage" type="number" step="any" inputmode="decimal" value="${esc(r.wage??'')}" placeholder="${esc(costRate(r.role))}" aria-label="Wage, what we pay the tech per hour" ${r.role==='Administration'?'disabled':''}></td>
         <td class="r num" id="et-labor-${i}"></td><td><button type="button" class="x" data-erm="labor.${i}" aria-label="Remove row">×</button></td></tr>`).join('')}
       </tbody></table></div>
-      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Labor line</button>${SHEETS[E.sheet]?.unit?'':'<button type="button" class="btn ghost small" data-eadd="units">+ Price by unit</button>'}<span class="note" style="margin:0">One line per tech. Blank wage uses the role's wage from Settings.</span></div>
+      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Labor line</button>${SHEETS[E.sheet]?.unit?'':'<button type="button" class="btn ghost small" data-eadd="units">+ Price by unit</button>'}<span class="note" style="margin:0"><span class="key-bill">Bill rate</span> is what the client pays per hour · <span class="key-wage">Wage</span> is what we pay the tech (blank = the role's wage in Settings). One line per tech.</span></div>
 `}
       <details class="calcbox" ${CALC.open?'open':''}><summary>Hours calculator</summary>${calcHTML()}</details>
     </section>
