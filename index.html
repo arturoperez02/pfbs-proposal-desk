@@ -380,8 +380,10 @@ function drawDrawer(){
     <fieldset><legend>Proposal</legend><div class="grid2">
       ${field('Date sent','dateSent','date')}
       ${sel('Estimator (sent by)','sentBy',names,'',!isManager())}
-      ${field('Client (company)','client','text','full')}
-      ${field('Property name / short label','property','text','full')}
+      ${field('Client (company)','client','text','full','list="clientList" autocomplete="off" placeholder="Start typing to pick a past client"')}
+      ${field('Property name / short label','property','text','full','list="propList" autocomplete="off" placeholder="Pick a past property or type a new one"')}
+      <datalist id="clientList">${clientNames().map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+      <datalist id="propList">${propsFor(p.client).map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
     </div>
     </fieldset>
     <fieldset><legend>Bill to &amp; job site</legend><div class="grid2">
@@ -394,9 +396,10 @@ function drawDrawer(){
     <fieldset><legend>Scope &amp; pricing</legend>
       <div id="itemsBox">${itemsHTML(p, ed)}</div>
       <div class="grid2">
-        ${field('Est. gross profit ($)','gp','number','','placeholder="from the bid sheet"')}
-        ${field('Pass-through costs ($)','passThrough','number','','placeholder="lifts, subs"')}
+        ${field('Est. gross profit ($)','gp','number','','placeholder="price − all job costs"')}
+        ${field('Pass-through costs ($)','passThrough','number','','placeholder="rentals + subs, as billed"')}
       </div>
+      <div class="note" style="margin:4px 0 0">From the bid sheet. <b>Gross profit</b> = total price minus tech wages, materials + tax, rental and sub costs, fuel and other costs. <b>Pass-through</b> = the Subcontractor / Rentals total the client pays (with markup).</div>
       <div id="calc1">${calc1(p)}</div>
       <label class="f">Proposal clarifications <span class="note" style="margin:0;font-weight:400">one per line</span><textarea data-k="clarifications" id="f-clarifications" rows="3" ${dis} placeholder="Leave blank to use your standard clarifications">${esc(p.clarifications??'')}</textarea></label>
     </fieldset>
@@ -458,7 +461,29 @@ function itemEvent(e, final){
   return true;
 }
 $('#drawer').addEventListener('input', e=>{ if(itemEvent(e,false)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
-$('#drawer').addEventListener('change', e=>{ if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='pricingOption') rerenderItems(); else refreshCalcs(); });
+// ---------- remember clients & properties from past proposals ----------
+const norm = v => String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
+function clientNames(){ const m=new Map(); for(const x of P){ const k=norm(x.client); if(k && !m.has(k)) m.set(k, String(x.client).trim()); } return [...m.values()].sort((a,b)=>a.localeCompare(b)); }
+function propsFor(client){ const c=norm(client), m=new Map(); for(const x of P){ if(c && norm(x.client)!==c) continue; const k=norm(x.property); if(k && !m.has(k)) m.set(k, String(x.property).trim()); } return [...m.values()].sort((a,b)=>a.localeCompare(b)); }
+function latest(pred){ return P.filter(x=>x.num!==draft.num && pred(x)).sort((a,b)=>String(b.num).localeCompare(String(a.num))); }
+const CONTACT_KEYS=['contactName','contactPhone','contactEmail','billAddress'];
+function fillEmpty(src, keys){ let n=0; for(const k of keys){ if(src && src[k] && !String(draft[k]||'').trim()){ draft[k]=src[k]; const el=document.getElementById('f-'+k); if(el) el.value=src[k]; n++; } } return n; }
+function autofill(k){
+  if(k==='client'){
+    const c=norm(draft.client); if(!c) return;
+    const hit=latest(x=>norm(x.client)===c && CONTACT_KEYS.some(f=>x[f]))[0];
+    const n=fillEmpty(hit, CONTACT_KEYS);
+    const dl=$('#propList'); if(dl) dl.innerHTML=propsFor(draft.client).map(v=>`<option value="${esc(v)}">`).join('');
+    if(n) toast(`Filled contact details from ${hit.num}`);
+  }
+  if(k==='property'){
+    const c=norm(draft.client), pr=norm(draft.property); if(!pr) return;
+    const hit=latest(x=>norm(x.property)===pr && (!c || norm(x.client)===c) && (x.siteAddress || CONTACT_KEYS.some(f=>x[f])))[0];
+    const n=fillEmpty(hit, ['siteAddress',...CONTACT_KEYS]);
+    if(n) toast(`Filled site details from ${hit.num}`);
+  }
+}
+$('#drawer').addEventListener('change', e=>{ if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property') autofill(k); if(k==='pricingOption') rerenderItems(); else refreshCalcs(); });
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
