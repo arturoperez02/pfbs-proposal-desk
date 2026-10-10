@@ -373,7 +373,8 @@ function countedItems(p){
   const items=p.items||[], groups=groupsOf(p), pick=groups.includes(p.pricingOption)?p.pricingOption:groups[0];
   return items.filter(i=> i.type==='Add-on' ? !!i.accepted : (!i.group || i.group===pick));
 }
-const SVC_WORDS = [['Solar Panel Cleaning',/solar|panel/i],['Pressure Wash',/pressure|power wash|steam/i],['Janitorial',/janitor|custodial|porter/i],['Gutter Cleaning',/gutter/i],['Graffiti Removal',/graffiti/i],['Gates & Doors',/\bgates?\b|\bdoors?\b/i],['Lights - Decor',/\blights?\b|lighting|decor/i],['Window Cleaning',/window|glass|screen|fa[cç]ade|skylight/i]];
+const GD_CLAR = [['Gates & Doors', 'Gate & Door Hardware: Pricing reflects direct replacement of the specified components listed; unforeseen frame damage, corrosion, or non-standard mounting conditions discovered during removal may require a change order.'], ['Gates & Doors', 'Client/building management is responsible for providing safe, unobstructed access to the door/gate location, including any lift, ladder staging area, or door lockout needed during installation.']];
+const SVC_WORDS = [['Solar Panel Cleaning',/solar|panel/i],['Pressure Wash',/pressure|power wash|steam/i],['Janitorial',/janitor|custodial|porter/i],['Gutter Cleaning',/gutter/i],['Graffiti Removal',/graffiti/i],['Gates & Doors',/\bgates?\b|\bdoors?\b|closer|electric strike|\bstrikes?\b|roll-?up|garage|panic (bar|device)|exit device|hinge|mag ?lock|card reader/i],['Lights - Decor',/\blights?\b|lighting|decor/i],['Window Cleaning',/window|glass|screen|fa[cç]ade|skylight/i]];
 function guessService(d){ for(const [svc,re] of SVC_WORDS) if(re.test(d||'')) return svc; return 'Other'; }
 // ---------- estimate (replaces the Excel bid sheets) ----------
 // Bid sheets: numbers copied from the Excel workbooks (WC, SP, PW, G&D). Shared numbers (tax, markups) come from Settings.
@@ -1509,8 +1510,9 @@ async function makePdf(p){
     y=doc.lastAutoTable.finalY+20;
   }
   // clarifications
+  const svcs=new Set(items.filter(i=>i.type!=='Add-on').map(i=>i.service||guessService(i.description)).concat(p.service?[p.service]:[]).filter(Boolean)), gdOnly=svcs.size>0 && [...svcs].every(v=>v==='Gates & Doors');
   const clar = (p.clarifications&&p.clarifications.trim()) ? p.clarifications.split('\n').map(x=>x.replace(/^\s*\d+[.)]\s*/,'').trim()).filter(Boolean)
-    : S.clarifications.filter(([svc])=>svc==='All' || items.some(i=>i.service===svc) || p.service===svc).map(c=>c[1]);
+    : S.clarifications.filter(([svc])=>(svc==='All' && !gdOnly) || svcs.has(svc)).map(c=>c[1]);
   if(clar.length){
     if(y>680){ doc.addPage(); y=60; }
     doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text('PROPOSAL CLARIFICATIONS',L0,y); y+=13;
@@ -1978,7 +1980,7 @@ function renderSettings(){
       <label class="f">Wages % of price: max<input id="s-lm" type="number" step="any" value="${Math.round(S.est.laborMax*1000)/10}" ${ro}></label>
       <label class="f">Labor burden % (payroll taxes, workers' comp, benefits)<input id="s-burden" type="number" step="any" value="${Math.round(S.est.burden*1000)/10}" ${ro}></label>
       <div class="note">On labor-only jobs wages are most of the cost, so wages ≈ 100% − margin. Caution 45% / max 55% fits a 45% target. The margin floor (red line) is under Guardrails above. Burden is added on top of wages in every estimate.</div></div>
-    ${ta('s-clar','Standard clarifications', S.clarifications.map(c=>c.join(' | ')).join('\n'), 'Service | text. Use All for every proposal. Used when a proposal\'s clarifications box is blank.')}
+    ${ta('s-clar','Standard clarifications', S.clarifications.map(c=>c.join(' | ')).join('\n'), 'Service | text. Use All for every proposal (except Gates &amp; Doors-only proposals, which get only their own). Used when a proposal\'s clarifications box is blank.')}
   </div>
   <div class="card listedit" style="margin-top:16px"><h3>Terms &amp; Conditions (page 2 of every PDF)</h3><textarea id="s-terms" style="min-height:260px" ${ro}>${esc(S.terms.map(t=>t.join(' | ')).join('\n'))}</textarea><div class="note">One term per line: Heading | text.</div>
     <label class="f" style="margin-top:8px">Acknowledgment text<textarea id="s-ack" rows="2" ${ro}>${esc(S.ack)}</textarea></label>
@@ -2004,7 +2006,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       matMarkup:(num($('#s-mm').value)||0)/100, taxRate:(num($('#s-tax').value)||0)/100, rentMarkup:(num($('#s-rm').value)||0)/100, equipMarkup:(num($('#s-em').value)||0)/100,
       rentalTax:(num($('#s-rtax').value)||0)/100, misc:S.est.misc, rentalDelivery:num($('#s-rdel').value)||0, rentalPickup:num($('#s-rpu').value)||0, rentalProtection:num($('#s-rpp').value)||0, rentalMisc:num($('#s-rmisc').value)||0, hoursPerDay:num($('#s-hpd').value)||8, targetMargin:(num($('#s-tgt').value)||45)/100, laborCaution:(num($('#s-lc').value)||45)/100, laborMax:Math.max(num($('#s-lm').value)||55, num($('#s-lc').value)||45)/100, burden:(num($('#s-burden').value)||0)/100 };
     const data={ est, services:L('s-svc'), leadSources:L('s-src'), lostReasons:L('s-lost'), addOns:L('s-addons'),
-      clarifications:L('s-clar').map(splitPair).map(([a,b])=>[a||'All',b]), terms:L('s-terms').map(splitPair), ack:$('#s-ack').value.trim(),
+      clarifications:L('s-clar').map(splitPair).map(([a,b])=>[a||'All',b]), terms:L('s-terms').map(splitPair), ack:$('#s-ack').value.trim(), gdClarSeeded:true,
       frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
@@ -2032,7 +2034,7 @@ function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
-async function loadSettings(){ const {data}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); S=Object.assign(structuredClone(DEFAULTS), data?.data||{}); S.est=Object.assign(structuredClone(DEFAULTS.est), S.est||{}); }
+async function loadSettings(){ const {data}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); S=Object.assign(structuredClone(DEFAULTS), data?.data||{}); S.est=Object.assign(structuredClone(DEFAULTS.est), S.est||{}); if(!S.gdClarSeeded){ if(!(S.clarifications||[]).some(c=>c[0]==='Gates & Doors')) S.clarifications=[...(S.clarifications||[]), ...GD_CLAR]; S.gdClarSeeded=true; } }
 async function loadProposals(){
   const {data,error}=await sb.from('proposals').select('*').order('num',{ascending:false});
   if(error){ $('#asof').textContent='Could not load proposals: '+error.message; return; }
