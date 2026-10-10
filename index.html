@@ -212,6 +212,7 @@ tr.matdet td{background:var(--bg);padding:6px 8px}.matgrid{display:grid;grid-tem
 .rtitem{border-left:4px solid var(--warn)}.rtitem.rt-reserved,.rtitem.rt-delivered,.rtitem.rt-offrentcalled{border-left-color:var(--info)}.rtitem.rt-pickedup{border-left-color:var(--good)}
 .rtalert{font-size:13px;font-weight:700;margin:0 0 6px}.rtalert.bad{color:var(--bad)}.rtalert.warn{color:var(--warn)}
 a.linkout{font-size:12px;font-weight:600;color:var(--accent)}
+.optpick{margin:8px 0 4px}.optlab{font-size:13px;font-weight:700;margin-bottom:4px}
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
@@ -389,9 +390,10 @@ function visits(p){ const f=S.frequencies.find(x=>x[0]===p.frequency); return f?
 function annual(p){ const L=countedItems(p); if(L.length) return L.reduce((s,i)=>s+(num(i.qty)||1)*(num(i.amount)||0),0); return num(p.amount)!=null && p.frequency ? num(p.amount)*visits(p) : null; }
 // ---------- line items ----------
 function groupsOf(p){ return [...new Set((p.items||[]).filter(i=>i.type!=='Add-on' && i.group).map(i=>i.group))]; }
+function chosenOptions(p){ const groups=groupsOf(p), pick=String(p.pricingOption||'').split('||').filter(g=>groups.includes(g)); return pick.length?pick:groups.slice(0,1); }
 function countedItems(p){
-  const items=p.items||[], groups=groupsOf(p), pick=groups.includes(p.pricingOption)?p.pricingOption:groups[0];
-  return items.filter(i=> i.type==='Add-on' ? !!i.accepted : (!i.group || i.group===pick));
+  const items=p.items||[], pick=chosenOptions(p);
+  return items.filter(i=> i.type==='Add-on' ? !!i.accepted : (!i.group || pick.includes(i.group)));
 }
 const GD_CLAR = [['Gates & Doors', 'Gate & Door Hardware: Pricing reflects direct replacement of the specified components listed; unforeseen frame damage, corrosion, or non-standard mounting conditions discovered during removal may require a change order.'], ['Gates & Doors', 'Client/building management is responsible for providing safe, unobstructed access to the door/gate location, including any lift, ladder staging area, or door lockout needed during installation.']];
 const SVC_WORDS = [['Solar Panel Cleaning',/solar|panel/i],['Pressure Wash',/pressure|power wash|steam/i],['Janitorial',/janitor|custodial|porter/i],['Gutter Cleaning',/gutter/i],['Graffiti Removal',/graffiti/i],['Gates & Doors',/\bgates?\b|\bdoors?\b|closer|electric strike|\bstrikes?\b|roll-?up|garage|panic (bar|device)|exit device|hinge|mag ?lock|card reader/i],['Lights - Decor',/\blights?\b|lighting|decor/i],['Window Cleaning',/window|glass|screen|fa[cç]ade|skylight/i]];
@@ -598,7 +600,7 @@ function itemsHTML(p, ed, accEd=ed){
   const rows = items.map((it,i)=>`<div class="item ${it.type==='Add-on'?'addon':''}" data-i="${i}">
     <div class="itop"><span class="ibadge">${it.type==='Add-on'?'Add-on':'Service'}</span>
       ${it.type==='Add-on'?`<label class="acc"><input type="checkbox" data-it="accepted" ${it.accepted?'checked':''} ${adis}> Client accepted</label>`:`<input class="grp" data-it="group" value="${esc(it.group||'')}" placeholder="Option label (optional)" aria-label="Option label" ${dis}>`}
-      ${ed?`<button type="button" class="btn ghost small" data-del="${i}" aria-label="Remove line">Remove</button>`:''}</div>
+      ${ed?`<button type="button" class="btn ghost small" data-dup="${i}" title="Copy this line, estimate included">Duplicate</button>${it.type!=='Add-on'&&it.group?`<button type="button" class="btn ghost small" data-dupopt="${i}" title="Copy this line into a new option">Copy as new option</button>`:''}<button type="button" class="btn ghost small" data-del="${i}" aria-label="Remove line">Remove</button>`:''}</div>
     <div class="igrid">
       <label class="f full">Description<input data-it="description" list="descList" value="${esc(it.description||'')}" placeholder="e.g. Perimeter exterior window &amp; screen washing" ${dis}></label>
       <label class="f">Qty / visits<input type="number" step="any" inputmode="decimal" data-it="qty" value="${esc(it.qty??1)}" ${dis}></label>
@@ -607,7 +609,9 @@ function itemsHTML(p, ed, accEd=ed){
       ${it.type!=='Add-on' || true ? `<div class="full estrow">${it.estimate ? estSummary(it) : '<span class="note" style="margin:0">No estimate yet</span>'}${(ed || it.estimate)?`<button type="button" class="btn ghost small" data-est="${i}">${it.estimate?(ed?'Open estimate':'View estimate'):'Build estimate'}</button>`:''}</div>`:''}
       <label class="f full">Note (optional)<input data-it="note" value="${esc(it.note||'')}" placeholder="e.g. Lift is required. Price includes lift rental." ${dis}></label>
     </div></div>`).join('');
-  const pick = groups.length>1 ? `<label class="f">Price this proposal on<select data-k="pricingOption" ${adis}>${groups.map(g=>`<option ${g===(groups.includes(p.pricingOption)?p.pricingOption:groups[0])?'selected':''}>${esc(g)}</option>`).join('')}</select></label>` : '';
+  const ch=chosenOptions(p), won=outcome(p)==='Won';
+  const pick = groups.length>1 ? `<div class="optpick"><div class="optlab">${won?'Client chose':'Count in totals'} <span class="note" style="margin:0;font-weight:400">${won?'tick every option the client approved':'until the client decides; tick the ones they approve'}</span></div>
+    <div class="svcpick">${groups.map(g=>`<label class="chip ${ch.includes(g)?'on':''}"><input type="checkbox" data-opt="${esc(g)}" ${ch.includes(g)?'checked':''} ${adis}> ${esc(g)}</label>`).join('')}</div></div>` : '';
   return `${items.length?'':'<div class="note" style="margin:0 0 8px">Add one line per service. Add-ons are optional extras the client can accept.</div>'}
     <div class="items">${rows}</div>
     <datalist id="descList">${[...S.addOns,...S.services].map(d=>`<option value="${esc(d)}">`).join('')}</datalist>
@@ -1107,7 +1111,11 @@ function autofill(k){
     if(n) toast(`Filled site details from ${hit.num}`);
   }
 }
-$('#drawer').addEventListener('change', e=>{ if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property') autofill(k); if(k==='pricingOption') rerenderItems(); else refreshCalcs(); });
+$('#drawer').addEventListener('change', e=>{ const o=e.target.dataset.opt; if(o==null||!draft) return;
+  const groups=groupsOf(draft); let ch=chosenOptions(draft).filter(g=>g!==o); if(e.target.checked) ch.push(o); ch=groups.filter(g=>ch.includes(g));
+  if(!ch.length){ e.target.checked=true; toast('At least one option has to count.'); return; }
+  draft.pricingOption=ch.join('||'); rerenderItems(); }, true);
+$('#drawer').addEventListener('change', e=>{ if(e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property') autofill(k); if(k==='pricingOption') rerenderItems(); else refreshCalcs(); });
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
@@ -1117,6 +1125,11 @@ $('#drawer').addEventListener('click', e=>{
   else if(t.dataset.est!=null) openEst(+t.dataset.est);
   else if(t.dataset.add){ draft.items=[...(draft.items||[])]; if(!draft.items.length && t.dataset.add==='Service' && num(draft.amount)!=null) draft.items.push({type:'Service',service:draft.service||'',qty:1,frequency:draft.frequency||'',amount:num(draft.amount),description:draft.service||''}); else draft.items.push({type:t.dataset.add,service:t.dataset.add==='Add-on'?'':(draft.service||''),qty:1,frequency:draft.frequency||'',amount:'',description:'',accepted:false}); rerenderItems(); }
   else if(t.dataset.del!=null){ draft.items.splice(+t.dataset.del,1); rerenderItems(); }
+  else if(t.dataset.dup!=null){ const i=+t.dataset.dup, c=structuredClone(draft.items[i]); delete c.accepted; draft.items.splice(i+1,0,c); rerenderItems(); toast('Line duplicated, estimate included. Change what differs.'); }
+  else if(t.dataset.dupopt!=null){ const i=+t.dataset.dupopt, src=draft.items[i], groups=groupsOf(draft);
+    const m=/(option\s*)(\d+)/i.exec(src.group||''); let next; if(m){ let n=Math.max(...groups.map(g=>+((/(option\s*)(\d+)/i.exec(g)||[])[2]||0)))+1; next=src.group.replace(m[0], m[1]+n); } else { next=`${src.group} (Option ${groups.length+1})`; }
+    const copies=draft.items.filter(x=>x.type!=='Add-on' && x.group===src.group).map(x=>({...structuredClone(x), group:next}));
+    draft.items.push(...copies); rerenderItems(); toast(`Copied ${copies.length} line${copies.length===1?'':'s'} into "${next}". Change what differs.`); }
   else if(t.id==='approveSend'){ const note=$('#revNote')?.value.trim(); draft.dateSent=iso(today()); setStatus('Sent'); save(async num=>{ await addActivity(num,'review_approved',note||null); }); }
   else if(t.id==='sendBack'){ const note=$('#revNote')?.value.trim(); if(!note){ $('#revNote').focus(); toast('Add a reason so the estimator knows what to fix.'); return; } setStatus('Estimating'); save(async num=>{ await addActivity(num,'review_sent_back',note); }); }
   else if(t.id==='startEst'){ if(!draft.sentBy){ toast('Assign an estimator first.'); return; }
@@ -1666,6 +1679,7 @@ async function makePdf(p){
   for(const it of items){ const key=it.type==='Add-on'?'__addon':(it.group||''); if(!seen.has(key)){ seen.set(key,[]); groups.push(key); } seen.get(key).push(it); }
   groups.sort((a,b)=>(a==='__addon')-(b==='__addon'));
   const multi=groups.filter(g=>g!=='__addon').length>1;
+  if(multi){ doc.setFont('helvetica','italic'); doc.setFontSize(8.5); doc.setTextColor(60); doc.text('This proposal includes more than one option. Please indicate which option(s) you would like to approve.',L0,y); y+=14; doc.setTextColor(0); }
   for(const g of groups){
     const rows=seen.get(g), title = g==='__addon' ? 'OPTIONAL ADD-ONS' : (g ? g.toUpperCase() : (multi?'BASE SERVICES':''));
     if(y>660){ doc.addPage(); y=60; }
