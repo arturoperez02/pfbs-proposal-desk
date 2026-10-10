@@ -246,11 +246,8 @@ td input,td select{padding:5px 8px}
   <section id="view-login" hidden>
     <div class="login card">
       <h2>Sign in</h2>
-      <p class="sub">Use your PF Building Services Microsoft 365 account.</p>
-      <button class="btn wide" id="msLogin">Sign in with Microsoft</button>
-      <details id="emailBox"><summary>Sign in with an email link instead</summary>
-        <form id="emailForm" class="emailrow"><input type="email" id="loginEmail" placeholder="you@pfbuildingservices.com" required aria-label="Work email"><button class="btn" type="submit">Email me a link</button></form>
-      </details>
+      <p class="sub">Enter your work email and we'll send you a sign-in link. Only people on the PF Building Services team list can get in.</p>
+      <form id="emailForm" class="emailrow"><input type="email" id="loginEmail" placeholder="you@pfbuildingservices.com" required aria-label="Work email" autocomplete="email"><button class="btn" type="submit">Email me a link</button></form>
       <p class="sub" id="loginMsg"></p>
     </div>
   </section>
@@ -2235,10 +2232,6 @@ async function loadProposals(){
 }
 
 // ---------- auth ----------
-$('#msLogin').addEventListener('click', async ()=>{
-  const {error}=await sb.auth.signInWithOAuth({provider:'azure', options:{scopes:'email', redirectTo: location.origin+location.pathname}});
-  if(error) $('#loginMsg').textContent=error.message;
-});
 $('#emailForm').addEventListener('submit', async e=>{
   e.preventDefault();
   const {error}=await sb.auth.signInWithOtp({email:$('#loginEmail').value.trim().toLowerCase(), options:{shouldCreateUser:true, emailRedirectTo: location.origin+location.pathname}});
