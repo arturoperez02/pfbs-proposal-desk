@@ -131,7 +131,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
 .acc{display:flex;gap:6px;align-items:center;font-size:13px;flex:1}
 .igrid{display:grid;grid-template-columns:1.4fr .7fr 1fr 1fr;gap:8px}.igrid .full{grid-column:1/-1}
 @media (max-width:720px){.igrid{grid-template-columns:1fr 1fr}}
-.sumline{display:flex;gap:6px 16px;flex-wrap:wrap;align-items:baseline;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:14px}
+.gpline{font-size:13px;color:var(--muted);margin-top:8px}.gpline b{color:var(--ink)}
 .itot{margin-top:10px;font-size:13px;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
 td input,td select{padding:5px 8px}
@@ -322,12 +322,8 @@ async function openDrawer(id){
   if(id){ const {data}=await sb.from('proposal_history').select('status,changed_at,changed_by').eq('num',id).order('changed_at',{ascending:false}).limit(8); hist=data||[]; if(draft&&draft.num===id) drawDrawer(); }
 }
 function closeDrawer(){ $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; }
-function calc1(p){ const g=gpPct(p); return `<div class="calc">
-      <div><span>GP %</span><b class="num" style="color:${g!=null&&g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b></div>
-      <div><span>Annual value</span><b class="num">${money(annual(p))}</b></div>
-      <div><span>Days open</span><b class="num">${daysOpen(p)??'—'}</b></div>
-      <div><span>Follow-up</span><b class="num">${followUp(p)?fmtD(iso(followUp(p))):'—'}</b></div>
-    </div>${g!=null&&g<S.marginFloor?`<div class="note" style="color:var(--bad)">Below the ${pct(S.marginFloor)} margin floor: needs owner approval; commission pays at a reduced rate.</div>`:''}`; }
+function calc1(p){ const g=gpPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
+function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null) return ''; const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
 function calc2(p){ const br=bdRate(p), er=estRate(p); return `<div class="calc">
       <div><span>BD rate</span><b class="num">${br==null?'—':pct(br)}</b></div>
       <div><span>BD commission</span><b class="num">${money(bdComm(p))}</b></div>
@@ -360,8 +356,7 @@ function itemsHTML(p, ed){
 }
 function itotText(p){ const L=countedItems(p), per=L.reduce((s,i)=>s+(num(i.amount)||0),0); const off=(p.items||[]).filter(i=>i.type==='Add-on'&&!i.accepted);
   return `Counted: ${L.length} line${L.length===1?'':'s'} · <b>${money(per)}</b> per visit · <b>${money(annual(p))}</b> per year${off.length?` · ${off.length} add-on${off.length===1?'':'s'} offered, not accepted`:''}`; }
-function sumLine(p){ return `<span>Total per visit <b>${money(p.amount)}</b></span><span>${esc(p.service||'—')}</span><span>${esc(p.frequency || ([...new Set(countedItems(p).map(i=>i.frequency).filter(Boolean))].length>1 ? 'Mixed frequencies' : '—'))}</span><span class="note" style="margin:0">Filled in from Scope &amp; pricing below</span>`; }
-function rerenderItems(){ syncFromItems(draft); const box=$('#itemsBox'); if(box) box.innerHTML=itemsHTML(draft, canEditDraft()); const a=$('#sumline'); if(a) a.innerHTML=sumLine(draft); refreshCalcs(); }
+function rerenderItems(){ syncFromItems(draft); const box=$('#itemsBox'); if(box) box.innerHTML=itemsHTML(draft, canEditDraft()); refreshCalcs(); }
 function drawDrawer(){
   const p=draft, ed=canEditDraft();
   const dis = ed?'':'disabled';
@@ -378,6 +373,7 @@ function drawDrawer(){
     <fieldset><legend>Status</legend>
       <div class="stages">${STATUSES.map(s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`).join('')}</div>
       ${!canReview()&&PRE.includes(orig?.status??'Estimating')?'<div class="note">Move it to Needs Review when it is ready. The senior estimator sends it.</div>':''}
+      <div id="openline">${openLine(p)}</div>
       <div class="hist">${hist.map(h=>`<div>${fmtD(h.changed_at)} — ${esc(h.status)}${h.changed_by?' · '+esc(h.changed_by):''}</div>`).join('')}${p.reviewedBy?`<div>Reviewed by ${esc(p.reviewedBy)}</div>`:''}</div>
     </fieldset>
     <fieldset><legend>Proposal</legend><div class="grid2">
@@ -385,12 +381,7 @@ function drawDrawer(){
       ${sel('Estimator (sent by)','sentBy',names,'',!isManager())}
       ${field('Client (company)','client','text','full')}
       ${field('Property name / short label','property','text','full')}
-      <div class="full sumline" id="sumline">${sumLine(p)}</div>
-      ${field('Est. gross profit ($)','gp','number')}
-      ${field('Pass-through costs ($)','passThrough','number','','placeholder="lifts, subs"')}
-      ${field('HCP job #','hcpJob')}
     </div>
-    <div id="calc1">${calc1(p)}</div>
     </fieldset>
     <fieldset><legend>Bill to &amp; job site</legend><div class="grid2">
       ${field('Contact name','contactName')}
@@ -401,6 +392,11 @@ function drawDrawer(){
     </div></fieldset>
     <fieldset><legend>Scope &amp; pricing</legend>
       <div id="itemsBox">${itemsHTML(p, ed)}</div>
+      <div class="grid2">
+        ${field('Est. gross profit ($)','gp','number','','placeholder="from the bid sheet"')}
+        ${field('Pass-through costs ($)','passThrough','number','','placeholder="lifts, subs"')}
+      </div>
+      <div id="calc1">${calc1(p)}</div>
       <label class="f">Proposal clarifications <span class="note" style="margin:0;font-weight:400">one per line</span><textarea data-k="clarifications" id="f-clarifications" rows="3" ${dis} placeholder="Leave blank to use your standard clarifications">${esc(p.clarifications??'')}</textarea></label>
     </fieldset>
     <fieldset><legend>Lead &amp; commission</legend><div class="grid2">
@@ -415,7 +411,8 @@ function drawDrawer(){
     <div id="calc2">${calc2(p)}</div>
     <div class="note">Commission shows once Date paid is filled in. Owners don't earn estimator commission.</div>
     </fieldset>
-    <fieldset><legend>Files</legend><div class="grid2">
+    <fieldset><legend>Job &amp; files</legend><div class="grid2">
+      ${field('HCP job #','hcpJob')}
       ${field('Bid sheet link (SharePoint)','bidLink','url','full','placeholder="https://…sharepoint.com/…"')}
       ${field('Proposal folder link','folderLink','url','full','placeholder="https://…sharepoint.com/…"')}
     </div>
@@ -456,7 +453,7 @@ function itemEvent(e, final){
   const f=e.target.dataset.it; if(!f) return false; const i=+e.target.closest('[data-i]').dataset.i, it=draft.items[i];
   it[f] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
   if(final && (e.target.tagName==='SELECT' || e.target.type==='checkbox' || f==='group')) { if(f==='service' && !it.description) it.description=it.service; rerenderItems(); }
-  else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); const a=$('#sumline'); if(a) a.innerHTML=sumLine(draft); refreshCalcs(); }
+  else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); refreshCalcs(); }
   return true;
 }
 $('#drawer').addEventListener('input', e=>{ if(itemEvent(e,false)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
