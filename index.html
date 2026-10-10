@@ -395,6 +395,7 @@ function estCalc(e){
   const n=v=>num(v)||0, line=r=>{ const c=n(r.unit)*n(r.qty); return {cost:c, price:c*(1+n(r.markup))}; };
   const sum=(a,f)=>(a||[]).reduce((s,r)=>s+f(r),0);
   const unitsPrice=sum(e.units,r=>n(r.qty)*n(r.rate));
+  if(SHEETS[e.sheet]?.unit) for(const r of (e.labor||[])) if(roleKind(r.role)!=='admin') r.rate=0;
   const burden=num(S.est.burden)||0, laborPrice=sum(e.labor,r=>n(r.hours)*n(r.rate))+unitsPrice, wages=sum(e.labor,r=>n(r.hours)*wageOf(r)), laborCost=wages*(1+burden);
   const techHours=sum((e.labor||[]).filter(r=>r.role!=='Administration'),r=>n(r.hours));
   const mat=sum(e.materials,r=>line(r).cost), matP=sum(e.materials,r=>line(r).price), tax=mat*n(e.taxRate);
@@ -987,7 +988,7 @@ function renderEst(){
       <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Bill rate ($/hr)</th><th>Wage ($/hr)</th><th class="r">Total</th><th></th></tr></thead><tbody>
       ${E.labor.map((r,i)=>`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
         <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Hours"></td>
-        <td><input data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Bill rate"></td>
+        <td>${SHEETS[E.sheet]?.unit && roleKind(r.role)!=='admin' ? `<input value="Billed per ${esc(SHEETS[E.sheet].unit.per)}" disabled aria-label="Bill rate" title="Price comes from the ${esc(SHEETS[E.sheet].unit.per)} rate above; hours here count as wage cost only">` : `<input data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Bill rate">`}</td>
         <td><input data-e="labor.${i}.wage" type="number" step="any" inputmode="decimal" value="${esc(r.wage??'')}" placeholder="${esc(costRate(r.role))}" aria-label="Wage per hour" ${r.role==='Administration'?'disabled':''}></td>
         <td class="r num" id="et-labor-${i}"></td><td><button type="button" class="x" data-erm="labor.${i}" aria-label="Remove row">×</button></td></tr>`).join('')}
       </tbody></table></div>
