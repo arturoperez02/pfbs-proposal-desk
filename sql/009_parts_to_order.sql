@@ -4,7 +4,8 @@
 --       [{desc, qty, supplier, sku, link, status: To order|Ordered|Received,
 --         orderedOn, orderedBy, orderNo, receivedOn}]
 --   • proposals.buyer: who buys the parts (blank = the estimator on the job)
---   • monthly report: lists parts still waiting to be ordered
+--   • lift / equipment rentals tracked in the same list (kind = rental)
+--   • monthly report: parts still to order and rentals needing action
 --   • follow-up emails: no price, no signature (your Outlook signature is added)
 -- Run once in Supabase: SQL Editor → New query → paste → Run. Safe to run twice.
 -- Needs update 007 first.
@@ -14,19 +15,24 @@ alter table public.proposals
   add column if not exists parts jsonb not null default '[]'::jsonb,
   add column if not exists buyer text;
 
--- parts still to order, as an HTML block for the monthly report
+-- parts still to order and rentals needing action, as an HTML block for the monthly report
 create or replace function public.parts_open_html() returns text
 language sql stable security definer set search_path = public as $$
   select case when count(*) = 0 then '' else
-    '<h3 style="color:#1F2A5C;margin:0">Parts still to order</h3><ul style="margin:6px 0 18px;padding-left:18px">'
+    '<h3 style="color:#1F2A5C;margin:0">Parts and rentals needing action</h3><ul style="margin:6px 0 18px;padding-left:18px">'
     || string_agg('<li>' || public.h(p.num || ' · ' || p.client) || ' — ' || public.h(e->>'desc')
-         || coalesce(' × ' || nullif(e->>'qty',''), '')
-         || ' (buyer: ' || public.h(coalesce(nullif(p.buyer,''), p.sent_by, 'not set')) || ', approved '
+         || case when e->>'kind' = 'rental'
+                 then case when coalesce(e->>'status','To reserve') = 'To reserve' then ': rental not reserved yet'
+                           else ': job is done, rental still on rent (call it off-rent)' end
+                 else coalesce(' × ' || nullif(e->>'qty',''), '') || ': still to order' end
+         || ' (' || public.h(coalesce(nullif(p.buyer,''), p.sent_by, 'no contact')) || ', approved '
          || coalesce(to_char(p.date_resolved, 'FMMM/FMDD'), '—') || ')</li>', '' order by p.date_resolved nulls last, p.num)
     || '</ul>' end
   from public.proposals p, jsonb_array_elements(coalesce(p.parts,'[]'::jsonb)) e
-  where coalesce(e->>'status','To order') = 'To order'
-    and p.status in ('Approved','Scheduled','Invoiced','Paid')
+  where p.status in ('Approved','Scheduled','Invoiced','Paid')
+    and ( (coalesce(e->>'kind','part') <> 'rental' and coalesce(e->>'status','To order') = 'To order')
+       or (e->>'kind' = 'rental' and coalesce(e->>'status','To reserve') = 'To reserve')
+       or (e->>'kind' = 'rental' and e->>'status' = 'Delivered' and p.status in ('Invoiced','Paid')) )
 $$;
 
 -- add that block to the report (app and Zapier)

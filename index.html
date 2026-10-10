@@ -207,6 +207,11 @@ tr.matdet td{background:var(--bg);padding:6px 8px}.matgrid{display:grid;grid-tem
 .ptfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
 .ptitem{border-left:4px solid var(--warn)}.ptitem.pt-ordered{border-left-color:var(--info)}.ptitem.pt-received{border-left-color:var(--good);opacity:.85}
 .revb.ptlate{background:var(--bad-bg);color:var(--bad)}
+.rtgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 8px}.rtgrid .span2{grid-column:span 2}.rtgrid .span3{grid-column:1/-1}
+@media (max-width:600px){.rtgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.rtgrid .span2,.rtgrid .span3{grid-column:1/-1}}
+.rtitem{border-left:4px solid var(--warn)}.rtitem.rt-reserved,.rtitem.rt-delivered,.rtitem.rt-offrentcalled{border-left-color:var(--info)}.rtitem.rt-pickedup{border-left-color:var(--good)}
+.rtalert{font-size:13px;font-weight:700;margin:0 0 6px}.rtalert.bad{color:var(--bad)}.rtalert.warn{color:var(--warn)}
+a.linkout{font-size:12px;font-weight:600;color:var(--accent)}
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
@@ -229,6 +234,7 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="pipeline" aria-selected="true">Pipeline</button>
     <button role="tab" data-tab="leads" aria-selected="false">Leads</button>
     <button role="tab" data-tab="sales" aria-selected="false" id="salesTab" hidden>My Sales</button>
+    <button role="tab" data-tab="orders" aria-selected="false" id="ordersTab" hidden>Orders</button>
     <button role="tab" data-tab="scorecard" aria-selected="false">Scorecards</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
@@ -290,6 +296,12 @@ td input,td select{padding:5px 8px}
       </div>
     </div>
     <div id="salesBody"></div>
+  </section>
+
+  <section id="view-orders" hidden>
+    <div class="toolbar" style="justify-content:space-between"><div><h2>Orders</h2><div class="sub">Lift rentals and parts for approved jobs. Click a row to open the job.</div></div>
+      <div id="ordChips" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
+    <div id="ordersBody"></div>
   </section>
 
   <section id="view-scorecard" hidden>
@@ -505,6 +517,7 @@ const FILTERS = [
   ['Renewals due', p=>renewalDue(p)],
   ['Needs actuals', p=>['Invoiced','Paid'].includes(p.status) && !(p.actuals||[]).length],
   ['Parts to order', p=>outcome(p)==='Won' && partsOpen(p)>0],
+  ['Rentals', p=>rentAlerts(p).length>0],
   ['All', ()=>true]
 ];
 function renderPipeline(){
@@ -525,7 +538,7 @@ function renderPipeline(){
   const list=P.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   $('#rows').innerHTML = list.length ? list.map(p=>{
     const d=daysOpen(p), f=followUp(p);
-    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}${outcome(p)==='Won'&&partsOpen(p)?` <span class="revb ${partsLate(p)?'ptlate':''}" title="${partsOpen(p)} part(s) still to order">Parts</span>`:''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
+    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}${outcome(p)==='Won'&&partsOpen(p)?` <span class="revb ${partsLate(p)?'ptlate':''}" title="${partsOpen(p)} part(s) still to order">Parts</span>`:''}${rentAlerts(p).length?` <span class="revb ${rentAlerts(p).some(a=>a[0]==='bad')?'ptlate':''}" title="${esc(rentAlerts(p).map(a=>a[1]).join('; '))}">Lift</span>`:''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">${P.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
   $('#newBtn').hidden = !canCreate(); $('#leadBtn').hidden = !canLead();
 }
@@ -675,7 +688,8 @@ function drawDrawer(){
       <div class="gpline" style="align-self:end">${p.renewalDate?'Set by you':'Suggested from '+esc(p.frequency.toLowerCase())+' frequency'}${renewalDue(p)?' · <b style="color:var(--warn)">due now</b>':''}</div></div>
       ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn small" id="rnRequote">Re-quote as new proposal</button><button type="button" class="btn ghost small" id="rnDone">Handled, next ${renewalOf(p)?fmtD(addMonths(renewalOf(p),FREQ_MONTHS[p.frequency])):''}</button></div>`:''}
       <div class="note">Shows under "Renewals due" 30 days before this date.</div></fieldset>` : ''}
-    ${outcome(p)==='Won' ? `<fieldset><legend>Parts to order</legend><div id="ptBox">${partsHTML(p, ed)}</div></fieldset>` : ''}
+    ${outcome(p)==='Won' ? `<fieldset><legend>Parts to order</legend><div id="ptBox">${partsHTML(p, ed)}</div></fieldset>
+    <fieldset><legend>Lift &amp; equipment rentals</legend><div id="rtBox">${rentalsTrackHTML(p, ed)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Change orders</legend><div id="coBox">${coHTML(p, ed)}</div></fieldset>` : ''}
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Job actuals</legend>
       <div class="note" style="margin:0 0 8px">Log each visit from the techs' sign-in sheets. Leave a cost blank if it matched the estimate.</div>
@@ -704,7 +718,7 @@ function setStatus(st){
   if((st==='Approved'||LOST.includes(st)) && !draft.dateResolved) draft.dateResolved=iso(today());
   if(st==='Sent' && !draft.dateSent) draft.dateSent=iso(today());
   if(st==='Paid' && !draft.datePaid) draft.datePaid=iso(today());
-  if(WON.includes(st) && !(draft.parts||[]).length){ const b=buildParts(draft); if(b.length){ draft.parts=b; toast(`Parts to order: ${b.length} item${b.length===1?'':'s'} from the estimate. Save to keep.`); } }
+  if(WON.includes(st) && !(draft.parts||[]).length){ const b=buildParts(draft); if(b.length){ draft.parts=b; const r=b.filter(isRent).length; toast(`From the estimate: ${b.length-r} part${b.length-r===1?'':'s'} to order${r?`, ${r} rental${r===1?'':'s'} to reserve`:''}. Save to keep.`); } }
   drawDrawer();
 }
 async function save(after, o={}){
@@ -796,21 +810,36 @@ const PART_ST=['To order','Ordered','Received'];
 function buildParts(p){
   const out=new Map();
   for(const it of countedItems(p)){ const e=it.estimate; if(!e) continue;
-    for(const [sec,pre] of [['materials',''],['rentals','Rental: ']]) for(const r of (e[sec]||[])){ const q=(num(r.qty)||0); if(!(q*(num(r.unit)||0)>0)) continue;
-      const key=(pre+(r.desc||'')+'|'+(r.sku||'')).toLowerCase(), cur=out.get(key);
-      if(cur) cur.qty+=q; else out.set(key,{desc:pre+(r.desc||'Item'), qty:q, supplier:r.supplier||'', sku:r.sku||'', link:r.link||'', status:'To order'}); } }
+    for(const r of (e.materials||[])){ const q=(num(r.qty)||0); if(!(q*(num(r.unit)||0)>0)) continue;
+      const key=((r.desc||'')+'|'+(r.sku||'')).toLowerCase(), cur=out.get(key);
+      if(cur) cur.qty+=q; else out.set(key,{desc:r.desc||'Item', qty:q, supplier:r.supplier||'', sku:r.sku||'', link:r.link||'', status:'To order'}); }
+    for(const r of (e.rentals||[])){ const q=(num(r.qty)||0), c=q*(num(r.unit)||0); if(!(c>0)) continue;
+      out.set('rent|'+out.size, {kind:'rental', desc:r.desc||'Lift rental', qty:q, estCost:Math.round(c*100)/100, vendor:r.supplier||'', status:'To reserve'}); } }
   return [...out.values()];
 }
-const partsOpen = p => (p.parts||[]).filter(x=>(x.status||'To order')==='To order').length;
+const isRent = x => x && x.kind==='rental';
+const partsOpen = p => (p.parts||[]).filter(x=>!isRent(x) && (x.status||'To order')==='To order').length;
+const RENT_ST=['To reserve','Reserved','Delivered','Off-rent called','Picked up'];
+// what needs doing on a rental: [level, message] or null
+function rentAlert(p, x){
+  const t=today(), d=x.deliveryDate?parse(x.deliveryDate):null, off=x.offRentDate?parse(x.offRentDate):null, st=x.status||'To reserve', done=['Invoiced','Paid'].includes(p.status);
+  if(st==='To reserve') return d && days(t,d)<=2 ? ['bad', d<t?'Delivery date passed and it is not reserved':`Delivers ${fmtD(x.deliveryDate)}, not reserved`] : ['warn','Not reserved yet'];
+  if(st==='Reserved') return d && d<t ? ['warn','Delivery date passed: mark it Delivered?'] : null;
+  if(st==='Delivered'){ if(done) return ['bad','Job is done: call it off-rent']; if(off && off<=t) return ['bad','Off-rent date reached: call it off-rent']; return null; }
+  if(st==='Off-rent called'){ if(!x.offRentNo) return ['bad','Get the off-rent (termination) #']; if(x.offRentOn && days(parse(x.offRentOn),t)>3) return ['warn','Confirm it was picked up']; return null; }
+  if(st==='Picked up' && num(x.finalCost)==null) return ['warn','Enter the final rental invoice'];
+  return null;
+}
+const rentAlerts = p => (p.parts||[]).filter(isRent).map(x=>rentAlert(p,x)).filter(Boolean);
 const partsLate = p => outcome(p)==='Won' && partsOpen(p)>0 && p.dateResolved && days(parse(p.dateResolved), today())>=2;
 const buyerOf = p => p.buyer || p.sentBy || '';
 function partsHTML(p, ed){
-  const L=p.parts||[], dis=ed?'':'disabled', names=TEAM.filter(t=>t.active&&t.role!=='BD Rep').map(t=>t.name);
-  const head=`<div class="grid2" style="margin-bottom:8px"><label class="f">Buyer<select id="ptBuyer" ${dis}><option value="">Estimator on the job${p.sentBy?' ('+esc(p.sentBy)+')':''}</option>${names.map(n=>`<option ${n===p.buyer?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
+  const ALL=p.parts||[], L=ALL.filter(x=>!isRent(x)), dis=ed?'':'disabled', names=TEAM.filter(t=>t.active&&t.role!=='BD Rep').map(t=>t.name);
+  const head=`<div class="grid2" style="margin-bottom:8px"><label class="f">Buyer / office contact<select id="ptBuyer" ${dis}><option value="">Estimator on the job${p.sentBy?' ('+esc(p.sentBy)+')':''}</option>${names.map(n=>`<option ${n===p.buyer?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
     <div class="gpline" style="align-self:end">${L.length?`${partsOpen(p)} to order · ${L.filter(x=>x.status==='Ordered').length} ordered · ${L.filter(x=>x.status==='Received').length} received${partsLate(p)?' · <b style="color:var(--bad)">approved '+days(parse(p.dateResolved),today())+' days ago, still to order</b>':''}`:''}</div></div>`;
   if(!L.length) return head+`<div class="note" style="margin:0 0 8px">No parts listed. ${(p.items||[]).some(i=>i.estimate)?'Pull them from the estimate, or add them by hand.':'Add anything that needs buying or booking.'}</div>
     ${ed?`<div class="toolbar" style="margin:0">${(p.items||[]).some(i=>i.estimate)?'<button type="button" class="btn small" id="ptBuild">Pull from estimate</button>':''}<button type="button" class="btn ghost small" id="ptAdd">+ Part</button></div>`:''}`;
-  return head+`<div class="items">${L.map((x,i)=>`<div class="item ptitem pt-${(x.status||'To order').replace(' ','').toLowerCase()}">
+  return head+`<div class="items">${ALL.map((x,i)=>isRent(x)?'':`<div class="item ptitem pt-${(x.status||'To order').replace(' ','').toLowerCase()}">
     <div class="ptgrid">
       <label class="f ptdesc">Item<input data-pt="${i}.desc" value="${esc(x.desc||'')}" ${dis}></label>
       <label class="f">Qty<input data-pt="${i}.qty" type="number" step="any" value="${esc(x.qty??'')}" ${dis}></label>
@@ -832,6 +861,43 @@ async function saveParts(note){
   return true;
 }
 const refreshParts = () => { const b=$('#ptBox'); if(b) b.innerHTML=partsHTML(draft, canEditDraft()); };
+const refreshRentals = () => { const b=$('#rtBox'); if(b) b.innerHTML=rentalsTrackHTML(draft, canEditDraft()); };
+function rentalsTrackHTML(p, ed){
+  const ALL=p.parts||[], R=ALL.filter(isRent), dis=ed?'':'disabled';
+  if(!R.length) return `<div class="note" style="margin:0 0 8px">No rentals. Lifts and equipment from the estimate's Subcontractors / rentals show up here when the job is approved.</div>
+    ${ed?`<div class="toolbar" style="margin:0">${(p.items||[]).some(i=>(i.estimate?.rentals||[]).length)?'<button type="button" class="btn small" id="ptBuild">Pull from estimate</button>':''}<button type="button" class="btn ghost small" id="rtAdd">+ Rental</button></div>`:''}`;
+  const inp=(i,k,l,type='text',cls='')=>`<label class="f ${cls}">${l}<input data-rt="${i}.${k}" type="${type}" ${type==='number'?'step="any"':''} value="${esc(ALL[i][k]??'')}" ${dis}></label>`;
+  return `<div class="items">${ALL.map((x,i)=>{ if(!isRent(x)) return ''; const a=rentAlert(p,x), st=x.status||'To reserve';
+    return `<div class="item rtitem rt-${st.replace(/\W+/g,'').toLowerCase()}">
+      ${a?`<div class="rtalert ${a[0]}">${esc(a[1])}</div>`:''}
+      <div class="rtgrid">
+        ${inp(i,'desc','Equipment','text','span2')}
+        <label class="f">Status<select data-rt="${i}.status" ${dis}>${RENT_ST.map(v=>`<option ${v===st?'selected':''}>${v}</option>`).join('')}</select></label>
+        ${inp(i,'vendor','Rental company')}${inp(i,'vendorPhone','Branch phone','tel')}${inp(i,'reservationNo','Reservation / contract #')}
+        ${inp(i,'deliveryDate','Delivery date','date')}${inp(i,'offRentDate','Planned off-rent date','date')}${inp(i,'offRentNo','Off-rent (termination) #')}
+        ${inp(i,'finalCost','Final invoice $','number')}<div class="f"><span>Estimated</span><div class="num" style="padding:8px 0">${x.estCost!=null?usd(x.estCost):'—'}</div></div>
+        ${inp(i,'notes','Notes','text','span3')}
+      </div>
+      <div class="ptfoot"><span class="note" style="margin:0">${[x.reservedOn&&`Reserved ${fmtD(x.reservedOn)}${x.reservedBy?' by '+esc(x.reservedBy):''}`, x.deliveredOn&&`delivered ${fmtD(x.deliveredOn)}`, x.offRentOn&&`off-rent called ${fmtD(x.offRentOn)}${x.offRentBy?' by '+esc(x.offRentBy):''}`, x.pickedUpOn&&`picked up ${fmtD(x.pickedUpOn)}`].filter(Boolean).join(' · ')}</span>
+        ${ed?`<button type="button" class="btn ghost small" data-ptdel="${i}">Remove</button>`:''}</div>
+    </div>`; }).join('')}</div>${ed?'<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="rtAdd">+ Rental</button></div>':''}`;
+}
+$('#drawer').addEventListener('change', async e=>{ const t=e.target; if(!draft||t.dataset.rt==null) return;
+  const [i,k]=t.dataset.rt.split('.'), x=draft.parts[+i]; x[k]= ['qty','finalCost'].includes(k) ? num(t.value) : t.value.trim(); let note=null;
+  if(k==='status'){ const v=t.value, d=iso(today());
+    if(v==='Reserved'){ x.reservedOn=x.reservedOn||d; x.reservedBy=x.reservedBy||me.name; }
+    if(v==='Delivered'){ x.deliveredOn=x.deliveredOn||d; x.reservedOn=x.reservedOn||d; }
+    if(v==='Off-rent called'){ x.offRentOn=x.offRentOn||d; x.offRentBy=x.offRentBy||me.name; }
+    if(v==='Picked up'){ x.pickedUpOn=x.pickedUpOn||d; x.offRentOn=x.offRentOn||d; }
+    if(v==='To reserve'){ ['reservedOn','reservedBy','deliveredOn','offRentOn','offRentBy','pickedUpOn'].forEach(f=>delete x[f]); }
+    note=`Rental: ${x.desc} → ${v}${v==='Reserved'&&x.reservationNo?' (reservation '+x.reservationNo+')':''}${v==='Off-rent called'&&x.offRentNo?' (off-rent # '+x.offRentNo+')':''}`; }
+  if(k==='offRentNo' && x.offRentNo) note=`Rental: ${x.desc} off-rent # ${x.offRentNo}`;
+  if(k==='finalCost' && x.finalCost!=null) note=`Rental: ${x.desc} final invoice ${usd(x.finalCost)}`;
+  if(await saveParts(note) && ['status','offRentNo','finalCost','deliveryDate','offRentDate'].includes(k)) refreshRentals();
+});
+$('#drawer').addEventListener('click', async e=>{ const t=e.target.closest('button'); if(!t||!draft) return;
+  if(t.id==='rtAdd'){ draft.parts=[...(draft.parts||[]), {kind:'rental', desc:'', qty:1, vendor:'', status:'To reserve'}]; refreshRentals(); }
+}, true);
 $('#drawer').addEventListener('change', async e=>{ const t=e.target; if(!draft) return;
   if(t.id==='ptBuyer'){ draft.buyer=t.value; if(await saveParts(`Parts buyer: ${t.value||'estimator on the job'}`)) refreshParts(); }
   if(t.dataset.pt!=null){ const [i,k]=t.dataset.pt.split('.'), x=draft.parts[+i]; x[k]= k==='qty'?num(t.value):t.value.trim();
@@ -841,10 +907,39 @@ $('#drawer').addEventListener('change', async e=>{ const t=e.target; if(!draft) 
     if(await saveParts(note) && (k==='status'||k==='link')) refreshParts(); }
 });
 $('#drawer').addEventListener('click', async e=>{ const t=e.target.closest('button'); if(!t||!draft) return;
-  if(t.id==='ptBuild'){ draft.parts=buildParts(draft); if(!draft.parts.length){ toast('The estimate has no materials or rentals with a cost.'); return; } if(await saveParts(`Parts list created from the estimate (${draft.parts.length} items)`)) refreshParts(); }
+  if(t.id==='ptBuild'){ const b=buildParts(draft), keepR=(draft.parts||[]).filter(isRent), keepP=(draft.parts||[]).filter(x=>!isRent(x));
+    const add=[...(keepP.length?[]:b.filter(x=>!isRent(x))), ...(keepR.length?[]:b.filter(isRent))]; if(!add.length){ toast('The estimate has no materials or rentals with a cost.'); return; }
+    draft.parts=[...(draft.parts||[]), ...add]; if(await saveParts(`Pulled from the estimate: ${add.length} item${add.length===1?'':'s'}`)){ refreshParts(); refreshRentals(); } }
   if(t.id==='ptAdd'){ draft.parts=[...(draft.parts||[]), {desc:'',qty:1,supplier:'',sku:'',link:'',status:'To order'}]; refreshParts(); }
-  if(t.dataset.ptdel!=null){ if(!t.dataset.armed){ t.dataset.armed='1'; t.textContent='Confirm remove'; return; } const x=draft.parts.splice(+t.dataset.ptdel,1)[0]; if(await saveParts(`Parts: removed ${x.desc}`)) refreshParts(); }
+  if(t.dataset.ptdel!=null){ if(!t.dataset.armed){ t.dataset.armed='1'; t.textContent='Confirm remove'; return; } const x=draft.parts.splice(+t.dataset.ptdel,1)[0]; if(await saveParts(`${isRent(x)?'Rental':'Parts'}: removed ${x.desc}`)){ refreshParts(); refreshRentals(); } }
 });
+
+// ---------- Orders tab (office view of rentals and parts) ----------
+let ordFilter='Needs action';
+function renderOrders(){
+  const jobs=P.filter(p=>(p.parts||[]).length && (outcome(p)==='Won'));
+  const R=[], Pt=[];
+  for(const p of jobs) (p.parts||[]).forEach(x=>{ (isRent(x)?R:Pt).push({p,x}); });
+  const rentAct=({p,x})=>!!rentAlert(p,x), rentOpen=({x})=>(x.status||'To reserve')!=='Picked up' || num(x.finalCost)==null;
+  const partAct=({p,x})=>(x.status||'To order')==='To order', partOpen=({x})=>(x.status||'To order')!=='Received';
+  const F={'Needs action':[rentAct,partAct],'Open':[rentOpen,partOpen],'All':[()=>true,()=>true]};
+  $('#ordChips').innerHTML=Object.keys(F).map(k=>`<button class="chip" data-of="${k}" aria-pressed="${k===ordFilter}">${k} <span class="c">${R.filter(F[k][0]).length+Pt.filter(F[k][1]).length}</span></button>`).join('');
+  const rr=R.filter(F[ordFilter][0]).sort((a,b)=>String(a.x.deliveryDate||'9').localeCompare(String(b.x.deliveryDate||'9')));
+  const pp=Pt.filter(F[ordFilter][1]).sort((a,b)=>String(a.p.dateResolved||'').localeCompare(String(b.p.dateResolved||'')));
+  const job=p=>`<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`;
+  $('#ordersBody').innerHTML = `<div class="card"><h3>Lift &amp; equipment rentals (${rr.length})</h3>
+    <div class="tablewrap"><table><thead><tr><th>Job</th><th>Equipment</th><th class="hide-sm">Rental company</th><th>Status</th><th class="hide-sm">Delivery</th><th class="hide-sm">Reservation #</th><th class="hide-sm">Off-rent #</th><th>Needs</th></tr></thead><tbody>
+    ${rr.length?rr.map(({p,x})=>{ const a=rentAlert(p,x); return `<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td>${esc(x.desc)}</td><td class="hide-sm">${esc(x.vendor||'')}</td><td><span class="pill ${(x.status||'To reserve')==='Picked up'?'p-won':(x.status||'To reserve')==='To reserve'?'p-open':'p-review'}">${esc(x.status||'To reserve')}</span></td><td class="hide-sm num">${fmtD(x.deliveryDate)}</td><td class="hide-sm">${esc(x.reservationNo||'')}</td><td class="hide-sm">${esc(x.offRentNo||'')}</td><td>${a?`<span class="flag ${a[0]}">${esc(a[1])}</span>`:'—'}</td></tr>`; }).join('')
+      : `<tr><td colspan="8" class="empty">${ordFilter==='Needs action'?'Nothing needs action on rentals.':'No rentals here.'}</td></tr>`}</tbody></table></div>
+    <div class="note">Red: costs money or blocks the job (job done but still on rent, delivery soon but not reserved, off-rent called without a number).</div></div>
+  <div class="card" style="margin-top:16px"><h3>Parts (${pp.length})</h3>
+    <div class="tablewrap"><table><thead><tr><th>Job</th><th>Item</th><th class="r">Qty</th><th class="hide-sm">Supplier</th><th>Status</th><th class="hide-sm">Order #</th><th class="hide-sm">Buyer</th><th></th></tr></thead><tbody>
+    ${pp.length?pp.map(({p,x})=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td>${esc(x.desc)}${x.sku?` <span class="note" style="margin:0">#${esc(x.sku)}</span>`:''}</td><td class="r num">${fmtH(num(x.qty)||0)}</td><td class="hide-sm">${esc(x.supplier||'')}</td><td><span class="pill ${(x.status||'To order')==='Received'?'p-won':(x.status||'To order')==='To order'?'p-open':'p-review'}">${esc(x.status||'To order')}</span></td><td class="hide-sm">${esc(x.orderNo||'')}</td><td class="hide-sm">${esc(buyerOf(p))}</td><td>${partsLate(p)&&(x.status||'To order')==='To order'?'<span class="flag bad">Late</span>':''}${safeLink(x.link)?` <a href="${esc(safeLink(x.link))}" target="_blank" rel="noopener" class="linkout">Link ↗</a>`:''}</td></tr>`).join('')
+      : `<tr><td colspan="8" class="empty">${ordFilter==='Needs action'?'No parts waiting to be ordered.':'No parts here.'}</td></tr>`}</tbody></table></div></div>`;
+}
+$('#ordChips').addEventListener('click', e=>{ const b=e.target.closest('[data-of]'); if(b){ ordFilter=b.dataset.of; renderOrders(); } });
+$('#ordersBody').addEventListener('click', e=>{ if(e.target.closest('a')) return; const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
+$('#ordersBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); } });
 
 // ---------- photos (stored in Supabase Storage, printed on the client PDF) ----------
 const PH_BUCKET='proposal-photos', PHURL={};
@@ -2098,14 +2193,14 @@ $('#settingsBody').addEventListener('change', async e=>{
 });
 
 // ---------- tabs / views ----------
-function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','scorecard','settings']) $('#view-'+v).hidden = v!==view; }
+function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','scorecard','settings']) $('#view-'+v).hidden = v!==view; }
 $('#tabs').addEventListener('click', e=>{
   const b=e.target.closest('[data-tab]'); if(!b) return;
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x===b);
   show(b.dataset.tab); renderAll();
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
-function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='scorecard') renderScore(); if(c==='settings') renderSettings(); }
+function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders') renderOrders(); if(c==='scorecard') renderScore(); if(c==='settings') renderSettings(); }
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
@@ -2141,6 +2236,7 @@ async function start(session){
   me=m; $('#whoName').textContent=`${m.name} · ${m.role}`; $('#who').hidden=false; $('#tabs').hidden=false;
   await Promise.all([loadTeam(), loadSettings()]);
   $('#salesTab').hidden = !(m.role==='BD Rep' || ['Owner','Admin','Senior Estimator'].includes(m.role));
+  $('#ordersTab').hidden = m.role==='BD Rep';
   $('#salesTab').textContent = m.role==='BD Rep' ? 'My Sales' : 'BD Sales';
   if(m.role==='BD Rep'){ for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab==='sales'); show('sales'); } else show('pipeline');
   await loadProposals(); loadProspects();
