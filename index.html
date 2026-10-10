@@ -151,7 +151,7 @@ dl.tots dt{color:var(--muted)}dl.tots dd{margin:0;text-align:right}
 dl.tots .big{font-family:var(--display);font-size:22px;color:var(--ink);padding-top:6px;border-top:1px solid var(--line)}
 dl.tots .sm{font-size:12px}
 .calcbox{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}.calcbox summary{font-weight:600;color:var(--accent)}
-.cgrid{margin:8px 0}.calcout{font-size:14px;margin:6px 0 8px}
+.cgrid{margin:8px 0}table.cres{border-collapse:collapse;width:auto;min-width:300px;font-size:14px}table.cres td{padding:3px 10px 3px 0;border:0;white-space:nowrap}table.cres tr.last td{font-weight:700;border-top:1px solid var(--line);padding-top:6px}.calcout{font-size:14px;margin:6px 0 8px}
 label.f.inline{display:flex;align-items:center;gap:6px}label.f.inline input{width:90px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
 td input,td select{padding:5px 8px}
@@ -588,7 +588,7 @@ $('#newBtn').addEventListener('click', ()=>openDrawer(null));
 
 
 // ---------- estimate editor ----------
-let EI=null, E=null, CALC={type:'exterior'};
+let EI=null, E=null, CALC={type:'swing'};
 function openEst(i){ EI=i; const it=draft.items[i]; E=structuredClone(it.estimate || newEstimate()); renderEst(); $('#est').hidden=false; }
 function closeEst(){ $('#est').hidden=true; EI=null; E=null; }
 const SECS = [['materials','Materials','Markup on cost; sales tax applies to material cost'],['rentals','Subcontractors / rentals','Billed to the client with markup (pass-through)'],['equipment','PFBS equipment','Your own equipment, e.g. depreciation per use'],['misc','Miscellaneous','Shipping, fuel, other costs']];
@@ -651,29 +651,45 @@ function updateEstTotals(){
     <button class="btn ghost wide" id="estSave" style="margin-top:6px">Save without changing price</button>
     <div class="note">Price rounds down to the whole dollar. You can still edit the line amount after.</div>`;
 }
+const CALC_DEF = {
+  swing:    {label:'Swing stage', inputs:[['techs','# of techs'],['wpt','# of windows / tech'],['floors','# of floors'],['mins','Minutes / window'],['drops','# of drops'],['dpd','Est. drops / day']], rig:true},
+  bosun:    {label:'Bosun chair / RDS', inputs:[['techs','# of techs'],['wpt','# of windows / tech'],['floors','# of floors'],['mins','Min / window'],['drops','# of drops'],['rdpt','Recommended drops / tech']]},
+  interior: {label:'Interior', inputs:[['windows','# of windows'],['mins','Minutes / window'],['techs','# of techs'],['floors','# of floors']]},
+  exterior: {label:'Exterior', inputs:[['windows','# of windows'],['mins','Min / windows'],['techs','# of techs']]}
+};
 function calcHTML(){
-  const t=CALC.type, v=k=>esc(CALC[k]??''), inp=(k,l)=>`<label class="f">${l}<input data-c="${k}" type="number" step="any" inputmode="decimal" value="${v(k)}"></label>`;
-  const types=[['exterior','Exterior (ground / WFP)'],['interior','Interior'],['bosun','Bosun chair / RDS'],['swing','Swing stage']];
-  let body='';
-  if(t==='exterior'||t==='interior') body=inp('windows','# of windows')+inp('mins','Minutes / window')+inp('techs','# of techs');
-  if(t==='bosun') body=inp('techs','# of techs')+inp('drops','Total drops')+inp('wpd','Windows / drop')+inp('mins','Minutes / window')+inp('dpd','Drops / tech / day');
-  if(t==='swing') body=inp('techs','Techs on stage')+inp('drops','Total drops')+inp('wpd','Windows / drop')+inp('mins','Minutes / window')+inp('dpd','Drops / day')+`<label class="f">Rig<select data-c="rig"><option value="1" ${CALC.rig!=='1.5'?'selected':''}>RR (+1 hr / drop)</option><option value="1.5" ${CALC.rig==='1.5'?'selected':''}>GR (+1.5 hr / drop)</option></select></label>`;
-  return `<div class="grid2 cgrid"><label class="f">Type<select data-c="type">${types.map(([k,l])=>`<option value="${k}" ${k===t?'selected':''}>${l}</option>`).join('')}</select></label>${body}</div>
-    ${t==='bosun'?'<div class="note">Drops / tech / day guide: 20–15 floors 1–2.5 · 15–10 floors 2.5–3.5 · 10–5 floors 3.5–4.5 · 6–4 floors 4.5–5.5</div>':''}
+  const t=CALC.type, d=CALC_DEF[t], v=k=>esc(CALC[k]??''), inp=(k,l)=>`<label class="f">${l}<input data-c="${k}" type="number" step="any" inputmode="decimal" value="${v(k)}"></label>`;
+  return `<div class="grid2 cgrid"><label class="f">Calculator<select data-c="type">${Object.entries(CALC_DEF).map(([k,x])=>`<option value="${k}" ${k===t?'selected':''}>${x.label}</option>`).join('')}</select></label>
+    ${d.rig?`<label class="f">Rig<select data-c="rig"><option value="1" ${CALC.rig!=='1.5'?'selected':''}>RR / no balance (+1 hr / drop)</option><option value="1.5" ${CALC.rig==='1.5'?'selected':''}>GR / RR balance (+1.5 hr / drop)</option></select></label>`:''}
+    ${d.inputs.map(([k,l])=>inp(k,l)).join('')}</div>
+    ${t==='bosun'?'<div class="note">Drops / tech guide (chair): 20–15 floors 1–2.5 · 15–10 floors 2.5–3.5 · 10–5 floors 3.5–4.5 · 6–4 floors 4.5–5.5</div>':''}
     ${t==='swing'?'<div class="note">Drops / day guide: 20–15 floors 3–4.5 · 15–10 floors 4.5–5.5 · 10–5 floors 5.5–6.5 · 6–4 floors 6.5–8.5</div>':''}
-    <div class="calcout" id="calcOut">${calcOut().text}</div>
-    <button type="button" class="btn small" id="calcApply">Apply to labor</button>`;
+    <div class="calcout" id="calcOut">${calcOut().html}</div>
+    <div class="toolbar"><button type="button" class="btn small" id="calcApply">Set tech hours</button><button type="button" class="btn ghost small" id="calcAdd">Add to tech hours (another location)</button></div>`;
 }
+// Same formulas as the Calculator tab of the WC bid sheet.
 function calcOut(){
-  const n=k=>num(CALC[k])||0, t=CALC.type, T=n('techs');
-  let per=null, text='Fill in the boxes to see hours.';
-  if(T>0){
-    if(t==='exterior'){ per=n('windows')*n('mins')/60/T+1; text=`${fmtH(per)} hrs per tech (includes 1 hr setup) · ${fmtH(per*T)} total`; }
-    if(t==='interior'){ per=n('windows')*n('mins')/60/T; text=`${fmtH(per)} hrs per tech · ${fmtH(per*T)} total`; }
-    if(t==='bosun' && n('dpd')>0){ const hpd=n('wpd')*n('mins')/60+1, days=n('drops')/(T*n('dpd')); per=days*8; text=`${fmtH(hpd)} hrs per drop · ${fmtH(days)} days · ${fmtH(per)} hrs per tech (8-hr days)`; }
-    if(t==='swing' && n('dpd')>0){ const hpd=n('wpd')*n('mins')/60/T+(num(CALC.rig)||1), days=n('drops')/n('dpd'); per=days*8; text=`${fmtH(hpd)} hrs per drop · ${fmtH(days)} days · ${fmtH(per)} hrs per tech (8-hr days)`; }
+  const n=k=>num(CALC[k])||0, t=CALC.type, T=n('techs'), rows=[]; let per=null;
+  const div=(a,b)=>b?a/b:null, f=x=>x==null?'—':fmtH(x);
+  if(t==='swing'){
+    const twd=T*n('wpt')*n('floors'), wpt=div(twd,T), hpd=wpt==null?null:wpt*n('mins')/60/T+(num(CALC.rig)||1), hday=hpd==null?null:n('dpd')*hpd, days=div(n('drops'),n('dpd')), hpt=days==null?null:days*8;
+    rows.push(['Total windows / drop',twd],['Windows / tech',wpt],['Hours / drop',hpd],['Total hours / day',hday],['Project days',days],['Project hrs / tech',hpt]); per=hpt;
   }
-  return {per, techs:T, text};
+  if(t==='bosun'){
+    const twd=T*n('wpt')*n('floors'), wpt=div(twd,T), hpd=wpt==null?null:wpt*n('mins')/60/T+1, hday=hpd==null?null:n('rdpt')*hpd, comb=T*n('rdpt'), days=div(n('drops'),comb), tot=days==null?null:days*8;
+    rows.push(['Total windows / drop',twd],['Windows / tech',wpt],['Total hrs / drop',hpd],['Hrs / day',hday],['Total drops / day combined',comb],['# of days / tech',days],['Total hrs to complete',tot]); per=tot;
+  }
+  if(t==='interior'){
+    const hpt=div(n('windows')*n('mins')/60,T), tot=hpt==null?null:n('floors')*hpt;
+    rows.push(['# of hours / tech',hpt],['Total project hours',tot]); per = n('floors') ? tot : hpt;
+  }
+  if(t==='exterior'){
+    const hpt=T? n('windows')*n('mins')/60/T+1 : null;
+    rows.push(['Total hrs / tech',hpt]); per=hpt;
+  }
+  const html = `<table class="cres">${rows.map(([l,x],i)=>`<tr class="${i===rows.length-1?'last':''}"><td>${l}</td><td class="r num">${f(x)}</td></tr>`).join('')}</table>`
+    + (per!=null && T ? `<div class="note" style="margin:6px 0 0">Applies <b>${f(per)} hrs</b> to each of ${T} tech line${T===1?'':'s'}${t==='interior'&&!n('floors')?' (no floors entered, so hours / tech)':''}.</div>` : '');
+  return {per, techs:T, html};
 }
 const fmtH = h => (Math.round(h*100)/100).toLocaleString('en-US');
 function rentalHTML(){ const R=CALC.rent||(CALC.rent={desc:'Boom lift',amount:'',delivery:'',pickup:'',tax:Math.round(S.est.rentalTax*100000)/1000,protection:'',misc:''}); const inp=(k,l,t='number')=>`<label class="f">${l}<input data-r="${k}" type="${t}" step="any" value="${esc(R[k]??'')}"></label>`;
@@ -689,14 +705,14 @@ $('#est').addEventListener('input', e=>{
   const t=e.target;
   if(t.dataset.e){ const path=t.dataset.e.split('.'); let v=t.value; if(t.dataset.pct) v = v===''?'':(num(v)||0)/100;
     if(path.length===1) E[path[0]]=v; else E[path[0]][+path[1]][path[2]]=v; updateEstTotals(); }
-  if(t.dataset.c && t.dataset.c!=='type'){ CALC[t.dataset.c]=t.value; const o=$('#calcOut'); if(o) o.innerHTML=calcOut().text; }
+  if(t.dataset.c && t.dataset.c!=='type'){ CALC[t.dataset.c]=t.value; const o=$('#calcOut'); if(o) o.innerHTML=calcOut().html; }
   if(t.dataset.r){ CALC.rent[t.dataset.r]=t.value; $('#rentOut').innerHTML=rentText(); }
   if(t.dataset.fu){ CALC.fuel[t.dataset.fu]=t.value; $('#fuelOut').innerHTML=fuelText(); }
 });
 $('#est').addEventListener('change', e=>{
   const t=e.target;
   if(t.dataset.c==='type'){ CALC.type=t.value; CALC.open=true; renderEst(); }
-  else if(t.dataset.c==='rig'){ CALC.rig=t.value; $('#calcOut').innerHTML=calcOut().text; }
+  else if(t.dataset.c==='rig'){ CALC.rig=t.value; $('#calcOut').innerHTML=calcOut().html; }
   else if(t.dataset.e && t.tagName==='SELECT'){ const [a,i,f]=t.dataset.e.split('.'); E[a][+i][f]=t.value; const r=S.est.labor.find(x=>x[0]===t.value); if(f==='role' && r) E[a][+i].rate=r[1]; renderEst(); }
 });
 $('#est').addEventListener('click', e=>{
@@ -707,11 +723,12 @@ $('#est').addEventListener('click', e=>{
     else E[sec].push({desc:'',unit:'',qty:1,markup: sec==='materials'?S.est.matMarkup : sec==='rentals'?S.est.rentMarkup : sec==='equipment'?S.est.equipMarkup : 0});
     renderEst(); return; }
   if(t.dataset.erm){ const [sec,i]=t.dataset.erm.split('.'); E[sec].splice(+i,1); renderEst(); return; }
-  if(t.id==='calcApply'){ const o=calcOut(); if(!o.per || !o.techs){ toast('Fill in the calculator first.'); return; }
-    const hrs=Math.ceil(o.per*2)/2, ex=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0];
+  if(t.id==='calcApply' || t.id==='calcAdd'){ const o=calcOut(); if(!o.per || !o.techs){ toast('Fill in the calculator first.'); return; }
+    const add=t.id==='calcAdd', hrs=Math.round(o.per*100)/100, ex=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0];
     const keep=E.labor.filter(r=>r.role==='Administration'), techs=E.labor.filter(r=>r.role!=='Administration');
-    const lines=[]; for(let k=0;k<o.techs;k++){ const prev=techs[k]; lines.push({role:prev?.role||ex[0], hours:hrs, rate:prev?.rate??ex[1]}); }
-    E.labor=[...keep,...lines]; CALC.open=true; renderEst(); toast(`Set ${o.techs} tech line${o.techs===1?'':'s'} to ${fmtH(hrs)} hrs`); return; }
+    const count=Math.max(o.techs, add?techs.length:0), lines=[];
+    for(let k=0;k<count;k++){ const prev=techs[k]; const base=add?(num(prev?.hours)||0):0; lines.push({role:prev?.role||ex[0], hours:Math.round((base+(k<o.techs?hrs:0))*100)/100, rate:prev?.rate??ex[1]}); }
+    E.labor=[...keep,...lines]; CALC.open=true; renderEst(); toast(add?`Added ${fmtH(hrs)} hrs to ${o.techs} tech line${o.techs===1?'':'s'}`:`Set ${o.techs} tech line${o.techs===1?'':'s'} to ${fmtH(hrs)} hrs`); return; }
   if(t.id==='rentApply'){ const tot=rentTotal(); if(!tot){ toast('Fill in the rental first.'); return; } E.rentals.push({desc:CALC.rent.desc||'Rental',unit:Math.round(tot*100)/100,qty:1,markup:S.est.rentMarkup}); renderEst(); toast('Rental line added'); return; }
   if(t.id==='fuelApply'){ const rt=Math.round(fuelRT()*100)/100; let f=E.misc.find(r=>/fuel/i.test(r.desc)); if(!f){ f={desc:'Fuel',unit:0,qty:0,markup:0}; E.misc.push(f); } f.unit=rt; f.qty=num(CALC.fuel.trips)||1; renderEst(); toast('Fuel cost set'); return; }
   if(t.id==='estUse' || t.id==='estSave'){
