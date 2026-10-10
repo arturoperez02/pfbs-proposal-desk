@@ -134,6 +134,25 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
 .gpline{font-size:13px;color:var(--muted);margin-top:8px}.gpline b{color:var(--ink)}
 .itot{margin-top:10px;font-size:13px;color:var(--muted)}
 select.qs{width:auto;border:0;padding:2px 22px 2px 9px;cursor:pointer;font-weight:600;font-size:12px;border-radius:999px}
+.estrow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13px}
+.estwrap{position:fixed;inset:0;z-index:25;background:var(--bg);display:flex;flex-direction:column}
+.esthead{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
+.esthead b{font-family:var(--display);font-size:22px;color:var(--accent)}
+.estbody{flex:1;overflow:auto;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;max-width:1240px;width:100%;margin:0 auto;align-items:start}
+.estmain{display:grid;gap:14px;min-width:0}
+.esttot{position:sticky;top:0}
+@media (max-width:900px){.estbody{grid-template-columns:minmax(0,1fr)}.esttot{position:static}}
+.estmain>section{min-width:0}.estbody .grid2{min-width:0}
+table.et td{padding:4px 6px;white-space:normal}table.et input,table.et select{padding:6px 8px;min-width:70px}
+table.et td:first-child input{min-width:160px}
+button.x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;padding:2px 6px}
+dl.tots{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:0 0 12px;font-variant-numeric:tabular-nums}
+dl.tots dt{color:var(--muted)}dl.tots dd{margin:0;text-align:right}
+dl.tots .big{font-family:var(--display);font-size:22px;color:var(--ink);padding-top:6px;border-top:1px solid var(--line)}
+dl.tots .sm{font-size:12px}
+.calcbox{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}.calcbox summary{font-weight:600;color:var(--accent)}
+.cgrid{margin:8px 0}.calcout{font-size:14px;margin:6px 0 8px}
+label.f.inline{display:flex;align-items:center;gap:6px}label.f.inline input{width:90px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
 td input,td select{padding:5px 8px}
 
@@ -203,6 +222,7 @@ td input,td select{padding:5px 8px}
 <div class="scrim" id="scrim" hidden></div>
 <aside class="drawer" id="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="dTitle"></aside>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="estwrap" id="est" hidden role="dialog" aria-modal="true" aria-labelledby="estTitle"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -222,6 +242,8 @@ const DEFAULTS = {
   marginFloor: 0.35, belowFloorShare: 0.5, estTiers: [[0,0.02],[0.35,0.035],[0.45,0.05]], expiryDays: 90,
   clarifications: [['All','This pricing does not cover removal of hard water deposits, adhesive residue, paint overspray, or silicone buildup.'],['All','Client/building management is responsible for supplying any inspection certificates required prior to the start of work.']],
   addOns: ['Window screen cleaning','Pressure washing - sidewalks & entry','Pressure washing - parking structure','Hard water stain removal','Interior window washing','Solar panel cleaning','Gutter cleaning','Graffiti removal'],
+  est: { labor: [['Administration',45,0],['Expert/Chair',75,32],['Apprentice',65,25]], taxRate: 0.1075, matMarkup: 1, rentMarkup: 0.25, equipMarkup: 0.25,
+         materials: [['WFS Resin Refill',80],['Rubber and Soap',5]], misc: [['Shipping',0.15],['Fuel',0],['Other Costs',0]], rentalTax: 0.09375 },
   terms: [["1. Proposal Validity", "Proposals are valid for ninety (90) days from issuance. PF Building Services reserves the right to revise pricing, scope, or terms after expiration. Acceptance constitutes agreement to all terms herein."], ["2. Scope of Work", "Services are limited exclusively to what is described in the written proposal (window washing, pressure washing, solar panel cleaning, janitorial, and building maintenance). Additional work requires a signed Change Order; verbal communication alone does not modify scope."], ["3. Change Orders", "Any modification to scope, materials, schedule, or access requires a written Change Order signed by both parties before work proceeds. Pricing and timelines will be adjusted accordingly, and PF Building Services is not responsible for delays from unapproved changes."], ["4. Pre-Existing Conditions", "PF Building Services is not liable for damage to or failure of pre-existing conditions or defects. Unsafe or deficient conditions discovered during work may result in suspension pending a separate written assessment and estimate."], ["5. Client Responsibilities", "Client shall provide safe, unobstructed access to work areas; secure personal property; disclose known site hazards; ensure necessary utilities are functional; and provide timely approvals. Failure may result in delays or additional charges at standard rates."], ["6. Work Schedule", "Standard hours are Monday-Friday, 6:00 AM-2:30 PM or 8:00 AM-4:00 PM, subject to property-specific rules. PF Building Services may reschedule due to unsafe conditions, weather, or circumstances beyond its control, with prompt notice."], ["7. Delays & Force Majeure", "PF Building Services is not liable for delays caused by acts of God, weather, fire, flood, governmental action, permit delays, labor disputes, supply chain issues, or restricted access. Timelines and costs may be adjusted proportionally with written notice."], ["8. Payment Terms", "Payment is due within thirty (30) days of invoice (Net 30) unless otherwise agreed. Late balances accrue interest at 1.5% per month; Client is responsible for collection costs including attorney fees. Disputes must be raised in writing within ten (10) days. Services may be suspended if payment is more than fifteen (15) days past due."], ["9. Limitation of Liability", "PF Building Services’ total liability shall not exceed the total fees paid for the specific services giving rise to a claim. PF Building Services is not liable for indirect, incidental, consequential, or punitive damages, including lost profits or business interruption."], ["10. Warranty", "PF Building Services warrants professional, workmanlike performance consistent with industry standards. Client must report any deficiency in writing within five (5) business days of completion; PF Building Services will re-perform deficient work at no charge, absent Client-caused or pre-existing conditions. This is the exclusive remedy for workmanship issues."], ["11. Insurance", "PF Building Services maintains Commercial General Liability, Workers’ Compensation, Commercial Auto Liability, Umbrella/Excess Liability, and Equipment/Inland Marine coverage. Certificates of Insurance are available upon written request within five (5) business days."], ["12. Indemnification", "Client agrees to indemnify and hold harmless PF Building Services, its officers, employees, agents, and subcontractors from claims arising from Client’s failure to disclose hazards, breach of this agreement, negligence, or pre-existing conditions not caused by PF Building Services."], ["13. Termination", "Either party may terminate with five (5) business days’ written notice. Client remains responsible for services rendered, materials procured, and reasonable demobilization costs. PF Building Services may terminate immediately for unsafe access, safety risk, or material breach of payment terms."], ["14. Dispute Resolution", "Disputes shall first be addressed through good-faith negotiation within fifteen (15) days of written notice, then non-binding mediation in California, prior to legal proceedings. This agreement is governed by California law; venue lies in the county where the project is located."], ["15. Photography & Documentation", "PF Building Services may photograph completed work for internal records, quality assurance, portfolio, and marketing purposes. No personally identifiable information or proprietary signage will be published without Client’s prior written consent."], ["16. General Provisions", "This agreement, the accepted proposal, and any executed Change Orders constitute the entire agreement between the parties. Invalid provisions do not affect the remainder of the agreement. No modification is valid unless in writing and signed by both parties. PF Building Services holds all required California business licenses."]],
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
@@ -265,12 +287,49 @@ function countedItems(p){
 }
 const SVC_WORDS = [['Solar Panel Cleaning',/solar|panel/i],['Pressure Wash',/pressure|power wash|steam/i],['Janitorial',/janitor|custodial|porter/i],['Gutter Cleaning',/gutter/i],['Graffiti Removal',/graffiti/i],['Gates & Doors',/\bgates?\b|\bdoors?\b/i],['Lights - Decor',/\blights?\b|lighting|decor/i],['Window Cleaning',/window|glass|screen|fa[cç]ade|skylight/i]];
 function guessService(d){ for(const [svc,re] of SVC_WORDS) if(re.test(d||'')) return svc; return 'Other'; }
+// ---------- estimate (replaces the Excel bid sheet) ----------
+function newEstimate(){
+  const E=S.est;
+  return { labor: E.labor.filter(r=>r[0]!=='Apprentice').map((r,i)=>({role:r[0], hours: r[0]==='Administration'?1:0, rate:r[1]})),
+           materials: E.materials.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.matMarkup})),
+           taxRate: E.taxRate,
+           rentals: [], equipment: [],
+           misc: E.misc.map(m=>({desc:m[0], unit:0, qty:0, markup:m[1]})) };
+}
+const costRate = role => { const r=S.est.labor.find(x=>x[0]===role); return r ? num(r[2])||0 : 0; };
+function estCalc(e){
+  const n=v=>num(v)||0, line=r=>{ const c=n(r.unit)*n(r.qty); return {cost:c, price:c*(1+n(r.markup))}; };
+  const sum=(a,f)=>(a||[]).reduce((s,r)=>s+f(r),0);
+  const laborPrice=sum(e.labor,r=>n(r.hours)*n(r.rate)), laborCost=sum(e.labor,r=>n(r.hours)*costRate(r.role));
+  const techHours=sum((e.labor||[]).filter(r=>r.role!=='Administration'),r=>n(r.hours));
+  const mat=sum(e.materials,r=>line(r).cost), matP=sum(e.materials,r=>line(r).price), tax=mat*n(e.taxRate);
+  const rent=sum(e.rentals,r=>line(r).cost), rentP=sum(e.rentals,r=>line(r).price);
+  const eq=sum(e.equipment,r=>line(r).cost), eqP=sum(e.equipment,r=>line(r).price);
+  const misc=sum(e.misc,r=>line(r).cost), miscP=sum(e.misc,r=>line(r).price);
+  const total=laborPrice+matP+tax+rentP+eqP+miscP, cost=laborCost+mat+tax+rent+eq+misc;
+  return {laborPrice,laborCost,techHours,mat,matP,tax,rent,rentP,eq,eqP,misc,miscP,total,cost,gp:total-cost,pass:rentP};
+}
+function estSummary(it){ const c=estCalc(it.estimate), amt=num(it.amount); const g=amt!=null?amt-c.cost:c.gp;
+  return `<span class="estsum">Estimate <b>${usd(c.total)}</b> · cost ${money(c.cost)} · GP <b>${money(g)}</b>${amt!=null&&Math.abs(amt-c.total)>=1?` <span class="note" style="margin:0">(line price ${money(amt)})</span>`:''}</span>`; }
+function estimateTotals(p){ // GP + pass-through from estimates, per visit, for counted lines
+  const L=countedItems(p); if(!L.length || !L.every(i=>i.estimate)) return null;
+  let gp=0, pass=0; for(const i of L){ const c=estCalc(i.estimate); gp += (num(i.amount)??c.total) - c.cost; pass += c.pass; }
+  return {gp:Math.round(gp*100)/100, pass:Math.round(pass*100)/100};
+}
+function gpBoxHTML(p, ed){
+  const auto=estimateTotals(p), dis=(ed&&!auto)?'':'disabled';
+  return `<div class="grid2">
+    <label class="f">Est. gross profit ($)<input id="f-gp" data-k="gp" type="number" step="any" value="${esc(p.gp??'')}" ${dis} placeholder="price − all job costs"></label>
+    <label class="f">Pass-through costs ($)<input id="f-passThrough" data-k="passThrough" type="number" step="any" value="${esc(p.passThrough??'')}" ${dis} placeholder="rentals + subs, as billed"></label></div>
+    <div class="note" style="margin:4px 0 0">${auto ? 'Calculated from the line estimates.' : 'Build an estimate on each line and these fill in automatically. Otherwise enter them from your bid sheet.'}</div>`;
+}
 function syncFromItems(p){
   for(const i of (p.items||[])) i.service = i.description ? guessService(i.description) : '';
   const L=countedItems(p); if(!(p.items||[]).length) return;
   p.amount = L.reduce((s,i)=>s+(num(i.amount)||0),0);
   const sv=[...new Set(L.map(i=>i.service).filter(Boolean))]; p.service = sv.length>1 ? 'Multiple services' : (sv[0]||p.service||'');
   const fq=[...new Set(L.map(i=>i.frequency).filter(Boolean))]; p.frequency = fq.length===1 ? fq[0] : (fq.length? '' : p.frequency);
+  const auto=estimateTotals(p); if(auto){ p.gp=auto.gp; p.passThrough=auto.pass; }
 }
 const SVC_CODE = {'Window Cleaning':'WC','Pressure Wash':'PW','Solar Panel Cleaning':'SP','Janitorial':'JAN','Gutter Cleaning':'GC','Graffiti Removal':'GR','Gates & Doors':'GD','Lights - Decor':'LD','Multiple services':'MULTI'};
 function bdRate(p){ if(!p.bdRep || !p.clientType) return null; const t=S.clientTypes.find(x=>x[0]===p.clientType); if(!t) return null; const g=gpPct(p); return t[1]*((g!=null && g<S.marginFloor)?S.belowFloorShare:1); }
@@ -346,6 +405,7 @@ function itemsHTML(p, ed){
       <label class="f">Qty / visits<input type="number" step="any" inputmode="decimal" data-it="qty" value="${esc(it.qty??1)}" ${dis}></label>
       <label class="f">Frequency<select data-it="frequency" ${dis}>${frqOpts(it.frequency)}</select></label>
       <label class="f">Amount per visit ($)<input type="number" step="any" inputmode="decimal" data-it="amount" value="${esc(it.amount??'')}" ${dis}></label>
+      ${it.type!=='Add-on' || true ? `<div class="full estrow">${it.estimate ? estSummary(it) : '<span class="note" style="margin:0">No estimate yet</span>'}${ed?`<button type="button" class="btn ghost small" data-est="${i}">${it.estimate?'Open estimate':'Build estimate'}</button>`:''}</div>`:''}
       <label class="f full">Note (optional)<input data-it="note" value="${esc(it.note||'')}" placeholder="e.g. Lift is required. Price includes lift rental." ${dis}></label>
     </div></div>`).join('');
   const pick = groups.length>1 ? `<label class="f">Price this proposal on<select data-k="pricingOption" ${dis}>${groups.map(g=>`<option ${g===(groups.includes(p.pricingOption)?p.pricingOption:groups[0])?'selected':''}>${esc(g)}</option>`).join('')}</select></label>` : '';
@@ -358,7 +418,8 @@ function itemsHTML(p, ed){
 }
 function itotText(p){ const L=countedItems(p), per=L.reduce((s,i)=>s+(num(i.amount)||0),0); const off=(p.items||[]).filter(i=>i.type==='Add-on'&&!i.accepted);
   return `Counted: ${L.length} line${L.length===1?'':'s'} · <b>${money(per)}</b> per visit · <b>${money(annual(p))}</b> per year${off.length?` · ${off.length} add-on${off.length===1?'':'s'} offered, not accepted`:''}`; }
-function rerenderItems(){ syncFromItems(draft); const box=$('#itemsBox'); if(box) box.innerHTML=itemsHTML(draft, canEditDraft()); refreshCalcs(); }
+function refreshGp(){ const g=$('#gpBox'); if(g) g.innerHTML=gpBoxHTML(draft, canEditDraft()); }
+function rerenderItems(){ syncFromItems(draft); const box=$('#itemsBox'); if(box) box.innerHTML=itemsHTML(draft, canEditDraft()); refreshGp(); refreshCalcs(); }
 function drawDrawer(){
   const p=draft, ed=canEditDraft();
   const dis = ed?'':'disabled';
@@ -397,11 +458,7 @@ function drawDrawer(){
     </div></fieldset>
     <fieldset><legend>Scope &amp; pricing</legend>
       <div id="itemsBox">${itemsHTML(p, ed)}</div>
-      <div class="grid2">
-        ${field('Est. gross profit ($)','gp','number','','placeholder="price − all job costs"')}
-        ${field('Pass-through costs ($)','passThrough','number','','placeholder="rentals + subs, as billed"')}
-      </div>
-      <div class="note" style="margin:4px 0 0">From the bid sheet. <b>Gross profit</b> = total price minus tech wages, materials + tax, rental and sub costs, fuel and other costs. <b>Pass-through</b> = the Subcontractor / Rentals total the client pays (with markup).</div>
+      <div id="gpBox">${gpBoxHTML(p, ed)}</div>
       <div id="calc1">${calc1(p)}</div>
       <label class="f">Proposal clarifications <span class="note" style="margin:0;font-weight:400">one per line</span><textarea data-k="clarifications" id="f-clarifications" rows="3" ${dis} placeholder="Leave blank to use your standard clarifications">${esc(p.clarifications??'')}</textarea></label>
     </fieldset>
@@ -459,7 +516,7 @@ function itemEvent(e, final){
   const f=e.target.dataset.it; if(!f) return false; const i=+e.target.closest('[data-i]').dataset.i, it=draft.items[i];
   it[f] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
   if(final && (e.target.tagName==='SELECT' || e.target.type==='checkbox' || f==='group')) { rerenderItems(); }
-  else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); refreshCalcs(); }
+  else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); if(estimateTotals(draft)) refreshGp(); const sm=e.target.closest('.item')?.querySelector('.estsum'); if(sm && it.estimate) sm.outerHTML=estSummary(it); refreshCalcs(); }
   return true;
 }
 $('#drawer').addEventListener('input', e=>{ if(itemEvent(e,false)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
@@ -491,6 +548,7 @@ $('#drawer').addEventListener('click', e=>{
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
   else if(t.id==='saveD') save();
   else if(t.id==='pdfD') makePdf(draft);
+  else if(t.dataset.est!=null) openEst(+t.dataset.est);
   else if(t.dataset.add){ draft.items=[...(draft.items||[])]; if(!draft.items.length && t.dataset.add==='Service' && num(draft.amount)!=null) draft.items.push({type:'Service',service:draft.service||'',qty:1,frequency:draft.frequency||'',amount:num(draft.amount),description:draft.service||''}); else draft.items.push({type:t.dataset.add,service:t.dataset.add==='Add-on'?'':(draft.service||''),qty:1,frequency:draft.frequency||'',amount:'',description:'',accepted:false}); rerenderItems(); }
   else if(t.dataset.del!=null){ draft.items.splice(+t.dataset.del,1); rerenderItems(); }
   else if(t.id==='approveSend'){ draft.dateSent=iso(today()); setStatus('Sent'); save(); }
@@ -527,6 +585,141 @@ $('#chips').addEventListener('click', e=>{ const b=e.target.closest('[data-f]');
 $('#q').addEventListener('input', e=>{ query=e.target.value; renderPipeline(); });
 $('#newBtn').addEventListener('click', ()=>openDrawer(null));
 
+
+
+// ---------- estimate editor ----------
+let EI=null, E=null, CALC={type:'exterior'};
+function openEst(i){ EI=i; const it=draft.items[i]; E=structuredClone(it.estimate || newEstimate()); renderEst(); $('#est').hidden=false; }
+function closeEst(){ $('#est').hidden=true; EI=null; E=null; }
+const SECS = [['materials','Materials','Markup on cost; sales tax applies to material cost'],['rentals','Subcontractors / rentals','Billed to the client with markup (pass-through)'],['equipment','PFBS equipment','Your own equipment, e.g. depreciation per use'],['misc','Miscellaneous','Shipping, fuel, other costs']];
+function rowsHTML(sec){
+  return (E[sec]||[]).map((r,i)=>`<tr><td><input data-e="${sec}.${i}.desc" value="${esc(r.desc||'')}" aria-label="Description"></td>
+    <td><input data-e="${sec}.${i}.unit" type="number" step="any" inputmode="decimal" value="${esc(r.unit??'')}" aria-label="Unit cost"></td>
+    <td><input data-e="${sec}.${i}.qty" type="number" step="any" inputmode="decimal" value="${esc(r.qty??'')}" aria-label="Quantity"></td>
+    <td><input data-e="${sec}.${i}.markup" data-pct="1" type="number" step="any" inputmode="decimal" value="${esc(r.markup!=null?Math.round(r.markup*10000)/100:'')}" aria-label="Markup percent"></td>
+    <td class="r num" id="et-${sec}-${i}"></td><td><button type="button" class="x" data-erm="${sec}.${i}" aria-label="Remove row">×</button></td></tr>`).join('');
+}
+function renderEst(){
+  const it=draft.items[EI], roles=S.est.labor.map(r=>r[0]);
+  $('#est').innerHTML = `
+  <div class="esthead"><div><b id="estTitle">Estimate</b><div class="sub">${esc(it.description||'Line '+(EI+1))} · per visit</div></div>
+    <button class="btn ghost small" id="estClose">Close</button></div>
+  <div class="estbody"><div class="estmain">
+    <section class="card"><h3>Labor</h3>
+      <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Bill rate ($/hr)</th><th class="r">Total</th><th></th></tr></thead><tbody>
+      ${E.labor.map((r,i)=>`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
+        <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Hours"></td>
+        <td><input data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Bill rate"></td>
+        <td class="r num" id="et-labor-${i}"></td><td><button type="button" class="x" data-erm="labor.${i}" aria-label="Remove row">×</button></td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Labor line</button><span class="note" style="margin:0">One line per tech. Wage cost per role is set in Settings.</span></div>
+      <details class="calcbox" ${CALC.open?'open':''}><summary>Hours calculator</summary>${calcHTML()}</details>
+    </section>
+    ${SECS.map(([sec,title,help])=>`<section class="card"><h3>${title}</h3><div class="note" style="margin:0 0 6px">${help}</div>
+      <div class="tablewrap"><table class="et"><thead><tr><th>Description</th><th>Unit cost</th><th>Qty${sec==='equipment'?' / days':''}</th><th>Markup %</th><th class="r">Total</th><th></th></tr></thead><tbody>${rowsHTML(sec)}</tbody></table></div>
+      ${sec==='materials'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="materials">+ Material</button><label class="f inline">Sales tax %<input data-e="taxRate" data-pct="1" type="number" step="any" value="${esc(Math.round(num(E.taxRate)*100000)/1000)}"></label></div>`:''}
+      ${sec==='rentals'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="rentals">+ Rental / sub</button></div><details class="calcbox"><summary>Lift rental calculator</summary>${rentalHTML()}</details>`:''}
+      ${sec==='equipment'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="equipment">+ Equipment</button></div>`:''}
+      ${sec==='misc'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="misc">+ Cost</button></div><details class="calcbox"><summary>Fuel calculator</summary>${fuelHTML()}</details>`:''}
+    </section>`).join('')}
+  </div>
+  <aside class="esttot card" id="estTot"></aside></div>`;
+  updateEstTotals();
+}
+function updateEstTotals(){
+  const c=estCalc(E), n=v=>num(v)||0;
+  E.labor.forEach((r,i)=>{ const el=$('#et-labor-'+i); if(el) el.textContent=usd(n(r.hours)*n(r.rate)); });
+  for(const [sec] of SECS) (E[sec]||[]).forEach((r,i)=>{ const el=$(`#et-${sec}-${i}`); if(el) el.textContent=usd(n(r.unit)*n(r.qty)*(1+n(r.markup))); });
+  const rnd=Math.floor(c.total), floor=S.marginFloor, gpp=c.total?c.gp/c.total:null;
+  $('#estTot').innerHTML = `<h3>Totals</h3>
+    <dl class="tots">
+      <dt>Labor</dt><dd>${usd(c.laborPrice)}</dd>
+      <dt>Materials</dt><dd>${usd(c.matP)}</dd>
+      <dt>Tax on materials</dt><dd>${usd(c.tax)}</dd>
+      <dt>Subs / rentals</dt><dd>${usd(c.rentP)}</dd>
+      <dt>PFBS equipment</dt><dd>${usd(c.eqP)}</dd>
+      <dt>Miscellaneous</dt><dd>${usd(c.miscP)}</dd>
+      <dt class="big">Price</dt><dd class="big">${usd(c.total)}</dd>
+      <dt>Job cost</dt><dd>${usd(c.cost)}</dd>
+      <dt class="sm">tech wages ${c.techHours} hrs</dt><dd class="sm">${usd(c.laborCost)}</dd>
+      <dt>Gross profit</dt><dd><b style="color:${gpp!=null&&gpp<floor?'var(--bad)':'inherit'}">${usd(c.gp)}</b></dd>
+      <dt>GP margin</dt><dd>${gpp==null?'—':pct(gpp)}</dd>
+      <dt>Pass-through</dt><dd>${usd(c.pass)}</dd>
+    </dl>
+    ${gpp!=null&&gpp<floor?`<div class="note" style="color:var(--bad)">Below the ${pct(floor)} margin floor.</div>`:''}
+    <button class="btn wide" id="estUse" ${c.total>0?'':'disabled'}>Save &amp; use ${money(rnd)} as line price</button>
+    <button class="btn ghost wide" id="estSave" style="margin-top:6px">Save without changing price</button>
+    <div class="note">Price rounds down to the whole dollar. You can still edit the line amount after.</div>`;
+}
+function calcHTML(){
+  const t=CALC.type, v=k=>esc(CALC[k]??''), inp=(k,l)=>`<label class="f">${l}<input data-c="${k}" type="number" step="any" inputmode="decimal" value="${v(k)}"></label>`;
+  const types=[['exterior','Exterior (ground / WFP)'],['interior','Interior'],['bosun','Bosun chair / RDS'],['swing','Swing stage']];
+  let body='';
+  if(t==='exterior'||t==='interior') body=inp('windows','# of windows')+inp('mins','Minutes / window')+inp('techs','# of techs');
+  if(t==='bosun') body=inp('techs','# of techs')+inp('drops','Total drops')+inp('wpd','Windows / drop')+inp('mins','Minutes / window')+inp('dpd','Drops / tech / day');
+  if(t==='swing') body=inp('techs','Techs on stage')+inp('drops','Total drops')+inp('wpd','Windows / drop')+inp('mins','Minutes / window')+inp('dpd','Drops / day')+`<label class="f">Rig<select data-c="rig"><option value="1" ${CALC.rig!=='1.5'?'selected':''}>RR (+1 hr / drop)</option><option value="1.5" ${CALC.rig==='1.5'?'selected':''}>GR (+1.5 hr / drop)</option></select></label>`;
+  return `<div class="grid2 cgrid"><label class="f">Type<select data-c="type">${types.map(([k,l])=>`<option value="${k}" ${k===t?'selected':''}>${l}</option>`).join('')}</select></label>${body}</div>
+    ${t==='bosun'?'<div class="note">Drops / tech / day guide: 20–15 floors 1–2.5 · 15–10 floors 2.5–3.5 · 10–5 floors 3.5–4.5 · 6–4 floors 4.5–5.5</div>':''}
+    ${t==='swing'?'<div class="note">Drops / day guide: 20–15 floors 3–4.5 · 15–10 floors 4.5–5.5 · 10–5 floors 5.5–6.5 · 6–4 floors 6.5–8.5</div>':''}
+    <div class="calcout" id="calcOut">${calcOut().text}</div>
+    <button type="button" class="btn small" id="calcApply">Apply to labor</button>`;
+}
+function calcOut(){
+  const n=k=>num(CALC[k])||0, t=CALC.type, T=n('techs');
+  let per=null, text='Fill in the boxes to see hours.';
+  if(T>0){
+    if(t==='exterior'){ per=n('windows')*n('mins')/60/T+1; text=`${fmtH(per)} hrs per tech (includes 1 hr setup) · ${fmtH(per*T)} total`; }
+    if(t==='interior'){ per=n('windows')*n('mins')/60/T; text=`${fmtH(per)} hrs per tech · ${fmtH(per*T)} total`; }
+    if(t==='bosun' && n('dpd')>0){ const hpd=n('wpd')*n('mins')/60+1, days=n('drops')/(T*n('dpd')); per=days*8; text=`${fmtH(hpd)} hrs per drop · ${fmtH(days)} days · ${fmtH(per)} hrs per tech (8-hr days)`; }
+    if(t==='swing' && n('dpd')>0){ const hpd=n('wpd')*n('mins')/60/T+(num(CALC.rig)||1), days=n('drops')/n('dpd'); per=days*8; text=`${fmtH(hpd)} hrs per drop · ${fmtH(days)} days · ${fmtH(per)} hrs per tech (8-hr days)`; }
+  }
+  return {per, techs:T, text};
+}
+const fmtH = h => (Math.round(h*100)/100).toLocaleString('en-US');
+function rentalHTML(){ const R=CALC.rent||(CALC.rent={desc:'Boom lift',amount:'',delivery:'',pickup:'',tax:Math.round(S.est.rentalTax*100000)/1000,protection:'',misc:''}); const inp=(k,l,t='number')=>`<label class="f">${l}<input data-r="${k}" type="${t}" step="any" value="${esc(R[k]??'')}"></label>`;
+  return `<div class="grid2 cgrid">${inp('desc','Description','text')}${inp('amount','Rental amount ($)')}${inp('delivery','Delivery ($)')}${inp('pickup','Pick-up ($)')}${inp('tax','Tax rate %')}${inp('protection','Protection plan ($)')}${inp('misc','Misc ($)')}</div><div class="calcout" id="rentOut">${rentText()}</div><button type="button" class="btn small" id="rentApply">Add as rental line</button>`; }
+function rentTotal(){ const R=CALC.rent||{}, n=k=>num(R[k])||0, base=n('amount')+n('delivery')+n('pickup'); return base + base*n('tax')/100 + n('protection') + n('misc'); }
+function rentText(){ return `Estimated charges: <b>${usd(rentTotal())}</b>`; }
+function fuelHTML(){ const F=CALC.fuel||(CALC.fuel={miles:'',mpg:12,price:5,trips:1}); const inp=(k,l)=>`<label class="f">${l}<input data-fu="${k}" type="number" step="any" value="${esc(F[k]??'')}"></label>`;
+  return `<div class="grid2 cgrid">${inp('miles','Trip distance one way (mi)')}${inp('mpg','Fuel efficiency (MPG)')}${inp('price','Fuel price ($/gal)')}${inp('trips','Round trips (days)')}</div><div class="calcout" id="fuelOut">${fuelText()}</div><button type="button" class="btn small" id="fuelApply">Set fuel cost</button>`; }
+function fuelRT(){ const F=CALC.fuel||{}, n=k=>num(F[k])||0; return n('mpg')? n('miles')/n('mpg')*n('price')*2 : 0; }
+function fuelText(){ return `Round trip: <b>${usd(fuelRT())}</b> × ${num(CALC.fuel?.trips)||0}`; }
+
+$('#est').addEventListener('input', e=>{
+  const t=e.target;
+  if(t.dataset.e){ const path=t.dataset.e.split('.'); let v=t.value; if(t.dataset.pct) v = v===''?'':(num(v)||0)/100;
+    if(path.length===1) E[path[0]]=v; else E[path[0]][+path[1]][path[2]]=v; updateEstTotals(); }
+  if(t.dataset.c && t.dataset.c!=='type'){ CALC[t.dataset.c]=t.value; const o=$('#calcOut'); if(o) o.innerHTML=calcOut().text; }
+  if(t.dataset.r){ CALC.rent[t.dataset.r]=t.value; $('#rentOut').innerHTML=rentText(); }
+  if(t.dataset.fu){ CALC.fuel[t.dataset.fu]=t.value; $('#fuelOut').innerHTML=fuelText(); }
+});
+$('#est').addEventListener('change', e=>{
+  const t=e.target;
+  if(t.dataset.c==='type'){ CALC.type=t.value; CALC.open=true; renderEst(); }
+  else if(t.dataset.c==='rig'){ CALC.rig=t.value; $('#calcOut').innerHTML=calcOut().text; }
+  else if(t.dataset.e && t.tagName==='SELECT'){ const [a,i,f]=t.dataset.e.split('.'); E[a][+i][f]=t.value; const r=S.est.labor.find(x=>x[0]===t.value); if(f==='role' && r) E[a][+i].rate=r[1]; renderEst(); }
+});
+$('#est').addEventListener('click', e=>{
+  const t=e.target.closest('button'); if(!t) return;
+  if(t.id==='estClose'){ closeEst(); return; }
+  if(t.dataset.eadd){ const sec=t.dataset.eadd;
+    if(sec==='labor'){ const r=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0]; E.labor.push({role:r[0],hours:0,rate:r[1]}); }
+    else E[sec].push({desc:'',unit:'',qty:1,markup: sec==='materials'?S.est.matMarkup : sec==='rentals'?S.est.rentMarkup : sec==='equipment'?S.est.equipMarkup : 0});
+    renderEst(); return; }
+  if(t.dataset.erm){ const [sec,i]=t.dataset.erm.split('.'); E[sec].splice(+i,1); renderEst(); return; }
+  if(t.id==='calcApply'){ const o=calcOut(); if(!o.per || !o.techs){ toast('Fill in the calculator first.'); return; }
+    const hrs=Math.ceil(o.per*2)/2, ex=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0];
+    const keep=E.labor.filter(r=>r.role==='Administration'), techs=E.labor.filter(r=>r.role!=='Administration');
+    const lines=[]; for(let k=0;k<o.techs;k++){ const prev=techs[k]; lines.push({role:prev?.role||ex[0], hours:hrs, rate:prev?.rate??ex[1]}); }
+    E.labor=[...keep,...lines]; CALC.open=true; renderEst(); toast(`Set ${o.techs} tech line${o.techs===1?'':'s'} to ${fmtH(hrs)} hrs`); return; }
+  if(t.id==='rentApply'){ const tot=rentTotal(); if(!tot){ toast('Fill in the rental first.'); return; } E.rentals.push({desc:CALC.rent.desc||'Rental',unit:Math.round(tot*100)/100,qty:1,markup:S.est.rentMarkup}); renderEst(); toast('Rental line added'); return; }
+  if(t.id==='fuelApply'){ const rt=Math.round(fuelRT()*100)/100; let f=E.misc.find(r=>/fuel/i.test(r.desc)); if(!f){ f={desc:'Fuel',unit:0,qty:0,markup:0}; E.misc.push(f); } f.unit=rt; f.qty=num(CALC.fuel.trips)||1; renderEst(); toast('Fuel cost set'); return; }
+  if(t.id==='estUse' || t.id==='estSave'){
+    const it=draft.items[EI]; it.estimate=structuredClone(E);
+    if(t.id==='estUse') it.amount=Math.floor(estCalc(E).total);
+    closeEst(); rerenderItems(); toast(t.id==='estUse'?`Line price set to ${money(it.amount)}. Save the proposal to keep it.`:'Estimate kept. Save the proposal to keep it.'); }
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#est').hidden){ e.stopImmediatePropagation(); closeEst(); } }, true);
 
 // ---------- PDF proposal ----------
 let LOGO=null;
@@ -690,6 +883,14 @@ function renderSettings(){
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
     ${ta('s-lost','Lost reasons', lines(S.lostReasons), 'One per line.')}
     ${ta('s-addons','Add-on suggestions', lines(S.addOns), 'One per line. These show as suggestions when you type a line description.')}
+    ${ta('s-labor','Labor roles & rates', S.est.labor.map(r=>r.join(' | ')).join('\n'), 'Role | bill rate $/hr | wage cost $/hr. Wage cost drives gross profit.')}
+    ${ta('s-mat','Material presets', S.est.materials.map(r=>r.join(' | ')).join('\n'), 'Name | unit cost. These start every new estimate (qty 0).')}
+    <div class="card listedit"><h3>Estimate defaults</h3>
+      <label class="f">Material markup %<input id="s-mm" type="number" step="any" value="${S.est.matMarkup*100}" ${ro}></label>
+      <label class="f">Sales tax on materials %<input id="s-tax" type="number" step="any" value="${Math.round(S.est.taxRate*100000)/1000}" ${ro}></label>
+      <label class="f">Rental / sub markup %<input id="s-rm" type="number" step="any" value="${S.est.rentMarkup*100}" ${ro}></label>
+      <label class="f">PFBS equipment markup %<input id="s-em" type="number" step="any" value="${S.est.equipMarkup*100}" ${ro}></label>
+      <label class="f">Equipment rental tax %<input id="s-rtax" type="number" step="any" value="${Math.round(S.est.rentalTax*100000)/1000}" ${ro}></label></div>
     ${ta('s-clar','Standard clarifications', S.clarifications.map(c=>c.join(' | ')).join('\n'), 'Service | text. Use All for every proposal. Used when a proposal\'s clarifications box is blank.')}
   </div>
   <div class="card listedit" style="margin-top:16px"><h3>Terms &amp; Conditions (page 2 of every PDF)</h3><textarea id="s-terms" style="min-height:260px" ${ro}>${esc(S.terms.map(t=>t.join(' | ')).join('\n'))}</textarea><div class="note">One term per line: Heading | text.</div>
@@ -708,7 +909,11 @@ $('#settingsBody').addEventListener('click', async e=>{
     const L=id=>$('#'+id).value.split('\n').map(s=>s.trim()).filter(Boolean);
     const pair=(id,f)=>L(id).map(l=>{ const [a,b]=l.split('|').map(s=>s.trim()); return f(a,b); });
     const splitPair=l=>{ const i=l.indexOf('|'); return i<0?['',l.trim()]:[l.slice(0,i).trim(), l.slice(i+1).trim()]; };
-    const data={ services:L('s-svc'), leadSources:L('s-src'), lostReasons:L('s-lost'), addOns:L('s-addons'),
+    const est={ labor:L('s-labor').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b)||0, num(c)||0]; }),
+      materials:L('s-mat').map(l=>{ const [a,b]=l.split('|').map(x=>x.trim()); return [a, num(b)||0]; }),
+      matMarkup:(num($('#s-mm').value)||0)/100, taxRate:(num($('#s-tax').value)||0)/100, rentMarkup:(num($('#s-rm').value)||0)/100, equipMarkup:(num($('#s-em').value)||0)/100,
+      rentalTax:(num($('#s-rtax').value)||0)/100, misc:S.est.misc };
+    const data={ est, services:L('s-svc'), leadSources:L('s-src'), lostReasons:L('s-lost'), addOns:L('s-addons'),
       clarifications:L('s-clar').map(splitPair).map(([a,b])=>[a||'All',b]), terms:L('s-terms').map(splitPair), ack:$('#s-ack').value.trim(),
       frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
