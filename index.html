@@ -536,7 +536,7 @@ function drawDrawer(){
   </div>
   <div class="dfoot"><span class="msg" id="dmsg">${ed?'':'View only'}</span>
     <button class="btn ghost" id="cancelD">Cancel</button>
-    ${isNew?'':'<button class="btn ghost" id="pdfD">Download PDF</button>'}
+    ${isNew?'':`<button class="btn ghost" id="estPdfD">Estimate PDF</button><button class="btn ghost" id="pdfD">Download PDF</button>`}
     <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save changes'}</button></div>`;
 }
 function setStatus(st){
@@ -600,6 +600,7 @@ $('#drawer').addEventListener('click', e=>{
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
   else if(t.id==='saveD') save();
   else if(t.id==='pdfD') makePdf(draft);
+  else if(t.id==='estPdfD') makeEstimatePdf(draft, (draft.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]));
   else if(t.dataset.est!=null) openEst(+t.dataset.est);
   else if(t.dataset.add){ draft.items=[...(draft.items||[])]; if(!draft.items.length && t.dataset.add==='Service' && num(draft.amount)!=null) draft.items.push({type:'Service',service:draft.service||'',qty:1,frequency:draft.frequency||'',amount:num(draft.amount),description:draft.service||''}); else draft.items.push({type:t.dataset.add,service:t.dataset.add==='Add-on'?'':(draft.service||''),qty:1,frequency:draft.frequency||'',amount:'',description:'',accepted:false}); rerenderItems(); }
   else if(t.dataset.del!=null){ draft.items.splice(+t.dataset.del,1); rerenderItems(); }
@@ -836,6 +837,7 @@ function updateEstTotals(){
     ${gpp!=null&&gpp<floor?`<div class="note" style="color:var(--bad)">Below the ${pct(floor)} margin floor.</div>`:''}
     <button class="btn wide" id="estUse" ${c.total>0?'':'disabled'}>Save &amp; use ${money(rnd)} as line price</button>
     <button class="btn ghost wide" id="estSave" style="margin-top:6px">Save without changing price</button>
+    <button class="btn ghost wide" id="estPdf" style="margin-top:6px">Download estimate PDF (internal)</button>
     <div class="note">Price rounds down to the whole dollar. You can still edit the line amount after.</div>`;
 }
 const CALC_DEF = {
@@ -918,6 +920,7 @@ $('#est').addEventListener('click', e=>{
     E.labor=[...keep,...lines]; CALC.open=true; renderEst(); toast(add?`Added ${fmtH(hrs)} hrs to ${o.techs} tech line${o.techs===1?'':'s'}`:`Set ${o.techs} tech line${o.techs===1?'':'s'} to ${fmtH(hrs)} hrs`); return; }
   if(t.id==='rentApply'){ const tot=rentTotal(); if(!tot){ toast('Fill in the rental first.'); return; } E.rentals.push({desc:CALC.rent.desc||'Rental',unit:Math.round(tot*100)/100,qty:1,markup:S.est.rentMarkup}); renderEst(); toast('Rental line added'); return; }
   if(t.id==='fuelApply'){ const rt=Math.round(fuelRT()*100)/100; let f=E.misc.find(r=>/fuel/i.test(r.desc)); if(!f){ f={desc:'Fuel',unit:0,qty:0,markup:0}; E.misc.push(f); } f.unit=rt; f.qty=num(CALC.fuel.trips)||1; renderEst(); toast('Fuel cost set'); return; }
+  if(t.id==='estPdf'){ const it=draft.items[EI]; makeEstimatePdf(draft, [[it, E]]); return; }
   if(t.id==='estTarget'){ const it=draft.items[EI]; it.estimate=structuredClone(E); it.amount=+t.dataset.price; closeEst(); rerenderItems(); toast(`Line price set to ${money(it.amount)} for target margin. Save the proposal to keep it.`); return; }
   if(t.id==='estUse' || t.id==='estSave'){
     const it=draft.items[EI]; it.estimate=structuredClone(E);
@@ -1009,6 +1012,61 @@ async function makePdf(p){
   const code=SVC_CODE[p.service]||'PROP', place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().replace(/\s+/g,' ').slice(0,40);
   doc.save(`${p.num}${(p.rev||1)>1?'_Rev'+p.rev:''}_${code}_${place}_${p.dateSent||iso(today())}.pdf`);
   toast('PDF downloaded');
+}
+async function makeEstimatePdf(p, pairs){
+  if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
+  if(!pairs.length){ toast('No estimate to print yet.'); return; }
+  const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), NAVY=[31,42,92], RED=[179,38,30], L0=46, R0=566, logo=await logoData(), n=v=>num(v)||0;
+  const head=()=>{
+    if(logo) doc.addImage(logo,'JPEG',46,30,100,23);
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...NAVY); doc.text('ESTIMATE WORKSHEET',R0,42,{align:'right'});
+    doc.setFontSize(8); doc.setTextColor(...RED); doc.text('INTERNAL – NOT FOR CLIENT',R0,54,{align:'right'});
+    doc.setDrawColor(...NAVY); doc.setLineWidth(1); doc.line(40,66,572,66); doc.setTextColor(0);
+  };
+  const tbl=(title, headRow, body, foot, colStyles)=>{
+    if(!body.length) return; if(y>690){ doc.addPage(); head(); y=84; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...NAVY); doc.text(title,L0,y); y+=5; doc.setTextColor(0);
+    doc.autoTable({startY:y, margin:{left:L0,right:612-R0}, head:[headRow], body, foot: foot?[foot]:undefined, showFoot:'lastPage', theme:'grid',
+      styles:{font:'helvetica',fontSize:7.8,cellPadding:3.5,lineColor:[210,210,210],lineWidth:0.5,textColor:20}, headStyles:{fillColor:NAVY,textColor:255,fontSize:7,fontStyle:'bold'},
+      footStyles:{fillColor:[245,246,249],textColor:20,fontStyle:'bold'}, columnStyles:colStyles||{}, didDrawPage:()=>{} });
+    y=doc.lastAutoTable.finalY+14;
+  };
+  let y=0;
+  pairs.forEach(([it,e],k)=>{
+    if(k>0) doc.addPage(); head(); y=84;
+    const c=estCalc(e), price=num(it.amount);
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(`${p.num||'New proposal'}${(p.rev||1)>1?' Rev '+p.rev:''}  ·  ${p.client||''}`,L0,y); y+=13;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+    [`Property: ${p.property||'—'}`,`Line: ${it.description||'—'}${it.frequency?'  ·  '+it.frequency:''}${num(it.qty)>1?'  ·  qty '+it.qty:''}`,`Estimator: ${p.sentBy||'—'}  ·  Printed ${fmtLong(iso(today()))}  ·  Amounts are per visit`].forEach(t=>{ doc.text(t,L0,y); y+=11; });
+    y+=6;
+    const R=v=>({content:v,styles:{halign:'right'}});
+    tbl('LABOR',['Role','Hours','Bill rate','Total','Wage','Wage cost'], (e.labor||[]).filter(r=>n(r.hours)).map(r=>[r.role, R(fmtH(n(r.hours))), R(usd(r.rate)), R(usd(n(r.hours)*n(r.rate))), R(r.role==='Administration'?'—':usd(costRate(r.role))), R(usd(n(r.hours)*costRate(r.role)))]),
+      ['Total', R(fmtH(c.techHours)+' tech'), '', R(usd(c.laborPrice)), '', R(usd(c.wages))]);
+    const line=(sec)=>(e[sec]||[]).filter(r=>n(r.unit)*n(r.qty)).map(r=>[r.desc||'', R(usd(r.unit)), R(fmtH(n(r.qty))), R(usd(n(r.unit)*n(r.qty))), R(pct(n(r.markup))), R(usd(n(r.unit)*n(r.qty)*(1+n(r.markup))))]);
+    const H=['Description','Unit cost','Qty','Cost','Markup','Price'];
+    tbl('MATERIALS', H, line('materials'), ['Sales tax '+(Math.round(n(e.taxRate)*10000)/100)+'% on cost','','','','',R(usd(c.tax))]);
+    tbl('SUBCONTRACTORS / RENTALS (PASS-THROUGH)', H, line('rentals'));
+    tbl('PFBS EQUIPMENT', H, line('equipment'));
+    tbl('MISCELLANEOUS', H, line('misc'));
+    if(y>560){ doc.addPage(); head(); y=84; }
+    const gpp=c.total?c.gp/c.total:null, priceGP=price!=null?price-c.cost:null, tgt=num(S.est.targetMargin)||0.45;
+    const rows=[['Labor',usd(c.laborPrice)],['Materials + tax',usd(c.matP+c.tax)],['Subs / rentals',usd(c.rentP)],['PFBS equipment',usd(c.eqP)],['Miscellaneous',usd(c.miscP)],['ESTIMATE TOTAL',usd(c.total)],
+      ...(price!=null?[['Line price used',usd(price)]]:[]),
+      ['Job cost',usd(c.cost)],['  Labor cost'+(c.burden?' (incl. '+pct(c.burden)+' burden)':''),usd(c.laborCost)],['  Materials + tax',usd(c.mat+c.tax)],['  Lifts / subs (your cost)',usd(c.rent)],['  Equipment + misc',usd(c.eq+c.misc)],
+      ['GROSS PROFIT'+(price!=null?' (at line price)':''),usd(priceGP??c.gp)],['Margin',pct((priceGP??c.gp)/((price??c.total)||1))],['Labor profit (labor only)',usd(c.laborProfit)],['Pass-through',usd(c.pass)],
+      ['Wages % of price',pct(c.laborCost/((price??c.total)||1))]];
+    doc.autoTable({startY:y, margin:{left:L0,right:612-(L0+270)}, body:rows, theme:'plain', styles:{font:'helvetica',fontSize:8.5,cellPadding:2.5},
+      columnStyles:{1:{halign:'right'}}, didParseCell:d=>{ if(/TOTAL|GROSS PROFIT/.test(d.row.raw[0])) d.cell.styles.fontStyle='bold'; } });
+    let y2=y; doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(...NAVY); doc.text('CREW PLAN',L0+300,y2+8); doc.setTextColor(0); doc.setFont('helvetica','normal');
+    const cl=doc.splitTextToSize(c.crew.techs?crewText(c):'No tech hours entered.',220); doc.text(cl,L0+300,y2+22); y2+=22+cl.length*11+8;
+    doc.setFont('helvetica','bold'); doc.setTextColor(...NAVY); doc.text('MARGIN CHECK',L0+300,y2); doc.setFont('helvetica','normal'); doc.setTextColor(0); y2+=14;
+    const m=(priceGP??c.gp)/((price??c.total)||1), floor=S.marginFloor, need=Math.ceil(c.cost/(1-tgt));
+    [`Margin ${pct(m)}: ${m>=tgt?'healthy':m>=floor?'getting thin':'below the '+pct(floor)+' floor'}`, `Target ${pct(tgt)}+ would be ${money(need)}`].forEach(t=>{ doc.text(t,L0+300,y2); y2+=11; });
+    if(m<floor){ doc.setTextColor(...RED); doc.text('Needs owner approval before sending.',L0+300,y2); doc.setTextColor(0); }
+  });
+  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120); doc.text(`PF Building Services · internal estimate · ${p.num||''} · page ${i} of ${pages}`,306,775,{align:'center'}); }
+  const place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40);
+  doc.save(`${p.num||'NEW'}${(p.rev||1)>1?'_Rev'+p.rev:''}_Estimate_${place}.pdf`); toast('Estimate PDF downloaded');
 }
 async function makeCoPdf(p, co){
   if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
