@@ -133,6 +133,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
 @media (max-width:720px){.igrid{grid-template-columns:1fr 1fr}.igrid label:nth-child(4){grid-column:1/-1}}
 .gpline{font-size:13px;color:var(--muted);margin-top:8px}.gpline b{color:var(--ink)}
 .itot{margin-top:10px;font-size:13px;color:var(--muted)}
+select.qs{width:auto;border:0;padding:2px 22px 2px 9px;cursor:pointer;font-weight:600;font-size:12px;border-radius:999px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
 td input,td select{padding:5px 8px}
 
@@ -225,7 +226,7 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications'};
 const READONLY = {reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ let v=p[f]; if(v==='') v=null; if(c==='items'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
@@ -308,7 +309,7 @@ function renderPipeline(){
   const list=P.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   $('#rows').innerHTML = list.length ? list.map(p=>{
     const d=daysOpen(p), f=followUp(p);
-    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
+    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">${P.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
   $('#newBtn').hidden = !canCreate();
 }
@@ -326,7 +327,7 @@ async function openDrawer(id){
 }
 function closeDrawer(){ $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; }
 function calc1(p){ const g=gpPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
-function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null) return ''; const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
+function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null){ const o=outcome(p); return (o==='Won'||o==='Lost') && p.dateResolved ? `<div class="gpline">${o} on ${fmtD(p.dateResolved)}${p.datePaid?' · paid '+fmtD(p.datePaid):''}</div>` : ''; } const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
 function calc2(p){ const br=bdRate(p), er=estRate(p); return `<div class="calc">
       <div><span>BD rate</span><b class="num">${br==null?'—':pct(br)}</b></div>
       <div><span>BD commission</span><b class="num">${money(bdComm(p))}</b></div>
@@ -375,6 +376,7 @@ function drawDrawer(){
       <div class="stages">${STATUSES.map(s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`).join('')}</div>
       ${!canReview()&&PRE.includes(orig?.status??'Estimating')?'<div class="note">Move it to Needs Review when it is ready. The senior estimator sends it.</div>':''}
       <div id="openline">${openLine(p)}</div>
+      ${LOST.includes(p.status)?`<div class="grid2" style="margin-top:6px">${sel('Lost reason','lostReason',S.lostReasons)}</div>`:''}
       <div class="hist">${hist.map(h=>`<div>${fmtD(h.changed_at)} — ${esc(h.status)}${h.changed_by?' · '+esc(h.changed_by):''}</div>`).join('')}${p.reviewedBy?`<div>Reviewed by ${esc(p.reviewedBy)}</div>`:''}</div>
     </fieldset>
     <fieldset><legend>Proposal</legend><div class="grid2">
@@ -403,20 +405,19 @@ function drawDrawer(){
       <div id="calc1">${calc1(p)}</div>
       <label class="f">Proposal clarifications <span class="note" style="margin:0;font-weight:400">one per line</span><textarea data-k="clarifications" id="f-clarifications" rows="3" ${dis} placeholder="Leave blank to use your standard clarifications">${esc(p.clarifications??'')}</textarea></label>
     </fieldset>
-    <fieldset><legend>Lead &amp; commission</legend><div class="grid2">
+    <fieldset><legend>Lead</legend><div class="grid2">
       ${sel('Client type','clientType',S.clientTypes.map(c=>c[0]))}
       ${sel('Lead source','leadSource',S.leadSources)}
       ${sel('BD rep','bdRep',bds)}
+    </div></fieldset>
+    ${outcome(p)==='Won' ? `<fieldset><legend>Payment &amp; commission</legend><div class="grid2">
+      ${field('HCP job #','hcpJob')}
       ${field('Date paid','datePaid','date')}
-      <label class="f">Commission paid on<input id="f-commPaidOn" data-k="commPaidOn" type="date" value="${esc(p.commPaidOn??'')}" ${ed&&canPayComm()?'':'disabled'}></label>
-      ${field('Date resolved','dateResolved','date')}
-      ${LOST.includes(p.status)?sel('Lost reason','lostReason',S.lostReasons):''}
     </div>
     <div id="calc2">${calc2(p)}</div>
-    <div class="note">Commission shows once Date paid is filled in. Owners don't earn estimator commission.</div>
-    </fieldset>
-    <fieldset><legend>Job &amp; files</legend><div class="grid2">
-      ${field('HCP job #','hcpJob')}
+    <div class="note">Date paid fills in when you mark it Paid. Commission payouts are recorded from the Scorecards page.${p.commPaidOn?` BD commission paid ${fmtD(p.commPaidOn)}.`:''}${p.estCommPaidOn?` Estimator commission paid ${fmtD(p.estCommPaidOn)}.`:''} Owners don't earn estimator commission.</div>
+    </fieldset>` : ''}
+    <fieldset><legend>Files</legend><div class="grid2">
       ${field('Bid sheet link (SharePoint)','bidLink','url','full','placeholder="https://…sharepoint.com/…"')}
       ${field('Proposal folder link','folderLink','url','full','placeholder="https://…sharepoint.com/…"')}
     </div>
@@ -441,6 +442,7 @@ async function save(){
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
   const btn=$('#saveD'); btn.disabled=true; $('#dmsg').textContent='Saving…';
   syncFromItems(draft); const row=toRow(draft); if(isNew) delete row.num;
+  if(!canPayComm()){ delete row.comm_paid_on; delete row.est_comm_paid_on; }
   const res = isNew ? await sb.from('proposals').insert(row).select().single()
                     : await sb.from('proposals').update(row).eq('num', orig.num).select().single();
   if(res.error){ btn.disabled=false; $('#dmsg').textContent = /column|schema cache/i.test(res.error.message||'') ? 'The database needs the line-items update (002_line_items.sql). Run it in Supabase, then save again.' : (res.error.message || 'Could not save. Try again.'); return; }
@@ -496,7 +498,30 @@ $('#drawer').addEventListener('click', e=>{
 });
 $('#scrim').addEventListener('click', closeDrawer);
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#drawer').hidden) closeDrawer(); });
-$('#rows').addEventListener('click', e=>{ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
+$('#rows').addEventListener('click', e=>{ if(e.target.closest('select')) return; const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
+function canEditRow(p){ return isManager() || (role()==='Estimator' && p.sentBy===me?.name); }
+function quickStatus(p){
+  if(!canEditRow(p)) return `<span class="pill ${pillClass(p.status)}">${esc(p.status)}</span>`;
+  const locked = st => PRE.includes(p.status) && !PRE.includes(st) && !canReview();
+  return `<select class="pill qs ${pillClass(p.status)}" data-qs="${esc(p.num)}" aria-label="Status for ${esc(p.num)}">${STATUSES.map(st=>`<option ${st===p.status?'selected':''} ${locked(st)?'disabled':''}>${st}</option>`).join('')}</select>`;
+}
+$('#rows').addEventListener('change', async e=>{
+  const sel=e.target.closest('select[data-qs]'); if(!sel) return;
+  const p=P.find(x=>x.num===sel.dataset.qs), st=sel.value; if(!p) return;
+  if((st==='Scheduled' && !p.hcpJob) || (LOST.includes(st) && !p.lostReason)){
+    await openDrawer(p.num); setStatus(st);
+    const fld = st==='Scheduled' ? '#f-hcpJob' : '#f-lostReason'; document.querySelector(fld)?.focus();
+    $('#dmsg').textContent = st==='Scheduled' ? 'Add the HCP job #, then save.' : 'Pick a lost reason, then save.'; return;
+  }
+  const patch={status:st}, t=iso(today());
+  if((st==='Approved'||LOST.includes(st)) && !p.dateResolved) patch.date_resolved=t;
+  if(st==='Sent' && !p.dateSent) patch.date_sent=t;
+  if(st==='Paid' && !p.datePaid) patch.date_paid=t;
+  sel.disabled=true;
+  const {error}=await sb.from('proposals').update(patch).eq('num',p.num);
+  if(error){ toast(error.message); renderPipeline(); return; }
+  toast(`${p.num} → ${st}`); await loadProposals();
+});
 $('#rows').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id);} });
 $('#chips').addEventListener('click', e=>{ const b=e.target.closest('[data-f]'); if(b){ filter=b.dataset.f; renderPipeline(); } });
 $('#q').addEventListener('input', e=>{ query=e.target.value; renderPipeline(); });
@@ -607,9 +632,21 @@ function group(key, names){
     const sum=(a,f)=>a.reduce((s,p)=>s+(num(f(p))||0),0);
     return {n,mine,won,lost,open,wonAmt:sum(won,p=>p.amount),openAmt:sum(open,p=>p.amount),gpWon:sum(won,p=>p.gp),gpBase:sum(won.filter(p=>num(p.gp)!=null),p=>p.amount),
       rate:(won.length+lost.length)?won.length/(won.length+lost.length):null, due:open.filter(p=>{const f=followUp(p);return f&&f<=today();}).length, stale:open.filter(p=>daysOpen(p)>S.expiryDays).length,
-      bdEarned:sum(mine,bdComm), bdPaid:sum(mine.filter(p=>p.commPaidOn),bdComm), estEarned:sum(mine,estComm), estPaid:sum(mine.filter(p=>p.commPaidOn),estComm)};
+      bdEarned:sum(mine,bdComm), bdPaid:sum(mine.filter(p=>p.commPaidOn),bdComm), estEarned:sum(mine,estComm), estPaid:sum(mine.filter(p=>p.estCommPaidOn),estComm)};
   });
 }
+function payBtn(kind,name,owed){ return owed>0.005 ? `<button class="btn small" data-pay="${kind}" data-name="${esc(name)}" data-owed="${owed}">Mark ${money(owed)} paid</button>` : ''; }
+$('#score').addEventListener('click', async e=>{
+  const b=e.target.closest('[data-pay]'); if(!b) return;
+  if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent=`Confirm: paid today`; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=`Mark ${money(+b.dataset.owed)} paid`; } },5000); return; }
+  const n=b.dataset.name, kind=b.dataset.pay;
+  const col = kind==='bd' ? 'comm_paid_on' : 'est_comm_paid_on';
+  const nums=P.filter(p=> kind==='bd' ? (!p.commPaidOn && p.bdRep===n && bdComm(p)>0) : (!p.estCommPaidOn && p.sentBy===n && estComm(p)>0)).map(p=>p.num);
+  if(!nums.length) return; b.disabled=true;
+  const {error}=await sb.from('proposals').update({[col]:iso(today())}).in('num',nums);
+  if(error){ toast(error.message); b.disabled=false; return; }
+  toast(`Recorded commission paid to ${n} on ${nums.length} proposal${nums.length===1?'':'s'}`); await loadProposals();
+});
 function renderScore(){
   const est=group('sentBy', TEAM.filter(t=>t.role!=='BD Rep').map(t=>t.name)).filter(r=>r.mine.length||TEAM.find(t=>t.name===r.n)?.active);
   const bd=group('bdRep', TEAM.filter(t=>t.role==='BD Rep').map(t=>t.name));
@@ -619,10 +656,10 @@ function renderScore(){
   const svc=S.services.filter(x=>x!=='Multiple services').concat(['Other']).filter((v,i,a)=>a.indexOf(v)===i).map(n=>{ const mine=P.filter(p=>hasSvc(p,n)), won=mine.filter(p=>outcome(p)==='Won'), lost=mine.filter(p=>outcome(p)==='Lost'), open=mine.filter(p=>outcome(p)==='Open');
     return {n,mine,won,rate:(won.length+lost.length)?won.length/(won.length+lost.length):null,wonAmt:won.reduce((s,p)=>s+lineAmt(p,n),0),openAmt:open.reduce((s,p)=>s+lineAmt(p,n),0)}; }).filter(r=>r.mine.length);
   $('#score').innerHTML = `
-  <div class="card"><h3>Estimators</h3>${table(['Estimator','Sent','Won','Lost','Open','Win rate','Won $','GP won $','Avg GP %','Open $','Follow-ups due','Past 90 days','Commission earned','Commission owed'],
-    est.map(r=>[esc(r.n),r.mine.length,r.won.length,r.lost.length,r.open.length,pct(r.rate),money(r.wonAmt),money(r.gpWon),r.gpBase?pct(r.gpWon/r.gpBase):'—',money(r.openAmt),r.due,r.stale,isEstimator(r.n)?money(r.estEarned):'owner',isEstimator(r.n)?money(r.estEarned-r.estPaid):'—']), 'No proposals yet.')}</div>
+  <div class="card"><h3>Estimators</h3>${table(['Estimator','Sent','Won','Lost','Open','Win rate','Won $','GP won $','Avg GP %','Open $','Follow-ups due','Past 90 days','Commission earned','Commission owed'].concat(canPayComm()?['']:[]),
+    est.map(r=>[esc(r.n),r.mine.length,r.won.length,r.lost.length,r.open.length,pct(r.rate),money(r.wonAmt),money(r.gpWon),r.gpBase?pct(r.gpWon/r.gpBase):'—',money(r.openAmt),r.due,r.stale,isEstimator(r.n)?money(r.estEarned):'owner',isEstimator(r.n)?money(r.estEarned-r.estPaid):'—'].concat(canPayComm()?[payBtn('est',r.n,isEstimator(r.n)?r.estEarned-r.estPaid:0)]:[])), 'No proposals yet.')}</div>
   <div class="card"><h3>Business development</h3>${table(['BD rep','Leads','Won','Won $','GP won $','Commission earned','Paid','Owed'],
-    bd.map(r=>[esc(r.n),r.mine.length,r.won.length,money(r.wonAmt),money(r.gpWon),money(r.bdEarned),money(r.bdPaid),money(r.bdEarned-r.bdPaid)]), 'No BD reps yet. Add them on the Settings tab when you hire.')}
+    bd.map(r=>[esc(r.n),r.mine.length,r.won.length,money(r.wonAmt),money(r.gpWon),money(r.bdEarned),money(r.bdPaid),money(r.bdEarned-r.bdPaid)].concat(canPayComm()?[payBtn('bd',r.n,r.bdEarned-r.bdPaid)]:[])), 'No BD reps yet. Add them on the Settings tab when you hire.')}
     <div class="note">Commission counts only proposals with a Date paid. Owed = earned with no “Commission paid on” date.</div></div>
   <div class="card"><h3>By lead source</h3>${table(['Lead source','Proposals','Won','Win rate','Won $'], src.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt)]), 'Pick a Lead source on new proposals and this fills in.')}</div>
   <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt)]), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
