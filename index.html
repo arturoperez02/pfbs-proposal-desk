@@ -302,7 +302,7 @@ const DEFAULTS = {
   addOns: ['Window screen cleaning','Pressure washing - sidewalks & entry','Pressure washing - parking structure','Hard water stain removal','Interior window washing','Solar panel cleaning','Gutter cleaning','Graffiti removal'],
   est: { labor: [['Administration',45,0],['Expert/Chair',75,32],['Apprentice',65,25]], taxRate: 0.1075, matMarkup: 1, rentMarkup: 0.25, equipMarkup: 0.25,
          materials: [['WFS Resin Refill',80],['Rubber and Soap',5]], misc: [['Shipping',0.15],['Fuel',0],['Other Costs',0]], rentalTax: 0.09375, rentalDelivery: 200, rentalPickup: 200, rentalProtection: 345.6, rentalMisc: 43.2, hoursPerDay: 8, burden: 0, targetMargin: 0.45, laborCaution: 0.45, laborMax: 0.55,
-         spRates: [['Tier 1 · easiest access',3],['Tier 2',4],['Tier 3',5],['Tier 4',10],['Tier 5',12],['Tier 6 · hardest access',15]] },
+         spRates: [['Tier 1 · easiest access',3],['Tier 2',4],['Tier 3',5],['Tier 4',10],['Tier 5',12],['Tier 6 · hardest access',15]], spSizeRates: [], spPph: 250 },
   terms: [["1. Proposal Validity", "Proposals are valid for ninety (90) days from issuance. PF Building Services reserves the right to revise pricing, scope, or terms after expiration. Acceptance constitutes agreement to all terms herein."], ["2. Scope of Work", "Services are limited exclusively to what is described in the written proposal (window washing, pressure washing, solar panel cleaning, janitorial, and building maintenance). Additional work requires a signed Change Order; verbal communication alone does not modify scope."], ["3. Change Orders", "Any modification to scope, materials, schedule, or access requires a written Change Order signed by both parties before work proceeds. Pricing and timelines will be adjusted accordingly, and PF Building Services is not responsible for delays from unapproved changes."], ["4. Pre-Existing Conditions", "PF Building Services is not liable for damage to or failure of pre-existing conditions or defects. Unsafe or deficient conditions discovered during work may result in suspension pending a separate written assessment and estimate."], ["5. Client Responsibilities", "Client shall provide safe, unobstructed access to work areas; secure personal property; disclose known site hazards; ensure necessary utilities are functional; and provide timely approvals. Failure may result in delays or additional charges at standard rates."], ["6. Work Schedule", "Standard hours are Monday-Friday, 6:00 AM-2:30 PM or 8:00 AM-4:00 PM, subject to property-specific rules. PF Building Services may reschedule due to unsafe conditions, weather, or circumstances beyond its control, with prompt notice."], ["7. Delays & Force Majeure", "PF Building Services is not liable for delays caused by acts of God, weather, fire, flood, governmental action, permit delays, labor disputes, supply chain issues, or restricted access. Timelines and costs may be adjusted proportionally with written notice."], ["8. Payment Terms", "Payment is due within thirty (30) days of invoice (Net 30) unless otherwise agreed. Late balances accrue interest at 1.5% per month; Client is responsible for collection costs including attorney fees. Disputes must be raised in writing within ten (10) days. Services may be suspended if payment is more than fifteen (15) days past due."], ["9. Limitation of Liability", "PF Building Services’ total liability shall not exceed the total fees paid for the specific services giving rise to a claim. PF Building Services is not liable for indirect, incidental, consequential, or punitive damages, including lost profits or business interruption."], ["10. Warranty", "PF Building Services warrants professional, workmanlike performance consistent with industry standards. Client must report any deficiency in writing within five (5) business days of completion; PF Building Services will re-perform deficient work at no charge, absent Client-caused or pre-existing conditions. This is the exclusive remedy for workmanship issues."], ["11. Insurance", "PF Building Services maintains Commercial General Liability, Workers’ Compensation, Commercial Auto Liability, Umbrella/Excess Liability, and Equipment/Inland Marine coverage. Certificates of Insurance are available upon written request within five (5) business days."], ["12. Indemnification", "Client agrees to indemnify and hold harmless PF Building Services, its officers, employees, agents, and subcontractors from claims arising from Client’s failure to disclose hazards, breach of this agreement, negligence, or pre-existing conditions not caused by PF Building Services."], ["13. Termination", "Either party may terminate with five (5) business days’ written notice. Client remains responsible for services rendered, materials procured, and reasonable demobilization costs. PF Building Services may terminate immediately for unsafe access, safety risk, or material breach of payment terms."], ["14. Dispute Resolution", "Disputes shall first be addressed through good-faith negotiation within fifteen (15) days of written notice, then non-binding mediation in California, prior to legal proceedings. This agreement is governed by California law; venue lies in the county where the project is located."], ["15. Photography & Documentation", "PF Building Services may photograph completed work for internal records, quality assurance, portfolio, and marketing purposes. No personally identifiable information or proprietary signage will be published without Client’s prior written consent."], ["16. General Provisions", "This agreement, the accepted proposal, and any executed Change Orders constitute the entire agreement between the parties. Invalid provisions do not affect the remainder of the agreement. No modification is valid unless in writing and signed by both parties. PF Building Services holds all required California business licenses."]],
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
@@ -366,6 +366,12 @@ const SHEETS = {
        misc:[['Shipping',0,0,0.15],['Fuel',0,1,0.15],['Other costs',10,1,0]]}
 };
 function sheetFor(desc){ const g=guessService(desc); return g==='Solar Panel Cleaning'?'SP' : g==='Pressure Wash'?'PW' : g==='Gates & Doors'?'GD' : 'WC'; }
+// Solar helpers: expected crew hours at the usual pace, and the job-size rate (Settings)
+function spSizeRate(qty){ const L=(S.est.spSizeRates||[]).filter(r=>num(r[0])!=null&&num(r[1])!=null).sort((a,b)=>num(a[0])-num(b[0])); let hit=null; for(const r of L) if(qty>=num(r[0])) hit=r; return hit; }
+function spHint(){ const u=(E?.units||[])[0]; const q=num(u?.qty)||0; if(!q) return 'Enter the number of panels.';
+  const pph=num(S.est.spPph)||250, crew=q/pph, techs=(E.labor||[]).filter(r=>roleKind(r.role)!=='admin').length||2, sz=spSizeRate(q);
+  return `At ${fmtH(pph)} panels/hr: <b>${fmtH(crew)} crew hours</b> (${fmtH(crew/techs)} hrs each for ${techs} tech${techs===1?'':'s'}).`
+    + (sz ? ` Job-size rate for ${fmtH(q)} panels: <b>$${num(sz[1]).toFixed(2)}</b>${num(u.rate)===num(sz[1])?' (in use)':` <button type="button" class="btn ghost small" id="spUseSize" data-rate="${sz[1]}">Use $${num(sz[1]).toFixed(2)}</button>`}` : ((S.est.spSizeRates||[]).length?'':' <span class="note" style="margin:0">Set job-size rates in Settings to get a suggested rate.</span>')); }
 function newEstimate(sheet='WC'){
   const E=S.est, T=SHEETS[sheet]||SHEETS.WC, adminRate=(E.labor.find(r=>r[0]==='Administration')||[0,45])[1];
   if(sheet==='SP' || sheet==='PW') return { sheet, units:[{desc:T.unit.desc, qty:0, rate: sheet==='SP' ? (num(S.est.spRates?.[0]?.[1])??3) : T.unit.rates[0], tier: sheet==='SP' ? (S.est.spRates?.[0]?.[0]||'') : undefined}],
@@ -978,7 +984,7 @@ function renderEst(){
         <td><input data-e="units.${i}.qty" type="number" step="any" inputmode="decimal" value="${esc(r.qty??'')}" aria-label="Quantity"></td>
         <td><input data-e="units.${i}.rate" type="number" step="any" inputmode="decimal" list="unitRates" value="${esc(r.rate??'')}" aria-label="Rate per unit"></td>
         <td class="r num" id="et-units-${i}"></td><td>${SHEETS[E.sheet]?.unit?.single?'':`<button type="button" class="x" data-erm="units.${i}" aria-label="Remove row">×</button>`}</td></tr>`).join('')}
-      </tbody></table></div><datalist id="unitRates">${(SHEETS[E.sheet]?.unit?.rates||[]).map(v=>`<option value="${v}">`).join('')}</datalist><div style="height:10px"></div>` : ''}
+      </tbody></table></div>${SHEETS[E.sheet]?.unit?.tiers?`<div class="gpline" id="spHint" style="margin:6px 0 0">${spHint()}</div>`:''}<datalist id="unitRates">${(SHEETS[E.sheet]?.unit?.rates||[]).map(v=>`<option value="${v}">`).join('')}</datalist><div style="height:10px"></div>` : ''}
       <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Bill rate ($/hr)</th><th>Wage ($/hr)</th><th class="r">Total</th><th></th></tr></thead><tbody>
       ${E.labor.map((r,i)=>`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
         <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Hours"></td>
@@ -1027,6 +1033,7 @@ function updateEstTotals(){
   const c=estCalc(E), n=v=>num(v)||0;
   E.labor.forEach((r,i)=>{ const el=$('#et-labor-'+i); if(el) el.textContent=usd(n(r.hours)*n(r.rate)); });
   (E.units||[]).forEach((r,i)=>{ const el=$('#et-units-'+i); if(el) el.textContent=usd(n(r.qty)*n(r.rate)); });
+  const sh=$('#spHint'); if(sh) sh.innerHTML=spHint();
   for(const [sec] of SECS) (E[sec]||[]).forEach((r,i)=>{ const el=$(`#et-${sec}-${i}`); if(el) el.textContent=usd(n(r.unit)*n(r.qty)*(1+n(r.markup))); });
   const rnd=Math.floor(c.total), floor=S.marginFloor, gpp=c.total?c.gp/c.total:null;
   const roles=Object.entries(c.byRole);
@@ -1081,6 +1088,7 @@ const CALC_DEF = {
 };
 function calcHTML(){
   const t=CALC.type, d=CALC_DEF[t], v=k=>esc(CALC[k]??''), inp=(k,l)=>`<label class="f">${l}<input data-c="${k}" type="number" step="any" inputmode="decimal" value="${v(k)}"></label>`;
+  if(t==='solar'){ if(CALC.pph==null||CALC.pph==='') CALC.pph=num(S.est.spPph)||250; if(CALC.techs==null||CALC.techs==='') CALC.techs=2; if((CALC.panels==null||CALC.panels==='') && num(E?.units?.[0]?.qty)) CALC.panels=E.units[0].qty; }
   if(t==='pw'){ CALC.areas=CALC.areas||[{name:'',l:'',w:''}]; if(CALC.techs==null) CALC.techs=2; if(CALC.sqfthr==null) CALC.sqfthr=1000; }
   return `<div class="grid2 cgrid"><label class="f">Calculator<select data-c="type">${Object.entries(CALC_DEF).map(([k,x])=>`<option value="${k}" ${k===t?'selected':''}>${x.label}</option>`).join('')}</select></label>
     ${d.rig?`<label class="f">Rig<select data-c="rig"><option value="1" ${CALC.rig!=='1.5'?'selected':''}>RR / no balance (+1 hr / drop)</option><option value="1.5" ${CALC.rig==='1.5'?'selected':''}>GR / RR balance (+1.5 hr / drop)</option></select></label>`:''}
@@ -1174,6 +1182,7 @@ $('#est').addEventListener('click', e=>{
     else E[sec].push({desc:'',unit:'',qty:1,markup: sec==='materials'?S.est.matMarkup : sec==='rentals'?S.est.rentMarkup : sec==='equipment'?S.est.equipMarkup : 0});
     renderEst(); return; }
   if(t.dataset.erm){ const [sec,i]=t.dataset.erm.split('.'); E[sec].splice(+i,1); renderEst(); return; }
+  if(t.id==='spUseSize'){ const u=E.units[0]; u.rate=num(t.dataset.rate); const hit=(S.est.spRates||[]).find(x=>num(x[1])===u.rate); u.tier=hit?hit[0]:''; renderEst(); return; }
   if(t.id==='caAdd'){ CALC.areas.push({name:'',l:'',w:''}); CALC.open=true; renderEst(); return; }
   if(t.dataset.carm!=null){ CALC.areas.splice(+t.dataset.carm,1); if(!CALC.areas.length) CALC.areas.push({name:'',l:'',w:''}); CALC.open=true; renderEst(); return; }
   if(t.id==='depApply'){ const per=Math.round(depPer()*100)/100; if(!per){ toast('Fill in the cost, life and uses first.'); return; } E.equipment.push({desc:CALC.dep.desc||'Equipment',unit:per,qty:1,markup:S.est.equipMarkup}); renderEst(); toast('Equipment line added'); return; }
@@ -1723,6 +1732,7 @@ function renderSettings(){
     ${ta('s-addons','Add-on suggestions', lines(S.addOns), 'One per line. These show as suggestions when you type a line description.')}
     ${ta('s-labor','Labor roles & rates', S.est.labor.map(r=>r.join(' | ')).join('\n'), 'Role | bill rate $/hr | wage cost $/hr. Wage cost drives gross profit.')}
     ${ta('s-sprates','Solar panel rates by access', (S.est.spRates||[]).map(r=>r.join(' | ')).join('\n'), 'Access | $ per panel. One rate per job on the solar (SP) estimate. Rename the tiers to how you describe access, e.g. Ground mount | 3.')}
+    ${ta('s-spsize','Solar rate by job size', (S.est.spSizeRates||[]).map(r=>r.join(' | ')).join('\n'), 'Panels from | $ per panel, one per line, e.g. 1000 | 1.00. The solar estimate suggests the rate for the job size; you click to use it.')}
     ${ta('s-mat','Material presets', S.est.materials.map(r=>r.join(' | ')).join('\n'), 'Name | unit cost. These start every new estimate (qty 0).')}
     <div class="card listedit"><h3>Estimate defaults</h3>
       <label class="f">Material markup %<input id="s-mm" type="number" step="any" value="${S.est.matMarkup*100}" ${ro}></label>
@@ -1734,7 +1744,8 @@ function renderSettings(){
       <label class="f">Rental pick-up fee ($)<input id="s-rpu" type="number" step="any" value="${S.est.rentalPickup}" ${ro}></label>
       <label class="f">Equipment protection plan ($)<input id="s-rpp" type="number" step="any" value="${S.est.rentalProtection}" ${ro}></label>
       <label class="f">Rental misc ($)<input id="s-rmisc" type="number" step="any" value="${S.est.rentalMisc}" ${ro}></label>
-      <label class="f">Hours in a work day<input id="s-hpd" type="number" step="any" value="${S.est.hoursPerDay}" ${ro}></label></div>
+      <label class="f">Hours in a work day<input id="s-hpd" type="number" step="any" value="${S.est.hoursPerDay}" ${ro}></label>
+      <label class="f">Solar panels cleaned per hour (crew)<input id="s-sppph" type="number" step="any" value="${S.est.spPph??250}" ${ro}></label></div>
     <div class="card listedit"><h3>Margin guardrails</h3>
       <label class="f">Target gross margin %<input id="s-tgt" type="number" step="any" value="${Math.round(S.est.targetMargin*1000)/10}" ${ro}></label>
       <label class="f">Wages % of price: caution above<input id="s-lc" type="number" step="any" value="${Math.round(S.est.laborCaution*1000)/10}" ${ro}></label>
@@ -1761,6 +1772,8 @@ $('#settingsBody').addEventListener('click', async e=>{
     const splitPair=l=>{ const i=l.indexOf('|'); return i<0?['',l.trim()]:[l.slice(0,i).trim(), l.slice(i+1).trim()]; };
     const est={ labor:L('s-labor').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b)||0, num(c)||0]; }),
       materials:L('s-mat').map(l=>{ const [a,b]=l.split('|').map(x=>x.trim()); return [a, num(b)||0]; }),
+      spSizeRates:L('s-spsize').map(l=>{ const [a,b]=l.split('|').map(x=>x.trim().replace(/[$,]/g,'')); return [num(a), num(b)]; }).filter(r=>r[0]!=null&&r[1]!=null).sort((x,y)=>x[0]-y[0]),
+      spPph:num($('#s-sppph').value)||250,
       spRates:L('s-sprates').map(l=>{ const [a,b]=l.split('|').map(x=>x.trim()); return [a, num(String(b||'').replace('$',''))||0]; }).filter(r=>r[0]),
       matMarkup:(num($('#s-mm').value)||0)/100, taxRate:(num($('#s-tax').value)||0)/100, rentMarkup:(num($('#s-rm').value)||0)/100, equipMarkup:(num($('#s-em').value)||0)/100,
       rentalTax:(num($('#s-rtax').value)||0)/100, misc:S.est.misc, rentalDelivery:num($('#s-rdel').value)||0, rentalPickup:num($('#s-rpu').value)||0, rentalProtection:num($('#s-rpp').value)||0, rentalMisc:num($('#s-rmisc').value)||0, hoursPerDay:num($('#s-hpd').value)||8, targetMargin:(num($('#s-tgt').value)||45)/100, laborCaution:(num($('#s-lc').value)||45)/100, laborMax:Math.max(num($('#s-lm').value)||55, num($('#s-lc').value)||45)/100, burden:(num($('#s-burden').value)||0)/100 };
