@@ -129,8 +129,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
 .ibadge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--info);background:var(--info-bg);border-radius:999px;padding:2px 8px}
 .item.addon .ibadge{color:var(--warn);background:var(--warn-bg)}
 .acc{display:flex;gap:6px;align-items:center;font-size:13px;flex:1}
-.igrid{display:grid;grid-template-columns:1.4fr .7fr 1fr 1fr;gap:8px}.igrid .full{grid-column:1/-1}
-@media (max-width:720px){.igrid{grid-template-columns:1fr 1fr}}
+.igrid{display:grid;grid-template-columns:.7fr 1fr 1fr;gap:8px}.igrid .full{grid-column:1/-1}
+@media (max-width:720px){.igrid{grid-template-columns:1fr 1fr}.igrid label:nth-child(4){grid-column:1/-1}}
 .gpline{font-size:13px;color:var(--muted);margin-top:8px}.gpline b{color:var(--ink)}
 .itot{margin-top:10px;font-size:13px;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
@@ -262,7 +262,10 @@ function countedItems(p){
   const items=p.items||[], groups=groupsOf(p), pick=groups.includes(p.pricingOption)?p.pricingOption:groups[0];
   return items.filter(i=> i.type==='Add-on' ? !!i.accepted : (!i.group || i.group===pick));
 }
+const SVC_WORDS = [['Solar Panel Cleaning',/solar|panel/i],['Pressure Wash',/pressure|power wash|steam/i],['Janitorial',/janitor|custodial|porter/i],['Gutter Cleaning',/gutter/i],['Graffiti Removal',/graffiti/i],['Gates & Doors',/\bgates?\b|\bdoors?\b/i],['Lights - Decor',/\blights?\b|lighting|decor/i],['Window Cleaning',/window|glass|screen|fa[cç]ade|skylight/i]];
+function guessService(d){ for(const [svc,re] of SVC_WORDS) if(re.test(d||'')) return svc; return 'Other'; }
 function syncFromItems(p){
+  for(const i of (p.items||[])) i.service = i.description ? guessService(i.description) : '';
   const L=countedItems(p); if(!(p.items||[]).length) return;
   p.amount = L.reduce((s,i)=>s+(num(i.amount)||0),0);
   const sv=[...new Set(L.map(i=>i.service).filter(Boolean))]; p.service = sv.length>1 ? 'Multiple services' : (sv[0]||p.service||'');
@@ -332,18 +335,16 @@ function calc2(p){ const br=bdRate(p), er=estRate(p); return `<div class="calc">
     </div>`; }
 function itemsHTML(p, ed){
   const dis=ed?'':'disabled', items=p.items||[], groups=groupsOf(p), L=countedItems(p);
-  const svcOpts=v=>'<option value=""></option>'+S.services.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('');
   const frqOpts=v=>'<option value=""></option>'+S.frequencies.map(f=>`<option ${f[0]===v?'selected':''}>${esc(f[0])}</option>`).join('');
   const rows = items.map((it,i)=>`<div class="item ${it.type==='Add-on'?'addon':''}" data-i="${i}">
     <div class="itop"><span class="ibadge">${it.type==='Add-on'?'Add-on':'Service'}</span>
       ${it.type==='Add-on'?`<label class="acc"><input type="checkbox" data-it="accepted" ${it.accepted?'checked':''} ${dis}> Client accepted</label>`:`<input class="grp" data-it="group" value="${esc(it.group||'')}" placeholder="Option label (optional)" aria-label="Option label" ${dis}>`}
       ${ed?`<button type="button" class="btn ghost small" data-del="${i}" aria-label="Remove line">Remove</button>`:''}</div>
     <div class="igrid">
-      <label class="f">Service<select data-it="service" ${dis}>${svcOpts(it.service)}</select></label>
+      <label class="f full">Description<input data-it="description" list="descList" value="${esc(it.description||'')}" placeholder="e.g. Perimeter exterior window &amp; screen washing" ${dis}></label>
       <label class="f">Qty / visits<input type="number" step="any" inputmode="decimal" data-it="qty" value="${esc(it.qty??1)}" ${dis}></label>
       <label class="f">Frequency<select data-it="frequency" ${dis}>${frqOpts(it.frequency)}</select></label>
       <label class="f">Amount per visit ($)<input type="number" step="any" inputmode="decimal" data-it="amount" value="${esc(it.amount??'')}" ${dis}></label>
-      <label class="f full">Description<input data-it="description" list="descList" value="${esc(it.description||'')}" placeholder="e.g. Perimeter exterior window &amp; screen washing" ${dis}></label>
       <label class="f full">Note (optional)<input data-it="note" value="${esc(it.note||'')}" placeholder="e.g. Lift is required. Price includes lift rental." ${dis}></label>
     </div></div>`).join('');
   const pick = groups.length>1 ? `<label class="f">Price this proposal on<select data-k="pricingOption" ${dis}>${groups.map(g=>`<option ${g===(groups.includes(p.pricingOption)?p.pricingOption:groups[0])?'selected':''}>${esc(g)}</option>`).join('')}</select></label>` : '';
@@ -452,7 +453,7 @@ function refreshCalcs(){ const a=$('#calc1'), b=$('#calc2'); if(a) a.innerHTML=c
 function itemEvent(e, final){
   const f=e.target.dataset.it; if(!f) return false; const i=+e.target.closest('[data-i]').dataset.i, it=draft.items[i];
   it[f] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
-  if(final && (e.target.tagName==='SELECT' || e.target.type==='checkbox' || f==='group')) { if(f==='service' && !it.description) it.description=it.service; rerenderItems(); }
+  if(final && (e.target.tagName==='SELECT' || e.target.type==='checkbox' || f==='group')) { rerenderItems(); }
   else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); refreshCalcs(); }
   return true;
 }
@@ -587,7 +588,11 @@ function group(key, names){
 function renderScore(){
   const est=group('sentBy', TEAM.filter(t=>t.role!=='BD Rep').map(t=>t.name)).filter(r=>r.mine.length||TEAM.find(t=>t.name===r.n)?.active);
   const bd=group('bdRep', TEAM.filter(t=>t.role==='BD Rep').map(t=>t.name));
-  const src=group('leadSource', S.leadSources).filter(r=>r.mine.length), svc=group('service', S.services).filter(r=>r.mine.length);
+  const src=group('leadSource', S.leadSources).filter(r=>r.mine.length);
+  const lineAmt=(p,svc)=>{ const L=countedItems(p); return L.length ? L.filter(i=>i.service===svc).reduce((s,i)=>s+(num(i.amount)||0),0) : (p.service===svc?(num(p.amount)||0):0); };
+  const hasSvc=(p,svc)=>{ const L=(p.items||[]); return L.length ? L.some(i=>i.type!=='Add-on' && i.service===svc) || countedItems(p).some(i=>i.service===svc) : p.service===svc; };
+  const svc=S.services.filter(x=>x!=='Multiple services').concat(['Other']).filter((v,i,a)=>a.indexOf(v)===i).map(n=>{ const mine=P.filter(p=>hasSvc(p,n)), won=mine.filter(p=>outcome(p)==='Won'), lost=mine.filter(p=>outcome(p)==='Lost'), open=mine.filter(p=>outcome(p)==='Open');
+    return {n,mine,won,rate:(won.length+lost.length)?won.length/(won.length+lost.length):null,wonAmt:won.reduce((s,p)=>s+lineAmt(p,n),0),openAmt:open.reduce((s,p)=>s+lineAmt(p,n),0)}; }).filter(r=>r.mine.length);
   $('#score').innerHTML = `
   <div class="card"><h3>Estimators</h3>${table(['Estimator','Sent','Won','Lost','Open','Win rate','Won $','GP won $','Avg GP %','Open $','Follow-ups due','Past 90 days','Commission earned','Commission owed'],
     est.map(r=>[esc(r.n),r.mine.length,r.won.length,r.lost.length,r.open.length,pct(r.rate),money(r.wonAmt),money(r.gpWon),r.gpBase?pct(r.gpWon/r.gpBase):'—',money(r.openAmt),r.due,r.stale,isEstimator(r.n)?money(r.estEarned):'owner',isEstimator(r.n)?money(r.estEarned-r.estPaid):'—']), 'No proposals yet.')}</div>
@@ -595,7 +600,7 @@ function renderScore(){
     bd.map(r=>[esc(r.n),r.mine.length,r.won.length,money(r.wonAmt),money(r.gpWon),money(r.bdEarned),money(r.bdPaid),money(r.bdEarned-r.bdPaid)]), 'No BD reps yet. Add them on the Settings tab when you hire.')}
     <div class="note">Commission counts only proposals with a Date paid. Owed = earned with no “Commission paid on” date.</div></div>
   <div class="card"><h3>By lead source</h3>${table(['Lead source','Proposals','Won','Win rate','Won $'], src.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt)]), 'Pick a Lead source on new proposals and this fills in.')}</div>
-  <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt)]), 'Pick a Service on new proposals and this fills in.')}</div>`;
+  <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt)]), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
 }
 
 // ---------- settings ----------
