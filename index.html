@@ -977,22 +977,37 @@ function renderEst(){
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="f inline" style="margin:0">Bid sheet<select id="estSheet" aria-label="Bid sheet">${Object.entries(SHEETS).map(([k,v])=>`<option value="${k}" ${k===E.sheet?'selected':''}>${v.label}</option>`).join('')}</select></label>
     <button class="btn ghost small" id="estClose">Close</button></div></div>
   <div class="estbody"><div class="estmain">
-    <section class="card"><h3>Labor</h3>
-      ${(E.units||[]).length ? `<div class="note" style="margin:0 0 6px">${SHEETS[E.sheet]?.unit?.tiers ? 'One rate per panel for the whole job, picked by how hard the access is. Enter the hours you expect in the labor lines below; they set the wage cost.' : `Priced per ${esc(SHEETS[E.sheet]?.unit?.per||'unit')}, like the ${esc(E.sheet)} bid sheet. Tech hours below are for wage cost (bill rate 0).`}</div>
+    ${(SHEETS[E.sheet]?.unit && (E.units||[]).length) ? `<section class="card"><h3>Price</h3>
+      <div class="note" style="margin:0 0 6px">${SHEETS[E.sheet].unit.tiers ? 'What the client pays: panels × your rate per panel (one rate for the job), plus administration.' : `What the client pays: ${esc(SHEETS[E.sheet].unit.per)} × rate, plus administration.`}</div>
       <div class="tablewrap"><table class="et"><thead><tr><th>${SHEETS[E.sheet]?.unit?.tiers?'Access':'Priced by unit'}</th><th>${SHEETS[E.sheet]?.unit?.tiers?'Panels':'Qty'}</th><th>Rate ($/unit)</th><th class="r">Total</th><th></th></tr></thead><tbody>
       ${E.units.map((r,i)=>`<tr><td>${SHEETS[E.sheet]?.unit?.tiers ? `<select data-tier="${i}" aria-label="Access">${(S.est.spRates||[]).map(t=>`<option value="${esc(t[0])}" ${t[0]===r.tier?'selected':''}>${esc(t[0])} · $${t[1]}</option>`).join('')}<option value="" ${r.tier?'':'selected'}>Custom rate</option></select>` : `<input data-e="units.${i}.desc" value="${esc(r.desc||'')}" aria-label="Description">`}</td>
         <td><input data-e="units.${i}.qty" type="number" step="any" inputmode="decimal" value="${esc(r.qty??'')}" aria-label="Quantity"></td>
         <td><input data-e="units.${i}.rate" type="number" step="any" inputmode="decimal" list="unitRates" value="${esc(r.rate??'')}" aria-label="Rate per unit"></td>
         <td class="r num" id="et-units-${i}"></td><td>${SHEETS[E.sheet]?.unit?.single?'':`<button type="button" class="x" data-erm="units.${i}" aria-label="Remove row">×</button>`}</td></tr>`).join('')}
-      </tbody></table></div>${SHEETS[E.sheet]?.unit?.tiers?`<div class="gpline" id="spHint" style="margin:6px 0 0">${spHint()}</div>`:''}<datalist id="unitRates">${(SHEETS[E.sheet]?.unit?.rates||[]).map(v=>`<option value="${v}">`).join('')}</datalist><div style="height:10px"></div>` : ''}
+      ${E.labor.map((r,i)=>roleKind(r.role)!=='admin'?'':`<tr><td>${esc(r.role)} <span class="note" style="margin:0">(hours × $/hr)</span></td>
+        <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Administration hours"></td>
+        <td><input data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Administration rate"></td>
+        <td class="r num" id="et-labor-${i}"></td><td></td></tr>`).join('')}
+      </tbody></table></div>${SHEETS[E.sheet]?.unit?.tiers?`<div class="gpline" id="spHint" style="margin:6px 0 0">${spHint()}</div>`:''}<datalist id="unitRates">${(SHEETS[E.sheet]?.unit?.rates||[]).map(v=>`<option value="${v}">`).join('')}</datalist></section>
+    <section class="card"><h3>Crew (actual labor)</h3>
+      <div class="note" style="margin:0 0 6px">Hours you expect × what you pay each tech. This is your labor cost; it doesn't change the price.</div>
+      <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Wage ($/hr)</th><th class="r">Wage cost</th><th></th></tr></thead><tbody>
+      ${E.labor.map((r,i)=>roleKind(r.role)==='admin'?'':`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.filter(x=>roleKind(x)!=='admin').map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
+        <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Hours"></td>
+        <td><input data-e="labor.${i}.wage" type="number" step="any" inputmode="decimal" value="${esc(r.wage??'')}" placeholder="${esc(costRate(r.role))}" aria-label="Wage per hour"></td>
+        <td class="r num" id="et-labor-${i}"></td><td><button type="button" class="x" data-erm="labor.${i}" aria-label="Remove row">×</button></td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Tech</button><span class="note" style="margin:0">One line per tech. Blank wage uses the role's wage from Settings.</span></div>
+` : `<section class="card"><h3>Labor</h3>
       <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Bill rate ($/hr)</th><th>Wage ($/hr)</th><th class="r">Total</th><th></th></tr></thead><tbody>
       ${E.labor.map((r,i)=>`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
         <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Hours"></td>
-        <td>${SHEETS[E.sheet]?.unit && roleKind(r.role)!=='admin' ? `<input value="Billed per ${esc(SHEETS[E.sheet].unit.per)}" disabled aria-label="Bill rate" title="Price comes from the ${esc(SHEETS[E.sheet].unit.per)} rate above; hours here count as wage cost only">` : `<input data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Bill rate">`}</td>
+        <td><input data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Bill rate"></td>
         <td><input data-e="labor.${i}.wage" type="number" step="any" inputmode="decimal" value="${esc(r.wage??'')}" placeholder="${esc(costRate(r.role))}" aria-label="Wage per hour" ${r.role==='Administration'?'disabled':''}></td>
         <td class="r num" id="et-labor-${i}"></td><td><button type="button" class="x" data-erm="labor.${i}" aria-label="Remove row">×</button></td></tr>`).join('')}
       </tbody></table></div>
-      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Labor line</button>${(E.units||[]).length||SHEETS[E.sheet]?.unit?.single?'':'<button type="button" class="btn ghost small" data-eadd="units">+ Price by unit</button>'}<span class="note" style="margin:0">One line per tech. Blank wage uses the role's wage from Settings.</span></div>
+      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Labor line</button>${SHEETS[E.sheet]?.unit?'':'<button type="button" class="btn ghost small" data-eadd="units">+ Price by unit</button>'}<span class="note" style="margin:0">One line per tech. Blank wage uses the role's wage from Settings.</span></div>
+`}
       <details class="calcbox" ${CALC.open?'open':''}><summary>Hours calculator</summary>${calcHTML()}</details>
     </section>
     ${SECS.map(([sec,title,help])=>`<section class="card"><h3>${title}</h3><div class="note" style="margin:0 0 6px">${help}</div>
@@ -1031,7 +1046,8 @@ function marginCheckHTML(c, price){
 }
 function updateEstTotals(){
   const c=estCalc(E), n=v=>num(v)||0;
-  E.labor.forEach((r,i)=>{ const el=$('#et-labor-'+i); if(el) el.textContent=usd(n(r.hours)*n(r.rate)); });
+  const perUnit=!!(SHEETS[E.sheet]?.unit && (E.units||[]).length);
+  E.labor.forEach((r,i)=>{ const el=$('#et-labor-'+i); if(el) el.textContent=usd(perUnit && roleKind(r.role)!=='admin' ? n(r.hours)*wageOf(r) : n(r.hours)*n(r.rate)); });
   (E.units||[]).forEach((r,i)=>{ const el=$('#et-units-'+i); if(el) el.textContent=usd(n(r.qty)*n(r.rate)); });
   const sh=$('#spHint'); if(sh) sh.innerHTML=spHint();
   for(const [sec] of SECS) (E[sec]||[]).forEach((r,i)=>{ const el=$(`#et-${sec}-${i}`); if(el) el.textContent=usd(n(r.unit)*n(r.qty)*(1+n(r.markup))); });
