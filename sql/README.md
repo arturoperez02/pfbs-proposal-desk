@@ -10,5 +10,6 @@
 | 006_audit_trail.sql | Run once: leads, price lock after sending, change log, review notes. |
 | 007_leads_followups_reports.sql | Run once: lead details, prospects, follow-up cadence, monthly report, HousecallPro link. |
 | 008_proposal_photos.sql | Run once: site photos on proposals (private storage bucket). |
+| 009_parts_to_order.sql | Run once: Parts to order checklist on approved jobs, buyer, parts in the monthly report. Needs 007. |
 
 Client data is never stored in this repository.

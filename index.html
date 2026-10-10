@@ -199,6 +199,14 @@ input.in-wage:disabled{background:transparent}
 .fnum{flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:700;font-size:13px}
 .fcount{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--hover);font-size:12px;font-weight:700;text-align:center}
 @media (max-width:720px){.flow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.flow li::after{display:none}}
+.linkbtn{display:block;border:0;background:none;padding:2px 0 0;color:var(--accent);font-size:11.5px;font-weight:600;cursor:pointer;text-align:left}
+tr.matdet td{background:var(--bg);padding:6px 8px}.matgrid{display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:8px}
+@media (max-width:700px){.matgrid{grid-template-columns:minmax(0,1fr)}}
+.ptgrid{display:grid;grid-template-columns:2fr .6fr 1fr;gap:6px 8px}.ptgrid .ptlink{grid-column:1/-1}
+@media (max-width:600px){.ptgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.ptgrid .ptdesc{grid-column:1/-1}}
+.ptfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ptitem{border-left:4px solid var(--warn)}.ptitem.pt-ordered{border-left-color:var(--info)}.ptitem.pt-received{border-left-color:var(--good);opacity:.85}
+.revb.ptlate{background:var(--bad-bg);color:var(--bad)}
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
@@ -330,11 +338,11 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer'};
 const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -395,17 +403,18 @@ function spHint(){ const u=(E?.units||[])[0]; const q=num(u?.qty)||0; if(!q) ret
   const pph=num(S.est.spPph)||250, crew=q/pph, techs=(E.labor||[]).filter(r=>roleKind(r.role)!=='admin').length||2;
   return `At ${fmtH(pph)} panels/hr: about <b>${fmtH(crew)} crew hours</b>.`
 ; }
+const matFromPreset = m => ({desc:m[0], unit:m[1], qty:0, markup:S.est.matMarkup, ...(m[2]?{supplier:m[2]}:{}), ...(m[3]?{sku:m[3]}:{}), ...(m[4]?{link:m[4]}:{})});
 function newEstimate(sheet='WC'){
   const E=S.est, T=SHEETS[sheet]||SHEETS.WC, adminRate=(E.labor.find(r=>r[0]==='Administration')||[0,45])[1];
   if(sheet==='SP' || sheet==='PW') return { sheet, units:[{desc:T.unit.desc, qty:0, rate: sheet==='SP' ? (num(S.est.spRates?.[0]?.[1])??3) : T.unit.rates[0], tier: sheet==='SP' ? (S.est.spRates?.[0]?.[0]||'') : undefined}],
     labor:[{role:'Administration', hours:1, rate:adminRate},{role:expertRole()[0], hours:0, rate:0, wage:T.wages.expert}],
-    materials:(sheet==='SP'?E.materials:T.materials).map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.matMarkup})), taxRate:E.taxRate, rentals:[],
+    materials:(sheet==='SP'?E.materials:T.materials).map(matFromPreset), taxRate:E.taxRate, rentals:[],
     equipment:T.equipment.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.equipMarkup})),
     misc:T.misc.map(m=>({desc:m[0], unit:m[1], qty:m[2], markup:m[3]})) };
   if(sheet==='GD') return { sheet, labor:[{role:'Administration', hours:1, rate:adminRate},{role:expertRole()[0], hours:0, rate:T.bill, wage:T.wages.expert}],
     materials:[], taxRate:E.taxRate, rentals:[], equipment:[], misc:T.misc.map(m=>({desc:m[0], unit:m[1], qty:m[2], markup:m[3]})) };
   return { sheet:'WC', labor: E.labor.filter(r=>r[0]!=='Apprentice').map((r,i)=>({role:r[0], hours: r[0]==='Administration'?1:0, rate:r[1]})),
-           materials: E.materials.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.matMarkup})),
+           materials: E.materials.map(matFromPreset),
            taxRate: E.taxRate,
            rentals: [], equipment: [],
            misc: E.misc.map(m=>({desc:m[0], unit:0, qty:0, markup:m[1]})) };
@@ -495,6 +504,7 @@ const FILTERS = [
   ['Lost', p=>outcome(p)==='Lost'],
   ['Renewals due', p=>renewalDue(p)],
   ['Needs actuals', p=>['Invoiced','Paid'].includes(p.status) && !(p.actuals||[]).length],
+  ['Parts to order', p=>outcome(p)==='Won' && partsOpen(p)>0],
   ['All', ()=>true]
 ];
 function renderPipeline(){
@@ -515,7 +525,7 @@ function renderPipeline(){
   const list=P.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   $('#rows').innerHTML = list.length ? list.map(p=>{
     const d=daysOpen(p), f=followUp(p);
-    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
+    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}${outcome(p)==='Won'&&partsOpen(p)?` <span class="revb ${partsLate(p)?'ptlate':''}" title="${partsOpen(p)} part(s) still to order">Parts</span>`:''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">${P.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
   $('#newBtn').hidden = !canCreate(); $('#leadBtn').hidden = !canLead();
 }
@@ -665,6 +675,7 @@ function drawDrawer(){
       <div class="gpline" style="align-self:end">${p.renewalDate?'Set by you':'Suggested from '+esc(p.frequency.toLowerCase())+' frequency'}${renewalDue(p)?' · <b style="color:var(--warn)">due now</b>':''}</div></div>
       ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn small" id="rnRequote">Re-quote as new proposal</button><button type="button" class="btn ghost small" id="rnDone">Handled, next ${renewalOf(p)?fmtD(addMonths(renewalOf(p),FREQ_MONTHS[p.frequency])):''}</button></div>`:''}
       <div class="note">Shows under "Renewals due" 30 days before this date.</div></fieldset>` : ''}
+    ${outcome(p)==='Won' ? `<fieldset><legend>Parts to order</legend><div id="ptBox">${partsHTML(p, ed)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Change orders</legend><div id="coBox">${coHTML(p, ed)}</div></fieldset>` : ''}
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Job actuals</legend>
       <div class="note" style="margin:0 0 8px">Log each visit from the techs' sign-in sheets. Leave a cost blank if it matched the estimate.</div>
@@ -693,6 +704,7 @@ function setStatus(st){
   if((st==='Approved'||LOST.includes(st)) && !draft.dateResolved) draft.dateResolved=iso(today());
   if(st==='Sent' && !draft.dateSent) draft.dateSent=iso(today());
   if(st==='Paid' && !draft.datePaid) draft.datePaid=iso(today());
+  if(WON.includes(st) && !(draft.parts||[]).length){ const b=buildParts(draft); if(b.length){ draft.parts=b; toast(`Parts to order: ${b.length} item${b.length===1?'':'s'} from the estimate. Save to keep.`); } }
   drawDrawer();
 }
 async function save(after, o={}){
@@ -777,6 +789,61 @@ $('#drawer').addEventListener('change', e=>{
   const t=e.target; if(!draft) return;
   if(t.dataset.lis!=null){ const li=draft.leadInfo||(draft.leadInfo={}); const set=new Set(li.services||[]); t.checked?set.add(t.dataset.lis):set.delete(t.dataset.lis); li.services=[...set]; t.closest('.chip')?.classList.toggle('on',t.checked); }
   if(t.dataset.li){ const li=draft.leadInfo||(draft.leadInfo={}); li[t.dataset.li]=t.value; }
+});
+
+// ---------- parts to order (created when the job is approved) ----------
+const PART_ST=['To order','Ordered','Received'];
+function buildParts(p){
+  const out=new Map();
+  for(const it of countedItems(p)){ const e=it.estimate; if(!e) continue;
+    for(const [sec,pre] of [['materials',''],['rentals','Rental: ']]) for(const r of (e[sec]||[])){ const q=(num(r.qty)||0); if(!(q*(num(r.unit)||0)>0)) continue;
+      const key=(pre+(r.desc||'')+'|'+(r.sku||'')).toLowerCase(), cur=out.get(key);
+      if(cur) cur.qty+=q; else out.set(key,{desc:pre+(r.desc||'Item'), qty:q, supplier:r.supplier||'', sku:r.sku||'', link:r.link||'', status:'To order'}); } }
+  return [...out.values()];
+}
+const partsOpen = p => (p.parts||[]).filter(x=>(x.status||'To order')==='To order').length;
+const partsLate = p => outcome(p)==='Won' && partsOpen(p)>0 && p.dateResolved && days(parse(p.dateResolved), today())>=2;
+const buyerOf = p => p.buyer || p.sentBy || '';
+function partsHTML(p, ed){
+  const L=p.parts||[], dis=ed?'':'disabled', names=TEAM.filter(t=>t.active&&t.role!=='BD Rep').map(t=>t.name);
+  const head=`<div class="grid2" style="margin-bottom:8px"><label class="f">Buyer<select id="ptBuyer" ${dis}><option value="">Estimator on the job${p.sentBy?' ('+esc(p.sentBy)+')':''}</option>${names.map(n=>`<option ${n===p.buyer?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
+    <div class="gpline" style="align-self:end">${L.length?`${partsOpen(p)} to order · ${L.filter(x=>x.status==='Ordered').length} ordered · ${L.filter(x=>x.status==='Received').length} received${partsLate(p)?' · <b style="color:var(--bad)">approved '+days(parse(p.dateResolved),today())+' days ago, still to order</b>':''}`:''}</div></div>`;
+  if(!L.length) return head+`<div class="note" style="margin:0 0 8px">No parts listed. ${(p.items||[]).some(i=>i.estimate)?'Pull them from the estimate, or add them by hand.':'Add anything that needs buying or booking.'}</div>
+    ${ed?`<div class="toolbar" style="margin:0">${(p.items||[]).some(i=>i.estimate)?'<button type="button" class="btn small" id="ptBuild">Pull from estimate</button>':''}<button type="button" class="btn ghost small" id="ptAdd">+ Part</button></div>`:''}`;
+  return head+`<div class="items">${L.map((x,i)=>`<div class="item ptitem pt-${(x.status||'To order').replace(' ','').toLowerCase()}">
+    <div class="ptgrid">
+      <label class="f ptdesc">Item<input data-pt="${i}.desc" value="${esc(x.desc||'')}" ${dis}></label>
+      <label class="f">Qty<input data-pt="${i}.qty" type="number" step="any" value="${esc(x.qty??'')}" ${dis}></label>
+      <label class="f">Status<select data-pt="${i}.status" ${dis}>${PART_ST.map(v=>`<option ${v===(x.status||'To order')?'selected':''}>${v}</option>`).join('')}</select></label>
+      <label class="f">Supplier<input data-pt="${i}.supplier" value="${esc(x.supplier||'')}" ${dis}></label>
+      <label class="f">Part / SKU #<input data-pt="${i}.sku" value="${esc(x.sku||'')}" ${dis}></label>
+      <label class="f">Order / PO #<input data-pt="${i}.orderNo" value="${esc(x.orderNo||'')}" ${dis}></label>
+      <label class="f ptlink">Link<input data-pt="${i}.link" type="url" value="${esc(x.link||'')}" placeholder="https://…" ${dis}></label>
+    </div>
+    <div class="ptfoot"><span class="note" style="margin:0">${x.orderedOn?`Ordered ${fmtD(x.orderedOn)}${x.orderedBy?' by '+esc(x.orderedBy):''}`:''}${x.receivedOn?` · received ${fmtD(x.receivedOn)}`:''}</span>
+      <span>${safeLink(x.link)?`<a class="btn ghost small" href="${esc(safeLink(x.link))}" target="_blank" rel="noopener">Open link ↗</a>`:''}${ed?` <button type="button" class="btn ghost small" data-ptdel="${i}">Remove</button>`:''}</span></div>
+  </div>`).join('')}</div>${ed?'<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="ptAdd">+ Part</button></div>':''}`;
+}
+async function saveParts(note){
+  const {error}=await sb.from('proposals').update({parts:draft.parts, buyer:draft.buyer||null}).eq('num',draft.num);
+  if(error){ toast(/column|schema/i.test(error.message)?'Run database update 009 to turn on Parts to order.':error.message); return false; }
+  const o=P.find(x=>x.num===draft.num); if(o){ o.parts=structuredClone(draft.parts); o.buyer=draft.buyer; }
+  if(note && await addActivity(draft.num,'note',note)) loadActivity(draft.num);
+  return true;
+}
+const refreshParts = () => { const b=$('#ptBox'); if(b) b.innerHTML=partsHTML(draft, canEditDraft()); };
+$('#drawer').addEventListener('change', async e=>{ const t=e.target; if(!draft) return;
+  if(t.id==='ptBuyer'){ draft.buyer=t.value; if(await saveParts(`Parts buyer: ${t.value||'estimator on the job'}`)) refreshParts(); }
+  if(t.dataset.pt!=null){ const [i,k]=t.dataset.pt.split('.'), x=draft.parts[+i]; x[k]= k==='qty'?num(t.value):t.value.trim();
+    let note=null;
+    if(k==='status'){ if(t.value==='Ordered'){ x.orderedOn=x.orderedOn||iso(today()); x.orderedBy=x.orderedBy||me.name; } if(t.value==='Received'){ x.receivedOn=iso(today()); x.orderedOn=x.orderedOn||iso(today()); } if(t.value==='To order'){ delete x.orderedOn; delete x.orderedBy; delete x.receivedOn; }
+      note=`Parts: ${x.desc} → ${t.value}${x.orderNo?' (order '+x.orderNo+')':''}`; }
+    if(await saveParts(note) && (k==='status'||k==='link')) refreshParts(); }
+});
+$('#drawer').addEventListener('click', async e=>{ const t=e.target.closest('button'); if(!t||!draft) return;
+  if(t.id==='ptBuild'){ draft.parts=buildParts(draft); if(!draft.parts.length){ toast('The estimate has no materials or rentals with a cost.'); return; } if(await saveParts(`Parts list created from the estimate (${draft.parts.length} items)`)) refreshParts(); }
+  if(t.id==='ptAdd'){ draft.parts=[...(draft.parts||[]), {desc:'',qty:1,supplier:'',sku:'',link:'',status:'To order'}]; refreshParts(); }
+  if(t.dataset.ptdel!=null){ if(!t.dataset.armed){ t.dataset.armed='1'; t.textContent='Confirm remove'; return; } const x=draft.parts.splice(+t.dataset.ptdel,1)[0]; if(await saveParts(`Parts: removed ${x.desc}`)) refreshParts(); }
 });
 
 // ---------- photos (stored in Supabase Storage, printed on the client PDF) ----------
@@ -982,6 +1049,7 @@ $('#rows').addEventListener('change', async e=>{
     $('#dmsg').textContent = st==='Scheduled' ? 'Add the HCP job #, then save.' : 'Pick a lost reason, then save.'; return;
   }
   const patch={status:st}, t=iso(today());
+  if(WON.includes(st) && !(p.parts||[]).length && (!COLS || COLS.has('parts'))){ const b=buildParts(p); if(b.length) patch.parts=b; }
   if((st==='Approved'||LOST.includes(st)) && !p.dateResolved) patch.date_resolved=t;
   if(st==='Sent' && !p.dateSent) patch.date_sent=t;
   if(st==='Paid' && !p.datePaid) patch.date_paid=t;
@@ -1098,19 +1166,24 @@ $('#drawer').addEventListener('click', e=>{
 // ---------- estimate editor ----------
 let EI=null, E=null, CALC={type:'swing'};
 let EST_RO=false, EST_BD=false;
-function openEst(i){ SEC_OPEN={}; EI=i; const it=draft.items[i]; EST_RO = isLocked() || !canEditDraft(); E=structuredClone(it.estimate || newEstimate(sheetFor(it.description))); E.sheet=E.sheet||'WC'; CALC={type:(SHEET_CALCS[E.sheet]||[]).includes(CALC.type)?CALC.type:calcFor(E.sheet), gd:E.gdTasks?structuredClone(E.gdTasks):undefined, rent:CALC.rent, fuel:CALC.fuel, dep:CALC.dep, mix:CALC.mix, open:['PW','GD'].includes(E.sheet)}; renderEst(); $('#est').hidden=false; }
+function openEst(i){ SEC_OPEN={}; MAT_OPEN=new Set(); EI=i; const it=draft.items[i]; EST_RO = isLocked() || !canEditDraft(); E=structuredClone(it.estimate || newEstimate(sheetFor(it.description))); E.sheet=E.sheet||'WC'; CALC={type:(SHEET_CALCS[E.sheet]||[]).includes(CALC.type)?CALC.type:calcFor(E.sheet), gd:E.gdTasks?structuredClone(E.gdTasks):undefined, rent:CALC.rent, fuel:CALC.fuel, dep:CALC.dep, mix:CALC.mix, open:['PW','GD'].includes(E.sheet)}; renderEst(); $('#est').hidden=false; }
 function closeEst(){ $('#est').hidden=true; EI=null; E=null; }
 const SECS = [['materials','Materials','Markup on cost; sales tax applies to material cost'],['rentals','Subcontractors / rentals','Billed to the client with markup (pass-through)'],['equipment','PFBS equipment','Your own equipment, e.g. depreciation per use'],['misc','Miscellaneous','Shipping, fuel, other costs']];
 let SEC_OPEN={};
 const secAmt = sec => (E[sec]||[]).reduce((s,r)=>s+(num(r.unit)||0)*(num(r.qty)||0)*(1+(num(r.markup)||0)),0) + (sec==='materials'? (E.materials||[]).reduce((s,r)=>s+(num(r.unit)||0)*(num(r.qty)||0),0)*(num(E.taxRate)||0) : 0);
 function secOpen(sec){ return SEC_OPEN[sec] ?? secAmt(sec)>0; }
 function secTotal(sec){ const v=secAmt(sec); return v>0 ? usd(v) : '<span class="note" style="margin:0">none · tap to add</span>'; }
+let MAT_OPEN=new Set();
+const safeLink = u => /^https?:\/\//i.test(String(u||'').trim()) ? String(u).trim() : '';
 function rowsHTML(sec){
-  return (E[sec]||[]).map((r,i)=>`<tr><td><input data-e="${sec}.${i}.desc" value="${esc(r.desc||'')}" aria-label="Description"></td>
+  const det = sec==='materials';
+  return (E[sec]||[]).map((r,i)=>{ const has=r.supplier||r.sku||r.link, open=MAT_OPEN.has(i)||has;
+    return `<tr><td><input data-e="${sec}.${i}.desc" value="${esc(r.desc||'')}" aria-label="Description">${det?`<button type="button" class="linkbtn" data-matdet="${i}">${has?`${esc([r.supplier,r.sku].filter(Boolean).join(' · ')||'Details')}${safeLink(r.link)?' ↗':''}`:'+ supplier, part #, link'}</button>`:''}</td>
     <td><input data-e="${sec}.${i}.unit" type="number" step="any" inputmode="decimal" value="${esc(r.unit??'')}" aria-label="Unit cost"></td>
     <td><input data-e="${sec}.${i}.qty" type="number" step="any" inputmode="decimal" value="${esc(r.qty??'')}" aria-label="Quantity"></td>
     <td><input data-e="${sec}.${i}.markup" data-pct="1" type="number" step="any" inputmode="decimal" value="${esc(r.markup!=null?Math.round(r.markup*10000)/100:'')}" aria-label="Markup percent"></td>
-    <td class="r num" id="et-${sec}-${i}"></td><td><button type="button" class="x" data-erm="${sec}.${i}" aria-label="Remove row">×</button></td></tr>`).join('');
+    <td class="r num" id="et-${sec}-${i}"></td><td><button type="button" class="x" data-erm="${sec}.${i}" aria-label="Remove row">×</button></td></tr>
+    ${det&&open?`<tr class="matdet"><td colspan="6"><div class="matgrid"><label class="f">Supplier<input data-e="${sec}.${i}.supplier" value="${esc(r.supplier||'')}" placeholder="e.g. Home Depot, Grainger"></label><label class="f">Part / SKU #<input data-e="${sec}.${i}.sku" value="${esc(r.sku||'')}"></label><label class="f">Link<input data-e="${sec}.${i}.link" type="url" value="${esc(r.link||'')}" placeholder="https://…"></label>${safeLink(r.link)?`<a class="btn ghost small" href="${esc(safeLink(r.link))}" target="_blank" rel="noopener" style="align-self:end">Open ↗</a>`:''}</div></td></tr>`:''}`; }).join('');
 }
 function renderEst(){
   const it=draft.items[EI], roles=S.est.labor.map(r=>r[0]);
@@ -1362,6 +1435,7 @@ $('#est').addEventListener('click', e=>{
     else E[sec].push({desc:'',unit:'',qty:1,markup: sec==='materials'?S.est.matMarkup : sec==='rentals'?S.est.rentMarkup : sec==='equipment'?S.est.equipMarkup : 0});
     renderEst(); return; }
   if(t.dataset.erm){ const [sec,i]=t.dataset.erm.split('.'); E[sec].splice(+i,1); renderEst(); return; }
+  if(t.dataset.matdet!=null){ const i=+t.dataset.matdet; MAT_OPEN.has(i)?MAT_OPEN.delete(i):MAT_OPEN.add(i); SEC_OPEN.materials=true; renderEst(); return; }
   if(t.id==='gdAdd'){ CALC.gd.push({task:'',qty:1,hrs:'',parts:''}); CALC.open=true; renderEst(); return; }
   if(t.dataset.gdrm!=null){ CALC.gd.splice(+t.dataset.gdrm,1); if(!CALC.gd.length) CALC.gd.push({task:'',qty:1,hrs:'',parts:''}); CALC.open=true; renderEst(); return; }
   if(t.id==='caAdd'){ CALC.areas.push({name:'',l:'',w:''}); CALC.open=true; renderEst(); return; }
@@ -1608,7 +1682,7 @@ async function makeEstimatePdf(p, pairs){
       tbl('LABOR',['Role','Hours','Bill rate','Total','Wage','Wage cost'], [...admin,...crew].map(r=>[r.role, R(fmtH(n(r.hours))), R(usd(r.rate)), R(usd(n(r.hours)*n(r.rate))), R(roleKind(r.role)==='admin'?'—':usd(wageOf(r))), R(usd(n(r.hours)*wageOf(r)))]),
         ['Total', R(fmtH(c.techHours)+' tech'), '', R(usd(c.laborPrice)), '', R(usd(c.wages))]);
     }
-    const line=(sec)=>(e[sec]||[]).filter(r=>n(r.unit)*n(r.qty)).map(r=>[r.desc||'', R(usd(r.unit)), R(fmtH(n(r.qty))), R(usd(n(r.unit)*n(r.qty))), R(pct(n(r.markup))), R(usd(n(r.unit)*n(r.qty)*(1+n(r.markup))))]);
+    const line=(sec)=>(e[sec]||[]).filter(r=>n(r.unit)*n(r.qty)).map(r=>[(r.desc||'')+((r.supplier||r.sku)?'\n'+[r.supplier,r.sku&&('#'+r.sku)].filter(Boolean).join(' · '):''), R(usd(r.unit)), R(fmtH(n(r.qty))), R(usd(n(r.unit)*n(r.qty))), R(pct(n(r.markup))), R(usd(n(r.unit)*n(r.qty)*(1+n(r.markup))))]);
     const H=['Description','Unit cost','Qty','Cost','Markup','Price'];
     tbl('MATERIALS', H, line('materials'), ['Sales tax '+(Math.round(n(e.taxRate)*10000)/100)+'% on cost','','','','',R(usd(c.tax))]);
     tbl('SUBCONTRACTORS / RENTALS (PASS-THROUGH)', H, line('rentals'));
@@ -1961,7 +2035,7 @@ function renderSettings(){
     ${ta('s-labor','Labor roles & rates', S.est.labor.map(r=>r.join(' | ')).join('\n'), 'Role | bill rate $/hr | wage cost $/hr. Wage cost drives gross profit.')}
     ${ta('s-sprates','Solar panel rates by access', (S.est.spRates||[]).map(r=>r.join(' | ')).join('\n'), 'Access | $ per panel. One rate per job on the solar (SP) estimate. Rename the tiers to how you describe access, e.g. Ground mount | 3.')}
     ${ta('s-gdtasks','Gates & doors tasks', (S.est.gdTasks||[]).map(r=>r.join(' | ')).join('\n'), 'Task | crew hours each | parts $ each. Used by the Gates & doors job builder. Leave a number at 0 to type it per job.')}
-    ${ta('s-mat','Material presets', S.est.materials.map(r=>r.join(' | ')).join('\n'), 'Name | unit cost. These start every new estimate (qty 0).')}
+    ${ta('s-mat','Material presets', S.est.materials.map(r=>r.filter((x,i)=>i<2||x).join(' | ')).join('\n'), 'Name | unit cost | supplier | part / SKU # | link (last three optional). These start every new estimate (qty 0) and carry into Parts to order.')}
     <div class="card listedit"><h3>Estimate defaults</h3>
       <label class="f">Material markup %<input id="s-mm" type="number" step="any" value="${S.est.matMarkup*100}" ${ro}></label>
       <label class="f">Sales tax on materials %<input id="s-tax" type="number" step="any" value="${Math.round(S.est.taxRate*100000)/1000}" ${ro}></label>
@@ -1999,7 +2073,7 @@ $('#settingsBody').addEventListener('click', async e=>{
     const pair=(id,f)=>L(id).map(l=>{ const [a,b]=l.split('|').map(s=>s.trim()); return f(a,b); });
     const splitPair=l=>{ const i=l.indexOf('|'); return i<0?['',l.trim()]:[l.slice(0,i).trim(), l.slice(i+1).trim()]; };
     const est={ labor:L('s-labor').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b)||0, num(c)||0]; }),
-      materials:L('s-mat').map(l=>{ const [a,b]=l.split('|').map(x=>x.trim()); return [a, num(b)||0]; }),
+      materials:L('s-mat').map(l=>{ const [a,b,c,d,...e]=l.split('|').map(x=>x.trim()); const r=[a, num(b)||0]; if(c||d||e.length) r.push(c||'', d||'', e.join('|')||''); return r; }),
       spPph:num($('#s-sppph').value)||250,
       gdTasks:L('s-gdtasks').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim().replace(/[$,]/g,'')); return [a, num(b)||0, num(c)||0]; }).filter(r=>r[0]),
       spRates:L('s-sprates').map(l=>{ const [a,b]=l.split('|').map(x=>x.trim()); return [a, num(String(b||'').replace('$',''))||0]; }).filter(r=>r[0]),
