@@ -69,7 +69,7 @@ lists finished jobs whose report hasn't gone out.
 
 1. entra.microsoft.com → App registrations → **New registration**: name `PFBS Proposal Desk`, accounts in this organization only.
 2. **Authentication → Add a platform → Single-page application**, redirect URI
-   `https://arturoperez02.github.io/pfbs-proposal-desk/auth.html`. No secret is needed (this is why it works with your tenant policy).
+   `https://apps.pfbuildingservices.com/auth.html`. No secret is needed (this is why it works with your tenant policy).
 3. **API permissions → Add → Microsoft Graph → Delegated:** `Files.ReadWrite.All` and `Sites.ReadWrite.All` → **Grant admin consent**.
 4. Copy the **Application (client) ID** and **Directory (tenant) ID** into `config.js` (`SP_CLIENT_ID`, `SP_TENANT_ID`).
 
