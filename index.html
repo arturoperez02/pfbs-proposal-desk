@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>PFBS Proposal Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+html,body{margin:0}
+[hidden]{display:none!important}
+/* Layout: sticky brand bar + tabs; each tab is one working surface; proposal detail opens in a side drawer (full screen on phones). */
+:root{
+  --navy:#1F2A5C; --gold:#C9A227; --gold-soft:#FFF3CD;
+  --bg:#F5F6F9; --surface:#FFFFFF; --ink:#1A1F33; --muted:#5C6378; --line:#DFE2EA; --hover:#EEF0F6;
+  --accent:#1F2A5C; --on-accent:#FFFFFF;
+  --good:#2E7D4F; --good-bg:#E3F2E8; --warn:#8A6100; --warn-bg:#FFF1CC; --bad:#B3261E; --bad-bg:#FBE4E2;
+  --info:#2F4A9A; --info-bg:#E4E9F7; --neutral-bg:#ECEDF1;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Barlow","Segoe UI",Arial,sans-serif;
+  --radius:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11141F; --surface:#1A1E2D; --ink:#E8EAF2; --muted:#A1A7BA; --line:#2C3247; --hover:#232840;
+  --accent:#D4B048; --on-accent:#11141F; --gold-soft:#3A3218;
+  --good:#7BCB98; --good-bg:#18301F; --warn:#E8C25A; --warn-bg:#352B10; --bad:#F09089; --bad-bg:#3A1C1A;
+  --info:#9DB1F0; --info-bg:#1E2747; --neutral-bg:#272C3E; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11141F; --surface:#1A1E2D; --ink:#E8EAF2; --muted:#A1A7BA; --line:#2C3247; --hover:#232840;
+  --accent:#D4B048; --on-accent:#11141F; --gold-soft:#3A3218;
+  --good:#7BCB98; --good-bg:#18301F; --warn:#E8C25A; --warn-bg:#352B10; --bad:#F09089; --bad-bg:#3A1C1A;
+  --info:#9DB1F0; --info-bg:#1E2747; --neutral-bg:#272C3E; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px}
+body{line-height:1.4}
+button,input,select,textarea{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:#1F2A5C;color:#fff;padding-inline:16px}
+.bar-in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:16px;min-height:56px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{font-family:var(--display);font-size:24px;letter-spacing:.04em;color:#fff}
+.brand span{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#C9A227}
+nav.tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+nav.tabs button{background:none;border:0;color:#C8CDE0;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:600}
+nav.tabs button[aria-selected="true"]{background:#C9A227;color:#1F2A5C}
+nav.tabs button:focus-visible{outline:2px solid #C9A227;outline-offset:2px}
+main{max-width:1240px;margin:0 auto;padding:20px 16px 48px}
+.testband{background:var(--gold-soft);border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px;font-size:13px;color:var(--ink);margin-bottom:16px}
+h2{font-family:var(--display);font-size:26px;margin:0;letter-spacing:.02em;text-wrap:balance}
+h3{font-family:var(--display);font-size:19px;margin:0 0 8px;letter-spacing:.02em}
+.sub{color:var(--muted);font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.kpi .v{font-family:var(--display);font-size:28px;margin-top:2px}
+.kpi.alert .v{color:var(--bad)} .kpi.warn .v{color:var(--warn)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;cursor:pointer;font-size:13px;font-weight:600}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.chip .c{opacity:.75;margin-left:4px}
+input[type=search],input[type=text],input[type=number],input[type=date],input[type=url],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.search{flex:1 1 220px;max-width:340px}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.small{padding:5px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;background:var(--surface);position:sticky;top:0}
+tbody tr{cursor:pointer} tbody tr:hover{background:var(--hover)}
+td.r,th.r{text-align:right}
+td.wrap{white-space:normal;min-width:180px}
+.pnum{font-weight:700;color:var(--accent)}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+.p-open{background:var(--warn-bg);color:var(--warn)} .p-won{background:var(--good-bg);color:var(--good)}
+.p-lost{background:var(--bad-bg);color:var(--bad)} .p-neutral{background:var(--neutral-bg);color:var(--muted)} .p-review{background:var(--info-bg);color:var(--info)}
+.flag{font-size:12px;font-weight:700} .flag.bad{color:var(--bad)} .flag.warn{color:var(--warn)}
+.empty{padding:32px;text-align:center;color:var(--muted)}
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(10,14,30,.45);z-index:20}
+aside.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--surface);z-index:21;display:flex;flex-direction:column;border-left:1px solid var(--line)}
+.dhead{padding:calc(14px + env(safe-area-inset-top,0px)) 18px 12px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start}
+.dhead .t{flex:1;min-width:0}
+.dhead .t b{font-family:var(--display);font-size:24px;color:var(--accent)}
+.dbody{padding:16px 18px;overflow-y:auto;flex:1;display:grid;gap:18px}
+.dfoot{padding:12px 18px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+.dfoot .msg{margin-right:auto;font-size:13px;color:var(--muted)}
+.stages{display:flex;flex-wrap:wrap;gap:6px}
+.stages button{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 9px;font-size:13px;cursor:pointer}
+.stages button.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.grid2 .full{grid-column:1/-1}
+label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:600;min-width:0}
+fieldset{border:0;padding:0;margin:0;display:grid;gap:10px}
+legend{font-family:var(--display);font-size:17px;color:var(--ink);margin-bottom:6px;letter-spacing:.02em}
+.calc{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.calc div{display:grid}.calc span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}.calc b{font-size:16px}
+.hist{font-size:13px;color:var(--muted);display:grid;gap:3px}
+.reviewbox{border:1px solid var(--info);background:var(--info-bg);color:var(--ink);border-radius:var(--radius);padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.cards{display:grid;gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.listedit{display:grid;gap:6px}
+.listedit textarea{min-height:150px;font-size:14px}
+.gate{padding:40px 16px;text-align:center;color:var(--muted)}
+@media (max-width:720px){
+  .hide-sm{display:none}
+  .grid2{grid-template-columns:1fr}
+  nav.tabs{margin-left:0;width:100%}
+  .bar-in{padding-block:8px}
+}
+@media (prefers-reduced-motion:no-preference){aside.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+
+.who{display:flex;align-items:center;gap:10px;color:#C8CDE0;font-size:13px}
+.btn.onbar{color:#fff;border-color:#4A5A8C}
+.login{max-width:440px;margin:48px auto;display:grid;gap:14px}
+.btn.wide{width:100%;padding:12px}
+.emailrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.emailrow input{flex:1 1 200px}
+details summary{cursor:pointer;color:var(--muted);font-size:14px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
+td input,td select{padding:5px 8px}
+
+</style>
+</head>
+<body>
+<header class="bar"><div class="bar-in">
+  <div class="brand"><b>PFBS</b><span>Proposal Desk</span></div>
+  <nav class="tabs" role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="pipeline" aria-selected="true">Pipeline</button>
+    <button role="tab" data-tab="scorecard" aria-selected="false">Scorecards</button>
+    <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
+  </nav>
+  <div class="who" id="who" hidden><span id="whoName"></span><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
+</div></header>
+
+<main>
+  <section id="view-login" hidden>
+    <div class="login card">
+      <h2>Sign in</h2>
+      <p class="sub">Use your PF Building Services Microsoft 365 account.</p>
+      <button class="btn wide" id="msLogin">Sign in with Microsoft</button>
+      <details id="emailBox"><summary>Sign in with an email link instead</summary>
+        <form id="emailForm" class="emailrow"><input type="email" id="loginEmail" placeholder="you@pfbuildingservices.com" required aria-label="Work email"><button class="btn" type="submit">Email me a link</button></form>
+      </details>
+      <p class="sub" id="loginMsg"></p>
+    </div>
+  </section>
+
+  <section id="view-blocked" hidden>
+    <div class="login card"><h2>Not on the team list</h2><p class="sub" id="blockedMsg"></p><button class="btn ghost" id="signOut2">Sign out</button></div>
+  </section>
+
+  <section id="view-setup" hidden>
+    <div class="login card"><h2>Almost ready</h2><p class="sub">Add your Supabase project URL and anon key at the top of the script in this file (SUPABASE_URL and SUPABASE_ANON_KEY). The setup guide walks through it.</p></div>
+  </section>
+
+  <section id="view-pipeline" hidden>
+    <div class="toolbar" style="justify-content:space-between">
+      <div><h2>Pipeline</h2><div class="sub" id="asof">Loading proposals…</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="exportBtn">Export CSV</button><button class="btn" id="newBtn">+ New proposal</button></div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="toolbar">
+      <div id="chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <input type="search" class="search" id="q" placeholder="Search client, property, PFBS #" aria-label="Search proposals">
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>PFBS #</th><th class="hide-sm">Sent</th><th>Client</th><th class="hide-sm">Property</th><th class="r">Amount</th><th>Status</th><th class="hide-sm r">Days open</th><th class="hide-sm">Follow-up</th><th class="hide-sm">By</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="9" class="empty">Loading proposals…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section id="view-scorecard" hidden>
+    <h2>Scorecards</h2>
+    <div class="sub" style="margin-bottom:16px">Won = Approved through Paid. Commission counts only proposals with a Date paid.</div>
+    <div class="cards" id="score"></div>
+  </section>
+
+  <section id="view-settings" hidden>
+    <h2>Settings</h2>
+    <div class="sub" style="margin-bottom:16px" id="setnote"></div>
+    <div id="settingsBody"></div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="dTitle"></aside>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+// ===================== CONFIGURATION =====================
+// Paste these from Supabase → Project Settings → API.
+// The anon key is meant to be public; the database's security rules protect the data.
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+// =========================================================
+(() => {
+const STATUSES = ['Estimating','Needs Review','Sent','Follow-up','Approved','Scheduled','Invoiced','Paid','Declined','Expired','Withdrawn'];
+const WON = ['Approved','Scheduled','Invoiced','Paid'], LOST = ['Declined','Expired'], OPEN = ['Sent','Follow-up'], PRE = ['Estimating','Needs Review'];
+const ROLES = ['Owner','Admin','Senior Estimator','Estimator','BD Rep'];
+const DEFAULTS = {
+  services: [], frequencies: [['One-time',1],['Annual',1]], leadSources: [], lostReasons: [],
+  clientTypes: [['New client',0.10],['Existing client - new property',0.05],['House account',0]],
+  marginFloor: 0.35, belowFloorShare: 0.5, estTiers: [[0,0.02],[0.35,0.035],[0.45,0.05]], expiryDays: 90
+};
+// DB column  <->  app field
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',bid_link:'bidLink',folder_link:'folderLink',notes:'notes'};
+const READONLY = {reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy'};
+const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ let v=p[f]; if(v==='') v=null; if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
+
+let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
+let filter='Open', query='';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = v => (v==null||v===''||isNaN(v)) ? '—' : '$' + Math.round(Number(v)).toLocaleString('en-US');
+const pct = v => (v==null||isNaN(v)) ? '—' : (v*100).toFixed(v<0.1?1:0) + '%';
+const today = () => { const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
+const parse = s => { if(!s) return null; const [y,m,d]=String(s).slice(0,10).split('-').map(Number); return new Date(y,m-1,d); };
+const iso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const fmtD = s => { const d=parse(s); return d ? (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2) : '—'; };
+const days = (a,b) => Math.round((b-a)/864e5);
+function num(v){ if(v===''||v==null) return null; const n=Number(v); return isNaN(n)?null:n; }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true, 3500); }
+const role = () => me?.role || '';
+const isManager = () => ['Owner','Admin','Senior Estimator'].includes(role());
+const canReview = () => ['Owner','Senior Estimator'].includes(role());
+const canPayComm = () => ['Owner','Admin'].includes(role());
+const canCreate = () => isManager() || role()==='Estimator';
+
+// ---------- calculations (same rules as the Excel log) ----------
+function outcome(p){ if(WON.includes(p.status)) return 'Won'; if(LOST.includes(p.status)) return 'Lost'; if(p.status==='Withdrawn') return 'Withdrawn'; if(PRE.includes(p.status)) return 'Draft'; return 'Open'; }
+function daysOpen(p){ if(outcome(p)!=='Open' || !p.dateSent) return null; return days(parse(p.dateSent), today()); }
+function followUp(p){ const d=daysOpen(p); if(d==null) return null; const add = d<3?3 : d<10?10 : d<21?21 : S.expiryDays; const f=parse(p.dateSent); f.setDate(f.getDate()+add); return f; }
+function gpPct(p){ return (num(p.gp)!=null && num(p.amount)) ? num(p.gp)/num(p.amount) : null; }
+function visits(p){ const f=S.frequencies.find(x=>x[0]===p.frequency); return f?f[1]:1; }
+function annual(p){ return num(p.amount)!=null && p.frequency ? num(p.amount)*visits(p) : null; }
+function bdRate(p){ if(!p.bdRep || !p.clientType) return null; const t=S.clientTypes.find(x=>x[0]===p.clientType); if(!t) return null; const g=gpPct(p); return t[1]*((g!=null && g<S.marginFloor)?S.belowFloorShare:1); }
+function bdComm(p){ const r=bdRate(p); return (p.datePaid && r!=null && num(p.gp)!=null) ? num(p.gp)*r : null; }
+function estRate(p){ const g=gpPct(p); if(g==null) return null; let r=S.estTiers[0][1]; for(const [min,rate] of S.estTiers) if(g>=min) r=rate; return r; }
+function estBase(p){ return num(p.amount)!=null ? num(p.amount)-(num(p.passThrough)||0) : null; }
+function isEstimator(name){ const m=TEAM.find(t=>t.name===name); return m && ['Estimator','Senior Estimator'].includes(m.role); }
+function estComm(p){ if(!p.datePaid || !isEstimator(p.sentBy)) return null; const r=estRate(p), b=estBase(p); return (r!=null&&b!=null)? b*r : null; }
+function pillClass(st){ if(WON.includes(st)) return 'p-won'; if(LOST.includes(st)) return 'p-lost'; if(OPEN.includes(st)) return 'p-open'; if(PRE.includes(st)) return 'p-review'; return 'p-neutral'; }
+
+// ---------- pipeline ----------
+const FILTERS = [
+  ['Open', p=>outcome(p)==='Open'],
+  ['Needs review', p=>PRE.includes(p.status)],
+  ['Follow-up due', p=>{const f=followUp(p); return f && f<=today();}],
+  ['Past 90 days', p=>{const d=daysOpen(p); return d!=null && d>S.expiryDays;}],
+  ['Won', p=>outcome(p)==='Won'],
+  ['Lost', p=>outcome(p)==='Lost'],
+  ['All', ()=>true]
+];
+function renderPipeline(){
+  const open=P.filter(p=>outcome(p)==='Open'), won=P.filter(p=>outcome(p)==='Won'), lost=P.filter(p=>outcome(p)==='Lost');
+  const due=P.filter(FILTERS[2][1]).length, stale=P.filter(FILTERS[3][1]).length, review=P.filter(FILTERS[1][1]).length;
+  const sum=a=>a.reduce((s,p)=>s+(num(p.amount)||0),0);
+  const rate=(won.length+lost.length)?won.length/(won.length+lost.length):null;
+  $('#kpis').innerHTML = [
+    ['Open pipeline', money(sum(open)), open.length+' proposals',''],
+    ['Won', money(sum(won)), won.length+' proposals',''],
+    ['Win rate', rate==null?'—':pct(rate), (won.length+lost.length)+' decided',''],
+    ['Needs review', review, 'waiting on senior estimator',''],
+    ['Follow-ups due', due, 'call or email this week', due?'warn':''],
+    ['Past 90 days', stale, 'mark Expired or re-issue', stale?'alert':'']
+  ].map(([l,v,s,c])=>`<div class="kpi ${c}"><div class="l">${l}</div><div class="v num">${v}</div><div class="sub">${s}</div></div>`).join('');
+  $('#chips').innerHTML = FILTERS.map(([n,f])=>`<button class="chip" aria-pressed="${filter===n}" data-f="${esc(n)}">${n}<span class="c num">${P.filter(f).length}</span></button>`).join('');
+  const fn=FILTERS.find(f=>f[0]===filter)[1], q=query.trim().toLowerCase();
+  const list=P.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
+  $('#rows').innerHTML = list.length ? list.map(p=>{
+    const d=daysOpen(p), f=followUp(p);
+    return `<tr data-id="${esc(p.num)}" tabindex="0"><td class="pnum num">${esc(p.num)}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
+  }).join('') : `<tr><td colspan="9" class="empty">${P.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
+  $('#newBtn').hidden = !canCreate();
+}
+
+// ---------- drawer ----------
+let draft=null, orig=null, isNew=false, hist=[];
+function opts(list,val){ return '<option value=""></option>'+list.map(v=>`<option ${v===val?'selected':''}>${esc(v)}</option>`).join(''); }
+function canEditDraft(){ return isNew ? canCreate() : (isManager() || (role()==='Estimator' && orig?.sentBy===me.name)); }
+async function openDrawer(id){
+  isNew=!id; orig = id ? P.find(p=>p.num===id) : null;
+  draft = orig ? structuredClone(orig) : {num:'', dateSent:iso(today()), sentBy: me.name, status:'Estimating'};
+  hist=[]; drawDrawer();
+  $('#scrim').hidden=false; $('#drawer').hidden=false; $('#closeD')?.focus();
+  if(id){ const {data}=await sb.from('proposal_history').select('status,changed_at,changed_by').eq('num',id).order('changed_at',{ascending:false}).limit(8); hist=data||[]; if(draft&&draft.num===id) drawDrawer(); }
+}
+function closeDrawer(){ $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; }
+function calc1(p){ const g=gpPct(p); return `<div class="calc">
+      <div><span>GP %</span><b class="num" style="color:${g!=null&&g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b></div>
+      <div><span>Annual value</span><b class="num">${money(annual(p))}</b></div>
+      <div><span>Days open</span><b class="num">${daysOpen(p)??'—'}</b></div>
+      <div><span>Follow-up</span><b class="num">${followUp(p)?fmtD(iso(followUp(p))):'—'}</b></div>
+    </div>${g!=null&&g<S.marginFloor?`<div class="note" style="color:var(--bad)">Below the ${pct(S.marginFloor)} margin floor: needs owner approval; commission pays at a reduced rate.</div>`:''}`; }
+function calc2(p){ const br=bdRate(p), er=estRate(p); return `<div class="calc">
+      <div><span>BD rate</span><b class="num">${br==null?'—':pct(br)}</b></div>
+      <div><span>BD commission</span><b class="num">${money(bdComm(p))}</b></div>
+      <div><span>Estimator rate</span><b class="num">${isEstimator(p.sentBy)&&er!=null?pct(er):'—'}</b></div>
+      <div><span>Estimator commission</span><b class="num">${money(estComm(p))}</b></div>
+    </div>`; }
+function drawDrawer(){
+  const p=draft, ed=canEditDraft();
+  const dis = ed?'':'disabled';
+  const field=(label,key,type='text',cls='',extra='')=>`<label class="f ${cls}">${label}<input id="f-${key}" data-k="${key}" type="${type}" value="${esc(p[key]??'')}" ${type==='number'?'step="any" inputmode="decimal"':''} ${extra} ${dis}></label>`;
+  const sel=(label,key,list,cls='',lock=false)=>`<label class="f ${cls}">${label}<select id="f-${key}" data-k="${key}" ${ed&&!lock?'':'disabled'}>${opts(list,p[key])}</select></label>`;
+  const names=TEAM.filter(t=>t.active&&t.role!=='BD Rep').map(t=>t.name), bds=TEAM.filter(t=>t.active&&t.role==='BD Rep').map(t=>t.name);
+  const preLocked = st => PRE.includes(orig?.status ?? 'Estimating') && !PRE.includes(st) && !canReview();
+  const review = p.status==='Needs Review' && !isNew ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>Waiting on review.</b> The senior estimator checks price and scope, then approves to send.</div>${canReview()?'<button class="btn small" id="approveSend">Approve &amp; mark Sent</button>':''}</div>`:'';
+  $('#drawer').innerHTML = `
+  <div class="dhead"><div class="t"><b id="dTitle" class="num">${isNew?'New proposal':esc(p.num)}</b><div class="sub">${isNew?'The PFBS number is assigned when you save.':esc(p.client||'')+' · '+esc(p.property||'')}</div></div>
+    <button class="btn ghost small" id="closeD">Close</button></div>
+  <div class="dbody">
+    ${review}
+    <fieldset><legend>Status</legend>
+      <div class="stages">${STATUSES.map(s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`).join('')}</div>
+      ${!canReview()&&PRE.includes(orig?.status??'Estimating')?'<div class="note">Move it to Needs Review when it is ready. The senior estimator sends it.</div>':''}
+      <div class="hist">${hist.map(h=>`<div>${fmtD(h.changed_at)} — ${esc(h.status)}${h.changed_by?' · '+esc(h.changed_by):''}</div>`).join('')}${p.reviewedBy?`<div>Reviewed by ${esc(p.reviewedBy)}</div>`:''}</div>
+    </fieldset>
+    <fieldset><legend>Proposal</legend><div class="grid2">
+      ${field('Date sent','dateSent','date')}
+      ${sel('Estimator (sent by)','sentBy',names,'',!isManager())}
+      ${field('Client','client','text','full')}
+      ${field('Property / job site','property','text','full')}
+      ${sel('Service','service',S.services)}
+      ${sel('Frequency','frequency',S.frequencies.map(f=>f[0]))}
+      ${field('Amount per visit ($)','amount','number')}
+      ${field('Est. gross profit ($)','gp','number')}
+      ${field('Pass-through costs ($)','passThrough','number','','placeholder="lifts, subs"')}
+      ${field('HCP job #','hcpJob')}
+    </div>
+    <div id="calc1">${calc1(p)}</div>
+    </fieldset>
+    <fieldset><legend>Lead &amp; commission</legend><div class="grid2">
+      ${sel('Client type','clientType',S.clientTypes.map(c=>c[0]))}
+      ${sel('Lead source','leadSource',S.leadSources)}
+      ${sel('BD rep','bdRep',bds)}
+      ${field('Date paid','datePaid','date')}
+      <label class="f">Commission paid on<input id="f-commPaidOn" data-k="commPaidOn" type="date" value="${esc(p.commPaidOn??'')}" ${ed&&canPayComm()?'':'disabled'}></label>
+      ${field('Date resolved','dateResolved','date')}
+      ${LOST.includes(p.status)?sel('Lost reason','lostReason',S.lostReasons):''}
+    </div>
+    <div id="calc2">${calc2(p)}</div>
+    <div class="note">Commission shows once Date paid is filled in. Owners don't earn estimator commission.</div>
+    </fieldset>
+    <fieldset><legend>Files</legend><div class="grid2">
+      ${field('Bid sheet link (SharePoint)','bidLink','url','full','placeholder="https://…sharepoint.com/…"')}
+      ${field('Proposal folder link','folderLink','url','full','placeholder="https://…sharepoint.com/…"')}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${/^https:\/\//.test(p.bidLink||'')?`<a class="btn ghost small" href="${esc(p.bidLink)}" target="_blank" rel="noopener">Open bid sheet</a>`:''}${/^https:\/\//.test(p.folderLink||'')?`<a class="btn ghost small" href="${esc(p.folderLink)}" target="_blank" rel="noopener">Open folder</a>`:''}</div>
+    </fieldset>
+    <fieldset><legend>Notes</legend><textarea id="f-notes" data-k="notes" rows="3" ${dis}>${esc(p.notes??'')}</textarea></fieldset>
+  </div>
+  <div class="dfoot"><span class="msg" id="dmsg">${ed?'':'View only'}</span>
+    <button class="btn ghost" id="cancelD">Cancel</button>
+    <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save changes'}</button></div>`;
+}
+function setStatus(st){
+  if(draft.status===st) return;
+  draft.status=st;
+  if((st==='Approved'||LOST.includes(st)) && !draft.dateResolved) draft.dateResolved=iso(today());
+  if(st==='Sent' && !draft.dateSent) draft.dateSent=iso(today());
+  if(st==='Paid' && !draft.datePaid) draft.datePaid=iso(today());
+  drawDrawer();
+}
+async function save(){
+  if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
+  const btn=$('#saveD'); btn.disabled=true; $('#dmsg').textContent='Saving…';
+  const row=toRow(draft); if(isNew) delete row.num;
+  const res = isNew ? await sb.from('proposals').insert(row).select().single()
+                    : await sb.from('proposals').update(row).eq('num', orig.num).select().single();
+  if(res.error){ btn.disabled=false; $('#dmsg').textContent = res.error.message || 'Could not save. Try again.'; return; }
+  toast(isNew ? `Created ${res.data.num}` : `Saved ${res.data.num}`);
+  closeDrawer(); await loadProposals();
+}
+function refreshCalcs(){ const a=$('#calc1'), b=$('#calc2'); if(a) a.innerHTML=calc1(draft); if(b) b.innerHTML=calc2(draft); }
+$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
+$('#drawer').addEventListener('change', e=>{ const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
+$('#drawer').addEventListener('click', e=>{
+  const t=e.target.closest('button'); if(!t) return;
+  if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
+  else if(t.id==='saveD') save();
+  else if(t.id==='approveSend'){ draft.dateSent=iso(today()); setStatus('Sent'); save(); }
+  else if(t.dataset.st) setStatus(t.dataset.st);
+});
+$('#scrim').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#drawer').hidden) closeDrawer(); });
+$('#rows').addEventListener('click', e=>{ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
+$('#rows').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id);} });
+$('#chips').addEventListener('click', e=>{ const b=e.target.closest('[data-f]'); if(b){ filter=b.dataset.f; renderPipeline(); } });
+$('#q').addEventListener('input', e=>{ query=e.target.value; renderPipeline(); });
+$('#newBtn').addEventListener('click', ()=>openDrawer(null));
+
+// ---------- export (backup) ----------
+$('#exportBtn').addEventListener('click', ()=>{
+  const cols=Object.keys(MAP);
+  const cell=v=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const csv=[cols.join(',')].concat(P.map(p=>{ const r=toRow(p); r.num=p.num; return cols.map(c=>cell(r[c])).join(','); })).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=`PFBS_Proposals_${iso(today())}.csv`; a.click(); URL.revokeObjectURL(a.href);
+});
+
+// ---------- scorecards ----------
+function table(head, rows, note=''){
+  return `<div class="tablewrap"><table><thead><tr>${head.map((h,i)=>`<th class="${i?'r':''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr style="cursor:default">${r.map((c,i)=>`<td class="${i?'r num':''}">${c}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${head.length}" class="empty">${note}</td></tr>`}</tbody></table></div>`;
+}
+function group(key, names){
+  return names.map(n=>{
+    const mine=P.filter(p=>p[key]===n), won=mine.filter(p=>outcome(p)==='Won'), lost=mine.filter(p=>outcome(p)==='Lost'), open=mine.filter(p=>outcome(p)==='Open');
+    const sum=(a,f)=>a.reduce((s,p)=>s+(num(f(p))||0),0);
+    return {n,mine,won,lost,open,wonAmt:sum(won,p=>p.amount),openAmt:sum(open,p=>p.amount),gpWon:sum(won,p=>p.gp),gpBase:sum(won.filter(p=>num(p.gp)!=null),p=>p.amount),
+      rate:(won.length+lost.length)?won.length/(won.length+lost.length):null, due:open.filter(p=>{const f=followUp(p);return f&&f<=today();}).length, stale:open.filter(p=>daysOpen(p)>S.expiryDays).length,
+      bdEarned:sum(mine,bdComm), bdPaid:sum(mine.filter(p=>p.commPaidOn),bdComm), estEarned:sum(mine,estComm), estPaid:sum(mine.filter(p=>p.commPaidOn),estComm)};
+  });
+}
+function renderScore(){
+  const est=group('sentBy', TEAM.filter(t=>t.role!=='BD Rep').map(t=>t.name)).filter(r=>r.mine.length||TEAM.find(t=>t.name===r.n)?.active);
+  const bd=group('bdRep', TEAM.filter(t=>t.role==='BD Rep').map(t=>t.name));
+  const src=group('leadSource', S.leadSources).filter(r=>r.mine.length), svc=group('service', S.services).filter(r=>r.mine.length);
+  $('#score').innerHTML = `
+  <div class="card"><h3>Estimators</h3>${table(['Estimator','Sent','Won','Lost','Open','Win rate','Won $','GP won $','Avg GP %','Open $','Follow-ups due','Past 90 days','Commission earned','Commission owed'],
+    est.map(r=>[esc(r.n),r.mine.length,r.won.length,r.lost.length,r.open.length,pct(r.rate),money(r.wonAmt),money(r.gpWon),r.gpBase?pct(r.gpWon/r.gpBase):'—',money(r.openAmt),r.due,r.stale,isEstimator(r.n)?money(r.estEarned):'owner',isEstimator(r.n)?money(r.estEarned-r.estPaid):'—']), 'No proposals yet.')}</div>
+  <div class="card"><h3>Business development</h3>${table(['BD rep','Leads','Won','Won $','GP won $','Commission earned','Paid','Owed'],
+    bd.map(r=>[esc(r.n),r.mine.length,r.won.length,money(r.wonAmt),money(r.gpWon),money(r.bdEarned),money(r.bdPaid),money(r.bdEarned-r.bdPaid)]), 'No BD reps yet. Add them on the Settings tab when you hire.')}
+    <div class="note">Commission counts only proposals with a Date paid. Owed = earned with no “Commission paid on” date.</div></div>
+  <div class="card"><h3>By lead source</h3>${table(['Lead source','Proposals','Won','Win rate','Won $'], src.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt)]), 'Pick a Lead source on new proposals and this fills in.')}</div>
+  <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt)]), 'Pick a Service on new proposals and this fills in.')}</div>`;
+}
+
+// ---------- settings ----------
+function renderSettings(){
+  const owner = role()==='Owner', ro = owner?'':'disabled';
+  $('#setnote').textContent = owner ? 'Changes apply to everyone as soon as you save.' : 'Only the owner can change settings.';
+  const lines=a=>a.map(x=>Array.isArray(x)?x.join(' | '):x).join('\n');
+  const ta=(id,label,val,help)=>`<div class="card listedit"><h3>${label}</h3><textarea id="${id}" ${ro}>${esc(val)}</textarea><div class="note">${help}</div></div>`;
+  $('#settingsBody').innerHTML = `
+  <div class="card" style="margin-bottom:16px"><h3>Team</h3>
+    <div class="tablewrap"><table><thead><tr><th>Name</th><th>Microsoft 365 email</th><th>Role</th><th>Active</th>${owner?'<th></th>':''}</tr></thead><tbody id="teamRows">
+    ${TEAM.map(t=>`<tr style="cursor:default" data-email="${esc(t.email)}"><td>${esc(t.name)}</td><td>${esc(t.email)}</td><td>${owner&&t.email!==me.email?`<select data-team="role" aria-label="Role for ${esc(t.name)}">${ROLES.map(r=>`<option ${r===t.role?'selected':''}>${r}</option>`).join('')}</select>`:esc(t.role)}</td><td>${owner&&t.email!==me.email?`<input type="checkbox" data-team="active" ${t.active?'checked':''} aria-label="Active">`:(t.active?'Yes':'No')}</td>${owner?'<td></td>':''}</tr>`).join('')}
+    ${owner?`<tr style="cursor:default"><td><input id="nt-name" placeholder="Name" aria-label="New member name"></td><td><input id="nt-email" type="email" placeholder="name@pfbuildingservices.com" aria-label="New member email"></td><td><select id="nt-role" aria-label="New member role">${ROLES.filter(r=>r!=='Owner').map(r=>`<option>${r}</option>`).join('')}</select></td><td></td><td><button class="btn small" id="addMember">Add</button></td></tr>`:''}
+    </tbody></table></div>
+    <div class="note">Only people listed here can sign in. Turning someone off removes their access right away. Estimators see only their own proposals; BD reps see only proposals credited to them.</div></div>
+  <div class="settings-grid">
+    ${ta('s-ct','Client type → BD rate', S.clientTypes.map(c=>c[0]+' | '+Math.round(c[1]*1000)/10).join('\n'), 'Client type | rate in percent of gross profit.')}
+    ${ta('s-tiers','Estimator rate by margin', S.estTiers.map(t=>Math.round(t[0]*1000)/10+' | '+Math.round(t[1]*1000)/10).join('\n'), 'GP % from | rate in percent of (price − pass-through).')}
+    <div class="card listedit"><h3>Guardrails</h3>
+      <label class="f">Margin floor (GP %)<input id="s-floor" type="number" step="any" value="${S.marginFloor*100}" ${ro}></label>
+      <label class="f">BD rate below floor (% of normal)<input id="s-share" type="number" step="any" value="${S.belowFloorShare*100}" ${ro}></label>
+      <label class="f">Proposal valid for (days)<input id="s-exp" type="number" value="${S.expiryDays}" ${ro}></label></div>
+    ${ta('s-svc','Services', lines(S.services), 'One per line.')}
+    ${ta('s-freq','Frequencies', lines(S.frequencies), 'Name | visits per year.')}
+    ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
+    ${ta('s-lost','Lost reasons', lines(S.lostReasons), 'One per line.')}
+  </div>
+  ${owner?'<div style="margin-top:16px"><button class="btn" id="saveS">Save settings</button></div>':''}`;
+}
+$('#settingsBody').addEventListener('click', async e=>{
+  if(e.target.id==='addMember'){
+    const name=$('#nt-name').value.trim(), email=$('#nt-email').value.trim().toLowerCase(), r=$('#nt-role').value;
+    if(!name||!email){ toast('Add a name and email.'); return; }
+    const {error}=await sb.from('team_members').insert({name,email,role:r});
+    if(error){ toast(error.message); return; } toast(`Added ${name}`); await loadTeam(); renderSettings();
+  }
+  if(e.target.id==='saveS'){
+    const L=id=>$('#'+id).value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const pair=(id,f)=>L(id).map(l=>{ const [a,b]=l.split('|').map(s=>s.trim()); return f(a,b); });
+    const data={ services:L('s-svc'), leadSources:L('s-src'), lostReasons:L('s-lost'),
+      frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
+      estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
+      marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, expiryDays:Number($('#s-exp').value)||90 };
+    const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
+    if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
+  }
+});
+$('#settingsBody').addEventListener('change', async e=>{
+  const k=e.target.dataset.team; if(!k) return;
+  const email=e.target.closest('tr').dataset.email, val = k==='active'? e.target.checked : e.target.value;
+  const {error}=await sb.from('team_members').update({[k]:val}).eq('email',email);
+  if(error){ toast(error.message); await loadTeam(); renderSettings(); } else { toast('Team updated'); await loadTeam(); }
+});
+
+// ---------- tabs / views ----------
+function show(view){ for(const v of ['login','blocked','setup','pipeline','scorecard','settings']) $('#view-'+v).hidden = v!==view; }
+$('#tabs').addEventListener('click', e=>{
+  const b=e.target.closest('[data-tab]'); if(!b) return;
+  for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x===b);
+  show(b.dataset.tab); renderAll();
+});
+function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
+function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='scorecard') renderScore(); if(c==='settings') renderSettings(); }
+
+// ---------- data ----------
+async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
+async function loadSettings(){ const {data}=await sb.from('settings').select('data').eq('id',1).maybeSingle(); S=Object.assign(structuredClone(DEFAULTS), data?.data||{}); }
+async function loadProposals(){
+  const {data,error}=await sb.from('proposals').select('*').order('num',{ascending:false});
+  if(error){ $('#asof').textContent='Could not load proposals: '+error.message; return; }
+  P=(data||[]).map(fromRow);
+  $('#asof').textContent=`${P.length} proposals · updated ${new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`;
+  renderAll();
+}
+
+// ---------- auth ----------
+$('#msLogin').addEventListener('click', async ()=>{
+  const {error}=await sb.auth.signInWithOAuth({provider:'azure', options:{scopes:'email', redirectTo: location.origin+location.pathname}});
+  if(error) $('#loginMsg').textContent=error.message;
+});
+$('#emailForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const {error}=await sb.auth.signInWithOtp({email:$('#loginEmail').value.trim().toLowerCase(), options:{shouldCreateUser:true, emailRedirectTo: location.origin+location.pathname}});
+  $('#loginMsg').textContent = error ? error.message : 'Check your email for the sign-in link.';
+});
+for(const id of ['#signOut','#signOut2']) $(id).addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
+
+let started=false;
+async function start(session){
+  if(!session){ show('login'); $('#tabs').hidden=true; $('#who').hidden=true; return; }
+  if(started) return; started=true;
+  const email=(session.user.email||'').toLowerCase();
+  const {data:m}=await sb.from('team_members').select('*').eq('email',email).eq('active',true).maybeSingle();
+  if(!m){ show('blocked'); $('#blockedMsg').textContent=`${email} isn't on the PF Building Services team list. Ask Arturo to add you.`; return; }
+  me=m; $('#whoName').textContent=`${m.name} · ${m.role}`; $('#who').hidden=false; $('#tabs').hidden=false;
+  await Promise.all([loadTeam(), loadSettings()]);
+  show('pipeline'); await loadProposals();
+  sb.channel('pfbs-live')
+    .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(loadProposals,400); })
+    .on('postgres_changes',{event:'*',schema:'public',table:'settings'},async()=>{ await loadSettings(); renderAll(); })
+    .subscribe();
+}
+
+if(!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase){ show('setup'); return; }
+sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+sb.auth.getSession().then(({data})=>start(data.session));
+sb.auth.onAuthStateChange((_e, session)=>{ if(session && !started) start(session); });
+})();
+</script>
+
+</body>
+</html>
