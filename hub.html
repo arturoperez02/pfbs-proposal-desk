@@ -6,8 +6,13 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#1F2A5C">
 <title>PFBS Apps</title>
-<link rel="icon" href="logo.jpg">
-<link rel="apple-touch-icon" href="logo.jpg">
+<link rel="icon" href="hub-icon-192.png">
+<link rel="apple-touch-icon" href="hub-icon-192.png">
+<link rel="manifest" href="hub.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PFBS Apps">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 :root{
   --bg:#F5F6F9; --surface:#FFFFFF; --ink:#1A1F33; --muted:#5C6378; --line:#DFE2EA; --hover:#EEF0F6;
@@ -23,7 +28,7 @@
   --accent:#D4B048; --on-accent:#11141F; --gold:#D4B048; --gold-soft:#3A3218; --chip:#1E2747; --chip-ink:#9DB1F0; }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px}
-header{background:#1F2A5C;color:#fff}
+header{background:#1F2A5C;color:#fff;padding-top:env(safe-area-inset-top)}
 .bar{max-width:1080px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .brand b{font-size:22px;letter-spacing:.04em}.brand span{color:#C9A227;font-size:12px;letter-spacing:.18em;text-transform:uppercase;margin-left:8px}
 .lang{display:flex;gap:4px}
@@ -98,7 +103,7 @@ const APPS = [
   {id:'reports', icon:'📝', url:'https://pfbs-reports.arturo-perez408.workers.dev', roles:['admin'],
    name:{en:'Service Reports', es:'Reportes de Servicio'},
    what:{en:'Finish the service report after a job, add photos, approve and send to the client.', es:'Completar el reporte de servicio, agregar fotos, aprobar y enviar al cliente.'},
-   who:{en:['Admin (Oscar)'], es:['Admin (Oscar)']}},
+   who:{en:['Admin'], es:['Admin']}},
   {id:'sp', icon:'🗂️', url:'https://pfwindowcleaning.sharepoint.com/sites/team/Clients', roles:['sales','estimating','admin'],
    name:{en:'Client Folders (SharePoint)', es:'Carpetas de Clientes (SharePoint)'},
    what:{en:'Each client’s folder: proposals, OPOS, contracts, photos, reports.', es:'Carpeta de cada cliente: propuestas, OPOS, contratos, fotos, reportes.'},
