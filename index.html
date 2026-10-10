@@ -141,8 +141,13 @@ select.qs{width:auto;border:0;padding:2px 22px 2px 9px;cursor:pointer;font-weigh
 .estbody{flex:1;overflow:auto;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;max-width:1240px;width:100%;margin:0 auto;align-items:start}
 .estmain{display:grid;gap:14px;min-width:0}
 .esttot{position:sticky;top:0}
+details.costsec{padding:12px 14px}details.costsec>summary{display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;list-style:none}
+details.costsec>summary::-webkit-details-marker{display:none}details.costsec>summary h3{margin:0}details.costsec>summary::before{content:'▸';color:var(--muted);margin-right:-4px}details.costsec[open]>summary::before{content:'▾'}
+details.costsec>summary h3{flex:1;color:var(--ink)}.sectot{font-weight:600}
+dl.tots.key{margin-top:12px}dl.tots.key dt{color:var(--ink);font-size:15px}dl.tots.key dd{font-family:var(--display);font-size:20px}
+details.breakdown{margin:12px 0;border-top:1px solid var(--line);padding-top:8px}details.breakdown>summary{cursor:pointer;font-weight:600;color:var(--accent)}
 @media (max-width:900px){.estbody{grid-template-columns:minmax(0,1fr)}.esttot{position:static}}
-.estmain>section{min-width:0}.estbody .grid2{min-width:0}
+.estmain>section,.estmain>details{min-width:0}.estbody .grid2{min-width:0}
 table.et td{padding:4px 6px;white-space:normal}table.et input,table.et select{padding:6px 8px;min-width:70px}
 table.et td:first-child input{min-width:160px}
 button.x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;padding:2px 6px}
@@ -369,8 +374,8 @@ function sheetFor(desc){ const g=guessService(desc); return g==='Solar Panel Cle
 // Solar helpers: expected crew hours at the usual pace, and the job-size rate (Settings)
 function spHint(){ const u=(E?.units||[])[0]; const q=num(u?.qty)||0; if(!q) return 'Enter the number of panels.';
   const pph=num(S.est.spPph)||250, crew=q/pph, techs=(E.labor||[]).filter(r=>roleKind(r.role)!=='admin').length||2;
-  return `At ${fmtH(pph)} panels/hr: <b>${fmtH(crew)} crew hours</b> (${fmtH(crew/techs)} hrs each for ${techs} tech${techs===1?'':'s'}).`
-    + ` Rate per panel is yours to set for each job; the Access list is just a shortcut.`; }
+  return `At ${fmtH(pph)} panels/hr: about <b>${fmtH(crew)} crew hours</b>.`
+; }
 function newEstimate(sheet='WC'){
   const E=S.est, T=SHEETS[sheet]||SHEETS.WC, adminRate=(E.labor.find(r=>r[0]==='Administration')||[0,45])[1];
   if(sheet==='SP' || sheet==='PW') return { sheet, units:[{desc:T.unit.desc, qty:0, rate: sheet==='SP' ? (num(S.est.spRates?.[0]?.[1])??3) : T.unit.rates[0], tier: sheet==='SP' ? (S.est.spRates?.[0]?.[0]||'') : undefined}],
@@ -959,10 +964,14 @@ $('#drawer').addEventListener('click', e=>{
 
 // ---------- estimate editor ----------
 let EI=null, E=null, CALC={type:'swing'};
-let EST_RO=false;
-function openEst(i){ EI=i; const it=draft.items[i]; EST_RO = isLocked() || !canEditDraft(); E=structuredClone(it.estimate || newEstimate(sheetFor(it.description))); E.sheet=E.sheet||'WC'; CALC={type:E.sheet==='SP'?'solar':E.sheet==='PW'?'pw':(CALC.type&&!['solar','pw'].includes(CALC.type)?CALC.type:'swing'), rent:CALC.rent, fuel:CALC.fuel, dep:CALC.dep, mix:CALC.mix, open:E.sheet==='PW'}; renderEst(); $('#est').hidden=false; }
+let EST_RO=false, EST_BD=false;
+function openEst(i){ SEC_OPEN={}; EI=i; const it=draft.items[i]; EST_RO = isLocked() || !canEditDraft(); E=structuredClone(it.estimate || newEstimate(sheetFor(it.description))); E.sheet=E.sheet||'WC'; CALC={type:E.sheet==='SP'?'solar':E.sheet==='PW'?'pw':(CALC.type&&!['solar','pw'].includes(CALC.type)?CALC.type:'swing'), rent:CALC.rent, fuel:CALC.fuel, dep:CALC.dep, mix:CALC.mix, open:E.sheet==='PW'}; renderEst(); $('#est').hidden=false; }
 function closeEst(){ $('#est').hidden=true; EI=null; E=null; }
 const SECS = [['materials','Materials','Markup on cost; sales tax applies to material cost'],['rentals','Subcontractors / rentals','Billed to the client with markup (pass-through)'],['equipment','PFBS equipment','Your own equipment, e.g. depreciation per use'],['misc','Miscellaneous','Shipping, fuel, other costs']];
+let SEC_OPEN={};
+const secAmt = sec => (E[sec]||[]).reduce((s,r)=>s+(num(r.unit)||0)*(num(r.qty)||0)*(1+(num(r.markup)||0)),0) + (sec==='materials'? (E.materials||[]).reduce((s,r)=>s+(num(r.unit)||0)*(num(r.qty)||0),0)*(num(E.taxRate)||0) : 0);
+function secOpen(sec){ return SEC_OPEN[sec] ?? secAmt(sec)>0; }
+function secTotal(sec){ const v=secAmt(sec); return v>0 ? usd(v) : '<span class="note" style="margin:0">none · tap to add</span>'; }
 function rowsHTML(sec){
   return (E[sec]||[]).map((r,i)=>`<tr><td><input data-e="${sec}.${i}.desc" value="${esc(r.desc||'')}" aria-label="Description"></td>
     <td><input data-e="${sec}.${i}.unit" type="number" step="any" inputmode="decimal" value="${esc(r.unit??'')}" aria-label="Unit cost"></td>
@@ -978,7 +987,7 @@ function renderEst(){
     <button class="btn ghost small" id="estClose">Close</button></div></div>
   <div class="estbody"><div class="estmain">
     ${(SHEETS[E.sheet]?.unit && (E.units||[]).length) ? `<section class="card"><h3>Price</h3>
-      <div class="note" style="margin:0 0 6px">${SHEETS[E.sheet].unit.tiers ? 'What the client pays: panels × your rate per panel (one rate for the job), plus administration.' : `What the client pays: ${esc(SHEETS[E.sheet].unit.per)} × rate, plus administration.`}</div>
+      <div class="note" style="margin:0 0 6px">What the client pays.</div>
       <div class="tablewrap"><table class="et"><thead><tr><th>${SHEETS[E.sheet]?.unit?.tiers?'Access':'Priced by unit'}</th><th>${SHEETS[E.sheet]?.unit?.tiers?'Panels':'Qty'}</th><th>Rate ($/unit)</th><th class="r">Total</th><th></th></tr></thead><tbody>
       ${E.units.map((r,i)=>`<tr><td>${SHEETS[E.sheet]?.unit?.tiers ? `<select data-tier="${i}" aria-label="Access">${(S.est.spRates||[]).map(t=>`<option value="${esc(t[0])}" ${t[0]===r.tier?'selected':''}>${esc(t[0])} · $${t[1]}</option>`).join('')}<option value="" ${r.tier?'':'selected'}>Custom rate</option></select>` : `<input data-e="units.${i}.desc" value="${esc(r.desc||'')}" aria-label="Description">`}</td>
         <td><input data-e="units.${i}.qty" type="number" step="any" inputmode="decimal" value="${esc(r.qty??'')}" aria-label="Quantity"></td>
@@ -990,14 +999,14 @@ function renderEst(){
         <td class="r num" id="et-labor-${i}"></td><td></td></tr>`).join('')}
       </tbody></table></div>${SHEETS[E.sheet]?.unit?.tiers?`<div class="gpline" id="spHint" style="margin:6px 0 0">${spHint()}</div>`:''}<datalist id="unitRates">${(SHEETS[E.sheet]?.unit?.rates||[]).map(v=>`<option value="${v}">`).join('')}</datalist></section>
     <section class="card"><h3>Crew (actual labor)</h3>
-      <div class="note" style="margin:0 0 6px">Hours you expect × what you pay each tech. This is your labor cost; it doesn't change the price.</div>
+      <div class="note" style="margin:0 0 6px">Hours you expect × wage. Your cost, not the price.</div>
       <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Wage ($/hr)</th><th class="r">Wage cost</th><th></th></tr></thead><tbody>
       ${E.labor.map((r,i)=>roleKind(r.role)==='admin'?'':`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.filter(x=>roleKind(x)!=='admin').map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
         <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Hours"></td>
         <td><input data-e="labor.${i}.wage" type="number" step="any" inputmode="decimal" value="${esc(r.wage??'')}" placeholder="${esc(costRate(r.role))}" aria-label="Wage per hour"></td>
         <td class="r num" id="et-labor-${i}"></td><td><button type="button" class="x" data-erm="labor.${i}" aria-label="Remove row">×</button></td></tr>`).join('')}
       </tbody></table></div>
-      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Tech</button><span class="note" style="margin:0">One line per tech. Blank wage uses the role's wage from Settings.</span></div>
+      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Tech</button></div>
 ` : `<section class="card"><h3>Labor</h3>
       <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Bill rate ($/hr)</th><th>Wage ($/hr)</th><th class="r">Total</th><th></th></tr></thead><tbody>
       ${E.labor.map((r,i)=>`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
@@ -1010,13 +1019,13 @@ function renderEst(){
 `}
       <details class="calcbox" ${CALC.open?'open':''}><summary>Hours calculator</summary>${calcHTML()}</details>
     </section>
-    ${SECS.map(([sec,title,help])=>`<section class="card"><h3>${title}</h3><div class="note" style="margin:0 0 6px">${help}</div>
+    ${SECS.map(([sec,title,help])=>`<details class="card costsec" data-sec="${sec}" ${secOpen(sec)?'open':''}><summary><h3>${title}</h3><span class="sectot num" id="st-${sec}">${secTotal(sec)}</span></summary><div class="note" style="margin:8px 0 6px">${help}</div>
       <div class="tablewrap"><table class="et"><thead><tr><th>Description</th><th>Unit cost</th><th>Qty${sec==='equipment'?' / days':''}</th><th>Markup %</th><th class="r">Total</th><th></th></tr></thead><tbody>${rowsHTML(sec)}</tbody></table></div>
       ${sec==='materials'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="materials">+ Material</button><label class="f inline">Sales tax %<input data-e="taxRate" data-pct="1" type="number" step="any" value="${esc(Math.round(num(E.taxRate)*100000)/1000)}"></label></div>`:''}
       ${sec==='rentals'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="rentals">+ Rental / sub</button></div><details class="calcbox"><summary>Lift rental calculator</summary>${rentalHTML()}</details>`:''}
       ${sec==='equipment'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="equipment">+ Equipment</button></div><details class="calcbox"><summary>Depreciation calculator (cost per use)</summary>${depHTML()}</details>`:''}
       ${sec==='misc'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="misc">+ Cost</button></div><details class="calcbox"><summary>Fuel calculator</summary>${fuelHTML()}</details>${E.sheet==='PW'?`<details class="calcbox"><summary>Batch mixing guide</summary>${mixHTML()}</details>`:''}`:''}
-    </section>`).join('')}
+    </details>`).join('')}
   </div>
   <aside class="esttot card" id="estTot"></aside></div>`;
   updateEstTotals();
@@ -1038,7 +1047,7 @@ function marginCheckHTML(c, price){
   if(lo && (gL==='bad'||gL==='warn')) tips.push('Try a higher access tier, or check the expected hours.');
   if(gL==='bad') tips.push(`Below the ${pct(floor)} floor: needs owner approval before it goes out.`);
   return `<div class="mcheck">
-    <div class="mrow m-${gL}"><div class="mtop"><span>${lo?'Profit margin (price − wages, SP sheet)':'Gross profit margin'}</span><b>${gp==null?'—':pct(gp)}</b></div>${bar(gp,0.7,[floor,tgt])}<div class="mlab">${word[gL]} · target ${pct(tgt)}+, floor ${pct(floor)}</div></div>
+    <div class="mrow m-${gL}"><div class="mtop"><span>${lo?'Profit margin (price − wages)':'Gross profit margin'}</span><b>${gp==null?'—':pct(gp)}</b></div>${bar(gp,0.7,[floor,tgt])}<div class="mlab">${word[gL]} · target ${pct(tgt)}+, floor ${pct(floor)}</div></div>
     ${lo ? '' : `<div class="mrow m-${lL}"><div class="mtop"><span>Wages as % of price</span><b>${lab==null?'—':pct(lab)}</b></div>${bar(lab,0.7,[lc,lm])}<div class="mlab">${lword[lL]} · aim ≤ ${pct(lc)}, max ${pct(lm)}</div></div>`}
     ${tips.length?`<div class="mtips">${tips.map(t=>`<div>${t}</div>`).join('')}</div>`:''}
     ${(gL==='bad'||gL==='warn') && need ? `<button class="btn small" id="estTarget" data-price="${need}">Use ${money(need)} (${pct(tgt)} margin)</button>`:''}
@@ -1050,49 +1059,46 @@ function updateEstTotals(){
   E.labor.forEach((r,i)=>{ const el=$('#et-labor-'+i); if(el) el.textContent=usd(perUnit && roleKind(r.role)!=='admin' ? n(r.hours)*wageOf(r) : n(r.hours)*n(r.rate)); });
   (E.units||[]).forEach((r,i)=>{ const el=$('#et-units-'+i); if(el) el.textContent=usd(n(r.qty)*n(r.rate)); });
   const sh=$('#spHint'); if(sh) sh.innerHTML=spHint();
-  for(const [sec] of SECS) (E[sec]||[]).forEach((r,i)=>{ const el=$(`#et-${sec}-${i}`); if(el) el.textContent=usd(n(r.unit)*n(r.qty)*(1+n(r.markup))); });
+  for(const [sec] of SECS){ (E[sec]||[]).forEach((r,i)=>{ const el=$(`#et-${sec}-${i}`); if(el) el.textContent=usd(n(r.unit)*n(r.qty)*(1+n(r.markup))); }); const st=$('#st-'+sec); if(st) st.innerHTML=secTotal(sec); }
   const rnd=Math.floor(c.total), floor=S.marginFloor, gpp=c.total?c.gp/c.total:null;
   const roles=Object.entries(c.byRole);
-  $('#estTot').innerHTML = `<h3>Margin check</h3>${marginCheckHTML(c, rnd)}<h3 style="margin-top:14px">Totals</h3>
+  const lo=laborOnly(E), profit=c.total-(lo?c.laborCost:c.cost);
+  $('#estTot').innerHTML = `${marginCheckHTML(c, rnd)}
+    <dl class="tots key">
+      <dt>Price</dt><dd>${usd(c.total)}</dd>
+      <dt>${lo?'Wages':'Job cost'}</dt><dd>${usd(lo?c.laborCost:c.cost)}</dd>
+      <dt>Profit</dt><dd style="color:${c.total&&profit/c.total<floor?'var(--bad)':'inherit'}">${usd(profit)}</dd>
+    </dl>
+    ${c.crew.techs ? `<div class="crewbox">${crewText(c)}</div>` : ''}
+    ${SHEETS[E.sheet]?.monthly ? `<h4>Monthly billing (quarterly service)</h4><dl class="tots"><dt>Basic (× 1.5 ÷ 3)</dt><dd>${usd(c.total*1.5/3)}</dd><dt>Standard (× 2 ÷ 3)</dt><dd>${usd(c.total*2/3)}</dd><dt>Premium (× 2.25 ÷ 3)</dt><dd>${usd(c.total*2.25/3)}</dd></dl>` : ''}
+    <details class="breakdown" ${EST_BD?'open':''}><summary>Full breakdown</summary>
+    <h4>Price</h4>
     <dl class="tots">
       <dt>Labor${c.unitsPrice?' (incl. per-unit)':''}</dt><dd>${usd(c.laborPrice)}</dd>
-      <dt>Materials</dt><dd>${usd(c.matP)}</dd>
-      <dt>Tax on materials</dt><dd>${usd(c.tax)}</dd>
-      <dt>Subs / rentals</dt><dd>${usd(c.rentP)}</dd>
-      <dt>PFBS equipment</dt><dd>${usd(c.eqP)}</dd>
-      <dt>Miscellaneous</dt><dd>${usd(c.miscP)}</dd>
-      <dt class="big">Price</dt><dd class="big">${usd(c.total)}</dd>
+      ${c.matP?`<dt>Materials</dt><dd>${usd(c.matP)}</dd><dt>Tax on materials</dt><dd>${usd(c.tax)}</dd>`:''}
+      ${c.rentP?`<dt>Subs / rentals</dt><dd>${usd(c.rentP)}</dd>`:''}
+      ${c.eqP?`<dt>PFBS equipment</dt><dd>${usd(c.eqP)}</dd>`:''}
+      ${c.miscP?`<dt>Miscellaneous</dt><dd>${usd(c.miscP)}</dd>`:''}
     </dl>
-    ${SHEETS[E.sheet]?.monthly ? `<h4>Monthly billing (quarterly service)</h4><dl class="tots"><dt>Basic (× 1.5 ÷ 3)</dt><dd>${usd(c.total*1.5/3)}</dd><dt>Standard (× 2 ÷ 3)</dt><dd>${usd(c.total*2/3)}</dd><dt>Premium (× 2.25 ÷ 3)</dt><dd>${usd(c.total*2.25/3)}</dd><dt class="sm" style="grid-column:1/-1">Same Q 2 M options as the PW bid sheet.</dt></dl>` : ''}
-    <h4>Crew plan</h4>
-    <div class="crewbox">${c.crew.techs ? crewText(c) : 'Add tech hours in Labor to see the crew plan.'}</div>
     <h4>Actual labor</h4>
     <dl class="tots">
       ${roles.length ? roles.map(([r,b])=>`<dt>${esc(b.role)} ${fmtH(b.hours)} hrs × ${usd(b.wage)}</dt><dd>${usd(b.cost)}</dd>`).join('') : '<dt>No tech hours yet</dt><dd>—</dd>'}
-      ${c.burden?`<dt>Wages</dt><dd>${usd(c.wages)}</dd><dt>Labor burden ${pct(c.burden)}</dt><dd>${usd(c.burdenCost)}</dd>`:''}
-      <dt><b>Total labor cost</b> (${fmtH(c.techHours)} hrs)</dt><dd><b>${usd(c.laborCost)}</b></dd>
-      <dt>Labor billed</dt><dd>${usd(c.laborPrice)}</dd>
-      <dt><b>Labor profit</b></dt><dd><b>${usd(c.laborProfit)}</b></dd>
-      <dt class="sm" style="grid-column:1/-1">Labor only: excludes lifts, subs, materials and other costs.</dt>
+      ${c.burden?`<dt>Labor burden ${pct(c.burden)}</dt><dd>${usd(c.burdenCost)}</dd>`:''}
+      <dt>Labor profit</dt><dd>${usd(c.laborProfit)}</dd>
     </dl>
-    <h4>Job cost &amp; profit</h4>
+    <h4>Job cost</h4>
     <dl class="tots">
-      <dt>Labor cost${c.burden?' (with burden)':''}</dt><dd>${usd(c.laborCost)}</dd>
-      <dt>Materials + tax</dt><dd>${usd(c.mat+c.tax)}</dd>
-      <dt>Lifts / subs (your cost)</dt><dd>${usd(c.rent)}</dd>
-      <dt>PFBS equipment</dt><dd>${usd(c.eq)}</dd>
-      <dt>Misc (fuel, other)</dt><dd>${usd(c.misc)}</dd>
+      <dt>Labor${c.burden?' (with burden)':''}</dt><dd>${usd(c.laborCost)}</dd>
+      ${c.mat?`<dt>Materials + tax</dt><dd>${usd(c.mat+c.tax)}</dd>`:''}
+      ${c.rent?`<dt>Lifts / subs (your cost)</dt><dd>${usd(c.rent)}</dd>`:''}
+      ${c.eq?`<dt>PFBS equipment</dt><dd>${usd(c.eq)}</dd>`:''}
+      ${c.misc?`<dt>Misc (fuel, other)</dt><dd>${usd(c.misc)}</dd>`:''}
       <dt><b>Job cost</b></dt><dd><b>${usd(c.cost)}</b></dd>
-      <dt><b>Gross profit</b></dt><dd><b style="color:${gpp!=null&&gpp<floor?'var(--bad)':'inherit'}">${usd(c.gp)}</b></dd>
-      <dt>GP margin</dt><dd>${gpp==null?'—':pct(gpp)}</dd>
-      <dt>Pass-through</dt><dd>${usd(c.pass)}</dd>
-      ${laborOnly(E)?`<dt><b>Profit, labor only (SP sheet)</b></dt><dd><b>${usd(c.total-c.laborCost)}</b></dd><dt>Labor-only margin</dt><dd>${c.total?pct((c.total-c.laborCost)/c.total):'—'}</dd>`:''}
-    </dl>
-    ${gpp!=null&&gpp<floor?`<div class="note" style="color:var(--bad)">Below the ${pct(floor)} margin floor.</div>`:''}
+      <dt>Gross profit (all costs)</dt><dd>${usd(c.gp)} · ${gpp==null?'—':pct(gpp)}</dd>
+      ${c.pass?`<dt>Pass-through</dt><dd>${usd(c.pass)}</dd>`:''}
+    </dl></details>
     <button class="btn wide" id="estUse" ${c.total>0?'':'disabled'}>Save &amp; use ${money(rnd)} as line price</button>
-    <button class="btn ghost wide" id="estSave" style="margin-top:6px">Save without changing price</button>
-    <button class="btn ghost wide" id="estPdf" style="margin-top:6px">Download estimate PDF (internal)</button>
-    <div class="note">Price rounds down to the whole dollar. You can still edit the line amount after.</div>`;
+    <div class="toolbar" style="margin-top:6px;justify-content:space-between"><button class="btn ghost small" id="estSave">Save, keep line price</button><button class="btn ghost small" id="estPdf">Estimate PDF</button></div>`;
 }
 const CALC_DEF = {
   solar:    {label:'Solar panels (SP) · optional check', inputs:[['panels','# of solar panels'],['techs','# of techs'],['pph','# of panels cleaned / hr']]},
@@ -1179,6 +1185,7 @@ $('#est').addEventListener('input', e=>{
   if(t.dataset.mx){ const [i,k]=t.dataset.mx.split('.'); CALC.mix[+i][k]=t.value; $('#mx-'+i).innerHTML=mixText(+i); }
   if(t.dataset.ca){ const [i,k]=t.dataset.ca.split('.'); CALC.areas[+i][k]=t.value; const a=CALC.areas[+i], el=$('#ca-'+i); if(el) el.textContent=fmtH((num(a.l)||0)*(num(a.w)||0)); const o=$('#calcOut'); if(o) o.innerHTML=calcOut().html; }
 });
+$('#est').addEventListener('toggle', e=>{ const d=e.target; if(d.classList?.contains('costsec')) SEC_OPEN[d.dataset.sec]=d.open; if(d.classList?.contains('breakdown')) EST_BD=d.open; }, true);
 $('#est').addEventListener('change', e=>{
   const t=e.target;
   if(t.dataset.tier!=null){ const u=E.units[+t.dataset.tier], hit=(S.est.spRates||[]).find(x=>x[0]===t.value); u.tier=t.value; if(hit) u.rate=num(hit[1]); renderEst(); return; }
