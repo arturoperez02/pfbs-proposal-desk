@@ -370,7 +370,7 @@ function newEstimate(sheet='WC'){
   const E=S.est, T=SHEETS[sheet]||SHEETS.WC, adminRate=(E.labor.find(r=>r[0]==='Administration')||[0,45])[1];
   if(sheet==='SP' || sheet==='PW') return { sheet, units:[{desc:T.unit.desc, qty:0, rate: sheet==='SP' ? (num(S.est.spRates?.[0]?.[1])??3) : T.unit.rates[0], tier: sheet==='SP' ? (S.est.spRates?.[0]?.[0]||'') : undefined}],
     labor:[{role:'Administration', hours:1, rate:adminRate},{role:expertRole()[0], hours:0, rate:0, wage:T.wages.expert}],
-    materials:T.materials.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.matMarkup})), taxRate:E.taxRate, rentals:[],
+    materials:(sheet==='SP'?E.materials:T.materials).map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.matMarkup})), taxRate:E.taxRate, rentals:[],
     equipment:T.equipment.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.equipMarkup})),
     misc:T.misc.map(m=>({desc:m[0], unit:m[1], qty:m[2], markup:m[3]})) };
   if(sheet==='GD') return { sheet, labor:[{role:'Administration', hours:1, rate:adminRate},{role:expertRole()[0], hours:0, rate:T.bill, wage:T.wages.expert}],
@@ -1146,6 +1146,7 @@ function fuelText(){ return `Round trip: <b>${usd(fuelRT())}</b> × ${num(CALC.f
 $('#est').addEventListener('input', e=>{
   const t=e.target;
   if(t.dataset.e){ const path=t.dataset.e.split('.'); let v=t.value; if(t.dataset.pct) v = v===''?'':(num(v)||0)/100;
+    if(path[0]==='units' && path[2]==='rate' && SHEETS[E.sheet]?.unit?.tiers){ const u=E.units[+path[1]], hit=(S.est.spRates||[]).find(x=>num(x[1])===num(v)); u.tier=hit?hit[0]:''; const sel=document.querySelector(`[data-tier="${path[1]}"]`); if(sel) sel.value=u.tier; }
     if(path.length===1) E[path[0]]=v; else E[path[0]][+path[1]][path[2]]=v; updateEstTotals(); }
   if(t.dataset.c && t.dataset.c!=='type'){ CALC[t.dataset.c]=t.value; const o=$('#calcOut'); if(o) o.innerHTML=calcOut().html; }
   if(t.dataset.r){ CALC.rent[t.dataset.r]=t.value; $('#rentOut').innerHTML=rentText(); }
