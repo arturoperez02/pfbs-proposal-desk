@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#1F2A5C">
+<title>PFBS Apps</title>
+<link rel="icon" href="logo.jpg">
+<link rel="apple-touch-icon" href="logo.jpg">
+<style>
+:root{
+  --bg:#F5F6F9; --surface:#FFFFFF; --ink:#1A1F33; --muted:#5C6378; --line:#DFE2EA; --hover:#EEF0F6;
+  --accent:#1F2A5C; --on-accent:#FFFFFF; --gold:#C9A227; --gold-soft:#FFF3CD;
+  --chip:#E4E9F7; --chip-ink:#2F4A9A; --radius:12px;
+  --body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#11141F; --surface:#1A1E2D; --ink:#E8EAF2; --muted:#A1A7BA; --line:#2C3247; --hover:#232840;
+  --accent:#D4B048; --on-accent:#11141F; --gold:#D4B048; --gold-soft:#3A3218; --chip:#1E2747; --chip-ink:#9DB1F0; } }
+:root[data-theme="dark"]{
+  --bg:#11141F; --surface:#1A1E2D; --ink:#E8EAF2; --muted:#A1A7BA; --line:#2C3247; --hover:#232840;
+  --accent:#D4B048; --on-accent:#11141F; --gold:#D4B048; --gold-soft:#3A3218; --chip:#1E2747; --chip-ink:#9DB1F0; }
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px}
+header{background:#1F2A5C;color:#fff}
+.bar{max-width:1080px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand b{font-size:22px;letter-spacing:.04em}.brand span{color:#C9A227;font-size:12px;letter-spacing:.18em;text-transform:uppercase;margin-left:8px}
+.lang{display:flex;gap:4px}
+.lang button{border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:999px;padding:5px 12px;font-weight:700;cursor:pointer}
+.lang button[aria-pressed="true"]{background:#C9A227;border-color:#C9A227;color:#1F2A5C}
+main{max-width:1080px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:24px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:15px}
+.roles{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.roles button{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer}
+.roles button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+a.app{display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;min-height:150px;transition:transform .08s,border-color .15s,opacity .15s}
+a.app:hover{border-color:var(--accent);transform:translateY(-1px)}
+a.app:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+a.app.dim{opacity:.38}
+.top{display:flex;align-items:center;gap:12px}
+.ico{flex:none;width:44px;height:44px;border-radius:10px;display:grid;place-items:center;font-size:22px;background:var(--hover)}
+.name{font-weight:800;font-size:17px;line-height:1.2}
+.what{color:var(--muted);font-size:14px;line-height:1.4;flex:1}
+.who{display:flex;flex-wrap:wrap;gap:6px}
+.who span{background:var(--chip);color:var(--chip-ink);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700}
+.go{font-size:13px;font-weight:700;color:var(--accent)}
+h2{font-size:15px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:28px 0 10px}
+.tip{margin-top:26px;background:var(--gold-soft);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;font-size:14px;line-height:1.5}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:0 16px 24px}
+@media (max-width:480px){ .grid{grid-template-columns:minmax(0,1fr)} a.app{min-height:0} }
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <div class="brand"><b>PFBS</b><span id="t-apps">Team apps</span></div>
+  <div class="lang" role="group" aria-label="Language"><button data-lang="en" aria-pressed="true">EN</button><button data-lang="es" aria-pressed="false">ES</button></div>
+</div></header>
+<main>
+  <h1 id="t-title">Everything we use, in one place</h1>
+  <p class="sub" id="t-sub">Pick your role to see the apps you use. Each app has its own sign-in.</p>
+  <div class="roles" id="roles" role="group" aria-label="Role"></div>
+  <div class="grid" id="apps"></div>
+  <div id="ownerWrap"></div>
+  <div class="tip" id="t-tip"></div>
+</main>
+<footer>PF Building Services · Fremont, CA</footer>
+<script>
+(() => {
+// Links only: no passwords or keys live on this page.
+const ROLES = [
+  ['all',       {en:'All',               es:'Todos'}],
+  ['sales',     {en:'Sales & BD',        es:'Ventas y BD'}],
+  ['estimating',{en:'Estimating',        es:'Estimación'}],
+  ['admin',     {en:'Office / Admin',    es:'Oficina / Admin'}],
+  ['warehouse', {en:'Warehouse',         es:'Almacén'}],
+  ['field',     {en:'Field crews',       es:'Cuadrillas'}],
+];
+const APPS = [
+  {id:'crm', icon:'📋', url:'https://arturoperez02.github.io/pfbs-proposal-desk/', roles:['sales','estimating','admin'],
+   name:{en:'Proposal Desk (CRM)', es:'Proposal Desk (CRM)'},
+   what:{en:'Leads, estimates, proposals, follow-ups, commissions, parts and lift rentals.', es:'Prospectos, estimados, propuestas, seguimientos, comisiones, partes y renta de equipo.'},
+   who:{en:['BD & Sales','Estimators','Admin'], es:['BD y Ventas','Estimadores','Admin']}},
+  {id:'hcp', icon:'🗓️', url:'https://pro.housecallpro.com/', roles:['admin','field','estimating'],
+   name:{en:'Housecall Pro', es:'Housecall Pro'},
+   what:{en:'Jobs, scheduling with clients, invoices and payments. Crew leads tap START / FINISH.', es:'Trabajos, citas con clientes, facturas y pagos. Líderes de cuadrilla marcan INICIAR / TERMINAR.'},
+   who:{en:['Admin','Crew leads'], es:['Admin','Líderes de cuadrilla']}},
+  {id:'sched', icon:'👷', url:'https://pfbs-schedule.arturo-perez408.workers.dev', roles:['admin'],
+   name:{en:'TechSched', es:'TechSched'},
+   what:{en:'Who works where each day. Sends the techs their schedule by email.', es:'Quién trabaja dónde cada día. Envía el horario a los técnicos por correo.'},
+   who:{en:['Admin (scheduling)'], es:['Admin (horarios)']}},
+  {id:'kit', icon:'📦', url:'https://arturoperez02.github.io/pfbs-kittracker/', roles:['warehouse','admin'],
+   name:{en:'KitTracker', es:'KitTracker'},
+   what:{en:'Equipment kits, checkout and return, inventory, DI tanks, vehicles, repairs.', es:'Kits de equipo, salida y regreso, inventario, tanques DI, vehículos, reparaciones.'},
+   who:{en:['Warehouse','Supervisors'], es:['Almacén','Supervisores']}},
+  {id:'reports', icon:'📝', url:'https://pfbs-reports.arturo-perez408.workers.dev', roles:['admin'],
+   name:{en:'Service Reports', es:'Reportes de Servicio'},
+   what:{en:'Finish the service report after a job, add photos, approve and send to the client.', es:'Completar el reporte de servicio, agregar fotos, aprobar y enviar al cliente.'},
+   who:{en:['Admin (Oscar)'], es:['Admin (Oscar)']}},
+  {id:'sp', icon:'🗂️', url:'https://pfwindowcleaning.sharepoint.com/sites/team/Clients', roles:['sales','estimating','admin'],
+   name:{en:'Client Folders (SharePoint)', es:'Carpetas de Clientes (SharePoint)'},
+   what:{en:'Each client’s folder: proposals, OPOS, contracts, photos, reports.', es:'Carpeta de cada cliente: propuestas, OPOS, contratos, fotos, reportes.'},
+   who:{en:['Office','Estimators'], es:['Oficina','Estimadores']}},
+  {id:'mail', icon:'✉️', url:'https://outlook.office.com/mail/', roles:['sales','estimating','admin'],
+   name:{en:'Outlook Email', es:'Correo Outlook'},
+   what:{en:'Work email and calendar. Proposal and follow-up drafts open here.', es:'Correo y calendario de trabajo. Los borradores de propuestas se abren aquí.'},
+   who:{en:['Office'], es:['Oficina']}},
+];
+const OWNER = [
+  {name:'Supabase', url:'https://supabase.com/dashboard/projects', what:{en:'CRM and KitTracker databases', es:'Bases de datos del CRM y KitTracker'}},
+  {name:'Zapier', url:'https://zapier.com/app/zaps', what:{en:'Automations between the apps', es:'Automatizaciones entre las apps'}},
+  {name:'GitHub', url:'https://github.com/arturoperez02', what:{en:'Code for our own apps', es:'Código de nuestras apps'}},
+  {name:'Cloudflare', url:'https://dash.cloudflare.com/', what:{en:'TechSched and Service Reports hosting', es:'Hospedaje de TechSched y Reportes'}},
+  {name:'Gusto', url:'https://app.gusto.com/', what:{en:'Payroll', es:'Nómina'}},
+];
+const TXT = {
+  en:{apps:'Team apps', title:'Everything we use, in one place', sub:'Pick your role to see the apps you use. Each app has its own sign-in.', open:'Open', owner:'Owner only',
+      tip:'<b>Tip:</b> on your phone, open this page and choose <b>Share → Add to Home Screen</b> (iPhone) or <b>⋮ → Add to Home screen</b> (Android). It becomes an app icon.'},
+  es:{apps:'Apps del equipo', title:'Todo lo que usamos, en un solo lugar', sub:'Elige tu puesto para ver las apps que usas. Cada app tiene su propio inicio de sesión.', open:'Abrir', owner:'Solo dueño',
+      tip:'<b>Consejo:</b> en tu teléfono, abre esta página y elige <b>Compartir → Agregar a inicio</b> (iPhone) o <b>⋮ → Agregar a la pantalla principal</b> (Android). Se vuelve un ícono de app.'},
+};
+const store = { get:k=>{ try{ return localStorage.getItem(k); }catch(_){ return null; } }, set:(k,v)=>{ try{ localStorage.setItem(k,v); }catch(_){} } };
+let lang = store.get('pfbs-hub-lang') || ((navigator.language||'').startsWith('es')?'es':'en');
+let role = store.get('pfbs-hub-role') || 'all';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function render(){
+  const T=TXT[lang]; document.documentElement.lang=lang;
+  $('#t-apps').textContent=T.apps; $('#t-title').textContent=T.title; $('#t-sub').textContent=T.sub; $('#t-tip').innerHTML=T.tip;
+  document.querySelectorAll('.lang button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.lang===lang));
+  $('#roles').innerHTML=ROLES.map(([k,l])=>`<button data-role="${k}" aria-pressed="${k===role}">${esc(l[lang])}</button>`).join('');
+  const show=a=>role==='all'||a.roles.includes(role);
+  const list=[...APPS].sort((a,b)=>show(b)-show(a));
+  $('#apps').innerHTML=list.map(a=>`<a class="app ${show(a)?'':'dim'}" href="${esc(a.url)}" target="_blank" rel="noopener">
+      <div class="top"><div class="ico" aria-hidden="true">${a.icon}</div><div class="name">${esc(a.name[lang])}</div></div>
+      <div class="what">${esc(a.what[lang])}</div>
+      <div class="who">${a.who[lang].map(w=>`<span>${esc(w)}</span>`).join('')}</div>
+      <div class="go">${T.open} ↗</div></a>`).join('');
+  $('#ownerWrap').innerHTML = role==='all' ? `<h2>${T.owner}</h2><div class="grid">${OWNER.map(o=>`<a class="app" style="min-height:0" href="${esc(o.url)}" target="_blank" rel="noopener"><div class="name">${esc(o.name)}</div><div class="what">${esc(o.what[lang])}</div><div class="go">${T.open} ↗</div></a>`).join('')}</div>` : '';
+}
+document.addEventListener('click', e=>{
+  const l=e.target.closest('[data-lang]'); if(l){ lang=l.dataset.lang; store.set('pfbs-hub-lang',lang); render(); }
+  const r=e.target.closest('[data-role]'); if(r){ role=r.dataset.role; store.set('pfbs-hub-role',role); render(); }
+});
+render();
+})();
+</script>
+</body>
+</html>
