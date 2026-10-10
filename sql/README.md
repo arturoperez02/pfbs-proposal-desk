@@ -8,5 +8,6 @@
 | 004_job_actuals.sql | Run once: log actual hours and costs per visit. |
 | 005_renewals_changes_revisions.sql | Run once: renewal reminders, change orders, revisions. |
 | 006_audit_trail.sql | Run once: leads, price lock after sending, change log, review notes. |
+| 007_leads_followups_reports.sql | Run once: lead details, prospects, follow-up cadence, monthly report, HousecallPro link. |
 
 Client data is never stored in this repository.

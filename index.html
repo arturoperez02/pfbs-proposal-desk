@@ -174,6 +174,10 @@ label.f.inline{display:flex;align-items:center;gap:6px}label.f.inline input{widt
 .stage .track{height:14px}.stage .r{text-align:right;font-variant-numeric:tabular-nums}
 .sales-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:16px}
 @media (max-width:560px){.stage{grid-template-columns:84px minmax(0,1fr) 92px}.sales-grid{grid-template-columns:minmax(0,1fr)}}
+.svcpick{display:flex;flex-wrap:wrap;gap:6px}.svcpick .chip{display:inline-flex;align-items:center;gap:6px;font-weight:500}.svcpick .chip input{margin:0}.svcpick .chip.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.fubox{border:1px solid var(--line);border-radius:var(--radius);padding:10px;margin:0 0 10px;background:var(--bg)}
+.rephtml{overflow-x:auto}
+@media (prefers-color-scheme: dark){ .rephtml{background:#fff;color:#1A1F33;padding:12px;border-radius:6px} }
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
@@ -194,6 +198,7 @@ td input,td select{padding:5px 8px}
   <div class="brand"><b>PFBS</b><span>Proposal Desk</span></div>
   <nav class="tabs" role="tablist" id="tabs" hidden>
     <button role="tab" data-tab="pipeline" aria-selected="true">Pipeline</button>
+    <button role="tab" data-tab="leads" aria-selected="false">Leads</button>
     <button role="tab" data-tab="sales" aria-selected="false" id="salesTab" hidden>My Sales</button>
     <button role="tab" data-tab="scorecard" aria-selected="false">Scorecards</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
@@ -238,6 +243,14 @@ td input,td select{padding:5px 8px}
     </table></div>
   </section>
 
+  <section id="view-leads" hidden>
+    <div class="toolbar" style="justify-content:space-between">
+      <div><h2>Leads</h2><div class="sub" id="leadsSub">New requests waiting for an estimate, and the prospects BD is working on.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="prospBtn" hidden>+ Prospect</button><button class="btn" id="leadBtn2" hidden>+ New lead</button></div>
+    </div>
+    <div id="leadsBody"></div>
+  </section>
+
   <section id="view-sales" hidden>
     <div class="toolbar" style="justify-content:space-between">
       <div><h2 id="salesTitle">My Sales</h2><div class="sub" id="salesSub"></div></div>
@@ -251,7 +264,7 @@ td input,td select{padding:5px 8px}
   </section>
 
   <section id="view-scorecard" hidden>
-    <h2>Scorecards</h2>
+    <div class="toolbar" style="justify-content:space-between"><h2>Scorecards</h2><button class="btn ghost" id="repBtn" hidden>Monthly report</button></div>
     <div class="sub" style="margin-bottom:16px">Won = Approved through Paid. Commission counts only proposals with a Date paid.</div>
     <div class="cards" id="score"></div>
   </section>
@@ -267,6 +280,7 @@ td input,td select{padding:5px 8px}
 <aside class="drawer" id="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="dTitle"></aside>
 <div class="toast" id="toast" role="status" hidden></div>
 <div class="estwrap" id="est" hidden role="dialog" aria-modal="true" aria-labelledby="estTitle"></div>
+<div class="estwrap" id="rep" hidden role="dialog" aria-modal="true" aria-label="Monthly report"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -292,10 +306,11 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications'};
-const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary'};
+const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ let v=p[f]; if(v==='') v=null; if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
+let COLS=null; // columns the database has (lets the app run before an update is applied)
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -304,7 +319,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const money = v => (v==null||v===''||isNaN(v)) ? '—' : '$' + Math.round(Number(v)).toLocaleString('en-US');
 const pct = v => (v==null||isNaN(v)) ? '—' : (v*100).toFixed(v<0.1?1:0) + '%';
 const today = () => { const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
-const parse = s => { if(!s) return null; const [y,m,d]=String(s).slice(0,10).split('-').map(Number); return new Date(y,m-1,d); };
+const parse = s => { if(!s) return null; if(/T\d/.test(String(s))){ const t=new Date(s); if(!isNaN(t)) return new Date(t.getFullYear(), t.getMonth(), t.getDate()); } const [y,m,d]=String(s).slice(0,10).split('-').map(Number); return new Date(y,m-1,d); };
 const iso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const fmtD = s => { const d=parse(s); return d ? (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2) : '—'; };
 const days = (a,b) => Math.round((b-a)/864e5);
@@ -321,7 +336,10 @@ let newLead=false;
 // ---------- calculations (same rules as the Excel log) ----------
 function outcome(p){ if(p.status==='Lead') return 'Lead'; if(WON.includes(p.status)) return 'Won'; if(LOST.includes(p.status)) return 'Lost'; if(p.status==='Withdrawn') return 'Withdrawn'; if(PRE.includes(p.status)) return 'Draft'; return 'Open'; }
 function daysOpen(p){ if(outcome(p)!=='Open' || !p.dateSent) return null; return days(parse(p.dateSent), today()); }
-function followUp(p){ const d=daysOpen(p); if(d==null) return null; const add = d<3?3 : d<10?10 : d<21?21 : S.expiryDays; const f=parse(p.dateSent); f.setDate(f.getDate()+add); return f; }
+const FU_STEPS = () => { const a=[3,10,21]; for(let k=35;k<S.expiryDays;k+=14) a.push(k); return a.filter(k=>k<S.expiryDays); };
+function followUp(p){ if(outcome(p)!=='Open' || !p.dateSent) return null; const s=parse(p.dateSent), last=p.lastFollowUp?parse(p.lastFollowUp):s;
+  for(const d of FU_STEPS()){ const f=new Date(s); f.setDate(f.getDate()+d); if(f>last) return f; } return null; }
+function fuStep(p){ const f=followUp(p); if(!f) return null; const d=days(parse(p.dateSent),f); return d<=3?1:d<=10?2:d<=21?3:4; }
 function gpPct(p){ return (num(p.gp)!=null && num(p.amount)) ? num(p.gp)/num(p.amount) : null; }
 function visits(p){ const f=S.frequencies.find(x=>x[0]===p.frequency); return f?f[1]:1; }
 function annual(p){ const L=countedItems(p); if(L.length) return L.reduce((s,i)=>s+(num(i.qty)||1)*(num(i.amount)||0),0); return num(p.amount)!=null && p.frequency ? num(p.amount)*visits(p) : null; }
@@ -333,31 +351,53 @@ function countedItems(p){
 }
 const SVC_WORDS = [['Solar Panel Cleaning',/solar|panel/i],['Pressure Wash',/pressure|power wash|steam/i],['Janitorial',/janitor|custodial|porter/i],['Gutter Cleaning',/gutter/i],['Graffiti Removal',/graffiti/i],['Gates & Doors',/\bgates?\b|\bdoors?\b/i],['Lights - Decor',/\blights?\b|lighting|decor/i],['Window Cleaning',/window|glass|screen|fa[cç]ade|skylight/i]];
 function guessService(d){ for(const [svc,re] of SVC_WORDS) if(re.test(d||'')) return svc; return 'Other'; }
-// ---------- estimate (replaces the Excel bid sheet) ----------
-function newEstimate(){
-  const E=S.est;
-  return { labor: E.labor.filter(r=>r[0]!=='Apprentice').map((r,i)=>({role:r[0], hours: r[0]==='Administration'?1:0, rate:r[1]})),
+// ---------- estimate (replaces the Excel bid sheets) ----------
+// Bid sheets: numbers copied from the Excel workbooks (WC, SP, PW, G&D). Shared numbers (tax, markups) come from Settings.
+const SHEETS = {
+  WC: {label:'Window cleaning (WC)'},
+  SP: {label:'Solar panel cleaning (SP)', unit:{desc:'Solar panels', per:'panel', rates:[3,4,5,10,12,15]}, wages:{'Expert/Chair':32,'Apprentice':25},
+       materials:[['Tucker pole resin',77],['Rubber and soap',5]], equipment:[['3400 pressure washer',10],['Solar cleaning brush',35]],
+       misc:[['Shipping',0,0,0.15],['Gas',35,0,0],['Other costs',10,0,0]]},
+  PW: {label:'Pressure washing (PW)', unit:{desc:'Pressure washing', per:'sq ft', rates:[0.10,0.12,0.15,0.25,0.30]}, wages:{'Expert/Chair':32,'Apprentice':32},
+       materials:[['Tucker pole resin',77],['Rubber and soap',5]], equipment:[],
+       misc:[['Shipping',0,0,0.15],['Gas',0,1,0.15],['Other costs',10,1,0]], monthly:true},
+  GD: {label:'Gates & doors (G&D)', bill:155, wages:{'Expert/Chair':45,'Apprentice':28}, materials:[], equipment:[],
+       misc:[['Shipping',0,0,0.15],['Fuel',0,1,0.15],['Other costs',10,1,0]]}
+};
+function sheetFor(desc){ const g=guessService(desc); return g==='Solar Panel Cleaning'?'SP' : g==='Pressure Wash'?'PW' : g==='Gates & Doors'?'GD' : 'WC'; }
+function newEstimate(sheet='WC'){
+  const E=S.est, T=SHEETS[sheet]||SHEETS.WC, adminRate=(E.labor.find(r=>r[0]==='Administration')||[0,45])[1];
+  if(sheet==='SP' || sheet==='PW') return { sheet, units:[{desc:T.unit.desc, qty:0, rate:T.unit.rates[0]}],
+    labor:[{role:'Administration', hours:1, rate:adminRate},{role:'Expert/Chair', hours:0, rate:0, wage:T.wages['Expert/Chair']}],
+    materials:T.materials.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.matMarkup})), taxRate:E.taxRate, rentals:[],
+    equipment:T.equipment.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.equipMarkup})),
+    misc:T.misc.map(m=>({desc:m[0], unit:m[1], qty:m[2], markup:m[3]})) };
+  if(sheet==='GD') return { sheet, labor:[{role:'Administration', hours:1, rate:adminRate},{role:'Expert/Chair', hours:0, rate:T.bill, wage:T.wages['Expert/Chair']}],
+    materials:[], taxRate:E.taxRate, rentals:[], equipment:[], misc:T.misc.map(m=>({desc:m[0], unit:m[1], qty:m[2], markup:m[3]})) };
+  return { sheet:'WC', labor: E.labor.filter(r=>r[0]!=='Apprentice').map((r,i)=>({role:r[0], hours: r[0]==='Administration'?1:0, rate:r[1]})),
            materials: E.materials.map(m=>({desc:m[0], unit:m[1], qty:0, markup:E.matMarkup})),
            taxRate: E.taxRate,
            rentals: [], equipment: [],
            misc: E.misc.map(m=>({desc:m[0], unit:0, qty:0, markup:m[1]})) };
 }
 const costRate = role => { const r=S.est.labor.find(x=>x[0]===role); return r ? num(r[2])||0 : 0; };
+const wageOf = r => (r && r.wage!=null && r.wage!=='' && num(r.wage)!=null) ? num(r.wage) : costRate(r?.role);
 function estCalc(e){
   const n=v=>num(v)||0, line=r=>{ const c=n(r.unit)*n(r.qty); return {cost:c, price:c*(1+n(r.markup))}; };
   const sum=(a,f)=>(a||[]).reduce((s,r)=>s+f(r),0);
-  const burden=num(S.est.burden)||0, laborPrice=sum(e.labor,r=>n(r.hours)*n(r.rate)), wages=sum(e.labor,r=>n(r.hours)*costRate(r.role)), laborCost=wages*(1+burden);
+  const unitsPrice=sum(e.units,r=>n(r.qty)*n(r.rate));
+  const burden=num(S.est.burden)||0, laborPrice=sum(e.labor,r=>n(r.hours)*n(r.rate))+unitsPrice, wages=sum(e.labor,r=>n(r.hours)*wageOf(r)), laborCost=wages*(1+burden);
   const techHours=sum((e.labor||[]).filter(r=>r.role!=='Administration'),r=>n(r.hours));
   const mat=sum(e.materials,r=>line(r).cost), matP=sum(e.materials,r=>line(r).price), tax=mat*n(e.taxRate);
   const rent=sum(e.rentals,r=>line(r).cost), rentP=sum(e.rentals,r=>line(r).price);
   const eq=sum(e.equipment,r=>line(r).cost), eqP=sum(e.equipment,r=>line(r).price);
   const misc=sum(e.misc,r=>line(r).cost), miscP=sum(e.misc,r=>line(r).price);
   const total=laborPrice+matP+tax+rentP+eqP+miscP, cost=laborCost+mat+tax+rent+eq+misc;
-  const byRole={}; for(const r of (e.labor||[])){ if(r.role==='Administration' || !n(r.hours)) continue; const b=byRole[r.role]||(byRole[r.role]={hours:0,wage:costRate(r.role),cost:0}); b.hours+=n(r.hours); b.cost+=n(r.hours)*costRate(r.role); }
+  const byRole={}; for(const r of (e.labor||[])){ if(r.role==='Administration' || !n(r.hours)) continue; const w=wageOf(r), key=r.role+'|'+w; const b=byRole[key]||(byRole[key]={role:r.role,hours:0,wage:w,cost:0}); b.hours+=n(r.hours); b.cost+=n(r.hours)*w; }
   const techLines=(e.labor||[]).filter(r=>r.role!=='Administration' && n(r.hours)>0), hpd=num(S.est.hoursPerDay)||8;
   const maxHrs=techLines.reduce((m,r)=>Math.max(m,n(r.hours)),0), minHrs=techLines.reduce((m,r)=>Math.min(m,n(r.hours)),Infinity);
   const crew={techs:techLines.length, maxHrs, even: techLines.length && maxHrs===minHrs, days:maxHrs/hpd, techDays:techHours/hpd, hpd};
-  return {laborPrice,laborCost,techHours,mat,matP,tax,rent,rentP,eq,eqP,misc,miscP,total,cost,gp:total-cost,pass:rentP,byRole,crew,laborProfit:laborPrice-laborCost,wages,burden,burdenCost:wages*burden};
+  return {unitsPrice,laborPrice,laborCost,techHours,mat,matP,tax,rent,rentP,eq,eqP,misc,miscP,total,cost,gp:total-cost,pass:rentP,byRole,crew,laborProfit:laborPrice-laborCost,wages,burden,burdenCost:wages*burden};
 }
 function crewText(c){ const k=c.crew; if(!k.techs) return ''; const d=fmtH(k.days);
   return `${k.techs} tech${k.techs===1?'':'s'} × ${k.even?fmtH(k.maxHrs)+' hrs':'up to '+fmtH(k.maxHrs)+' hrs'} = ${d} day${k.days===1?'':'s'} on site (${fmtH(k.techDays)} tech-day${k.techDays===1?'':'s'}, ${k.hpd}-hr days)`; }
@@ -451,7 +491,7 @@ function canEditDraft(){ if(isNew) return newLead ? canLead() : canCreate();
 function isLocked(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && role()!=='Owner' && (draft?.rev||1)===(orig.rev||1); }
 function ownerOverride(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && role()==='Owner'; }
 async function openDrawer(id, opts={}){
-  isNew=!id; newLead=!!opts.lead; orig = id ? P.find(p=>p.num===id) : null;
+  PR=null; isNew=!id; newLead=!!opts.lead; orig = id ? P.find(p=>p.num===id) : null;
   draft = orig ? structuredClone(orig) : newLead ? {num:'', dateSent:null, sentBy: role()==='Estimator'?me.name:'', bdRep: role()==='BD Rep'?me.name:'', leadSource: role()==='BD Rep'?'BD rep':'', status:'Lead', items:[]} : {num:'', dateSent:iso(today()), sentBy: me.name, status:'Estimating', items:[{type:'Service',service:'',qty:1,frequency:'',amount:'',description:'',note:''}]};
   hist=[]; drawDrawer();
   $('#scrim').hidden=false; $('#drawer').hidden=false; $('#closeD')?.focus();
@@ -482,7 +522,7 @@ async function addActivity(num, kind, note){
   const {error}=await sb.from('proposal_activity').insert({num, kind, note});
   if(error){ toast(error.message); return false; } return true;
 }
-function closeDrawer(){ $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; }
+function closeDrawer(){ $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; PR=null; }
 function calc1(p){ const g=gpPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
 function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null){ const o=outcome(p); return (o==='Won'||o==='Lost') && p.dateResolved ? `<div class="gpline">${o} on ${fmtD(p.dateResolved)}${p.datePaid?' · paid '+fmtD(p.datePaid):''}</div>` : ''; } const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
 function calc2(p){ const br=bdRate(p), er=estRate(p); return `${approvedCOs(p).length?`<div class="gpline" style="margin:0 0 6px">Includes approved change orders: +${money(coRevenue(p))} revenue, +${money(coGP(p))} GP</div>`:''}<div class="calc">
@@ -519,6 +559,7 @@ function itotText(p){ const L=countedItems(p), per=L.reduce((s,i)=>s+(num(i.amou
 function refreshGp(){ const g=$('#gpBox'); if(g) g.innerHTML=gpBoxHTML(draft, canEditDraft() && !isLocked()); }
 function rerenderItems(){ syncFromItems(draft); const box=$('#itemsBox'); if(box) box.innerHTML=itemsHTML(draft, canEditDraft() && !isLocked(), canEditDraft()); refreshGp(); refreshCalcs(); }
 function drawDrawer(){
+  if(draft.status==='Lead') return drawLeadForm();
   const p=draft, ed=canEditDraft();
   const dis = ed?'':'disabled';
   const field=(label,key,type='text',cls='',extra='')=>`<label class="f ${cls}">${label}<input id="f-${key}" data-k="${key}" type="${type}" value="${esc(p[key]??'')}" ${type==='number'?'step="any" inputmode="decimal"':''} ${extra} ${dis}></label>`;
@@ -593,10 +634,12 @@ function drawDrawer(){
       ${field('Bid sheet link (SharePoint)','bidLink','url','full','placeholder="https://…sharepoint.com/…"')}
       ${field('Proposal folder link','folderLink','url','full','placeholder="https://…sharepoint.com/…"')}
     </div>
+    ${spOn()?`<div class="gpline" id="spLine" style="margin:0 0 6px">${spLine(p)}</div><div class="toolbar" style="margin:0 0 6px"><button type="button" class="btn ghost small" id="spPick">${/sharepoint\.com/.test(p.folderLink||'')?'Change SharePoint folder':'Choose SharePoint folder'}</button></div><div id="spBox" class="fubox" hidden></div>`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap">${/^https:\/\//.test(p.bidLink||'')?`<a class="btn ghost small" href="${esc(p.bidLink)}" target="_blank" rel="noopener">Open bid sheet</a>`:''}${/^https:\/\//.test(p.folderLink||'')?`<a class="btn ghost small" href="${esc(p.folderLink)}" target="_blank" rel="noopener">Open folder</a>`:''}</div>
     </fieldset>
     ${!isNew ? `<fieldset><legend>Activity</legend>
       ${canEditDraft() || canLead() || canCreate() ? `<div class="actadd"><select id="actKind" aria-label="Type"><option value="follow_up">Follow-up</option><option value="note">Note</option></select><input id="actNote" placeholder="e.g. Called Joe, waiting on budget approval" aria-label="Activity note"><button type="button" class="btn small" id="actAdd">Add</button></div>`:''}
+      ${OPEN.includes(p.status) && (canEditDraft()||canLead()) ? `<div class="toolbar" style="margin:8px 0"><button type="button" class="btn ghost small" id="fuBtn">${(()=>{const f=followUp(p); return f&&f<=today()?'Write follow-up email (due)':'Write follow-up email';})()}</button></div><div id="fuBox" class="fubox" hidden></div>`:''}
       <div class="actlist" id="actList">${activityItems()}</div></fieldset>` : ''}
     <fieldset><legend>Notes</legend><textarea id="f-notes" data-k="notes" rows="3" ${dis}>${esc(p.notes??'')}</textarea></fieldset>
   </div>
@@ -613,21 +656,24 @@ function setStatus(st){
   if(st==='Paid' && !draft.datePaid) draft.datePaid=iso(today());
   drawDrawer();
 }
-async function save(after){
+async function save(after, o={}){
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
   if(draft.status==='Lead' && !draft.sentBy){ $('#dmsg').textContent='Assign an estimator before saving the lead.'; return; }
   const btn=$('#saveD'); btn.disabled=true; $('#dmsg').textContent='Saving…';
-  syncFromItems(draft); const row=toRow(draft); if(isNew) delete row.num;
+  syncFromItems(draft); const jc=jobCompare(draft); draft.actualsSummary = jc ? {rev:Math.round(jc.rev), estGP:jc.estGP==null?null:Math.round(jc.estGP), actGP:Math.round(jc.actGP), estHrs:jc.estHrs, actHrs:jc.actHrs, lastDate:(draft.actuals||[]).map(v=>v.date).filter(Boolean).sort().at(-1)||iso(today())} : null;
+  const row=toRow(draft); if(isNew) delete row.num;
   if(!canPayComm()){ delete row.comm_paid_on; delete row.est_comm_paid_on; }
   const res = isNew ? await sb.from('proposals').insert(row).select().single()
                     : await sb.from('proposals').update(row).eq('num', orig.num).select().single();
-  if(res.error){ btn.disabled=false; $('#dmsg').textContent = /column|schema cache/i.test(res.error.message||'') ? 'The database needs the line-items update (002_line_items.sql). Run it in Supabase, then save again.' : (res.error.message || 'Could not save. Try again.'); return; }
+  if(res.error){ btn.disabled=false; $('#dmsg').textContent = /column|schema cache/i.test(res.error.message||'') ? 'The database is missing an update. Run the newest file in the sql folder in Supabase, then save again.' : (res.error.message || 'Could not save. Try again.'); return; }
+  if(isNew && draft._fromProspect){ await sb.from('prospects').update({stage:'Converted', converted_num:res.data.num}).eq('id', draft._fromProspect); loadProspects(); }
   if(after) await after(res.data.num);
   toast(isNew ? `Created ${res.data.num}` : `Saved ${res.data.num}`);
   const saved=fromRow(res.data);
   highlight=saved.num; query=''; $('#q').value='';
   const fit=FILTERS.find(([n,f])=>n!=='All' && f(saved)); filter = fit ? fit[0] : 'All';
   closeDrawer(); await loadProposals();
+  if(o.reopen){ openDrawer(saved.num); return; }
   document.querySelector(`tr[data-id="${saved.num}"]`)?.scrollIntoView({block:'center', behavior:'smooth'});
   clearTimeout(save.t); save.t=setTimeout(()=>{ highlight=null; document.querySelectorAll('tr.hl').forEach(r=>r.classList.remove('hl')); }, 6000);
 }
@@ -640,6 +686,92 @@ function itemEvent(e, final){
   return true;
 }
 $('#drawer').addEventListener('input', e=>{ if(itemEvent(e,false)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
+// ---------- lead form (a lead is a request, not a priced proposal yet) ----------
+const TIMING=['As soon as possible','This month','Next 1–3 months','Planning / budgeting'];
+function drawLeadForm(){
+  const p=draft, ed=canEditDraft(), dis=ed?'':'disabled', li=p.leadInfo||(p.leadInfo={});
+  const field=(label,key,type='text',cls='',extra='')=>`<label class="f ${cls}">${label}<input id="f-${key}" data-k="${key}" type="${type}" value="${esc(p[key]??'')}" ${extra} ${dis}></label>`;
+  const sel=(label,key,list,lock=false)=>`<label class="f">${label}<select id="f-${key}" data-k="${key}" ${ed&&!lock?'':'disabled'}>${opts(list,p[key])}</select></label>`;
+  const names=TEAM.filter(t=>t.active&&t.role!=='BD Rep').map(t=>t.name), bds=TEAM.filter(t=>t.active&&t.role==='BD Rep').map(t=>t.name);
+  const svcs=S.services.filter(x=>x!=='Multiple services'), picked=li.services||[];
+  const wait = !isNew ? days(parse(p.leadAt||p.createdAt), today()) : null;
+  const canStart = !isNew && (isManager() || (role()==='Estimator' && p.sentBy===me.name));
+  $('#drawer').innerHTML = `
+  <div class="dhead"><div class="t"><b id="dTitle" class="num">${isNew?'New lead':esc(p.num)}</b><div class="sub">${isNew?'Log the request. The estimator prices it after the walkthrough.':'Lead · '+esc(p.client||'')+(p.property?' · '+esc(p.property):'')}</div></div>
+    <button class="btn ghost small" id="closeD">Close</button></div>
+  <div class="dbody">
+    ${!isNew?`<div class="reviewbox"><div style="flex:1;min-width:180px"><b>Lead${p.bdRep?' from '+esc(p.bdRep):''}</b> · logged ${fmtD(p.leadAt||p.createdAt)} · <span class="${wait>3?'flag bad':''}">waiting ${wait} day${wait===1?'':'s'}</span>. ${p.sentBy?'Assigned to '+esc(p.sentBy)+'.':'<b>No estimator assigned.</b>'}</div>
+      ${canStart?'<button class="btn small" id="startEst">Start estimate</button>':''}</div>`:''}
+    <fieldset><legend>Client &amp; property</legend><div class="grid2">
+      ${field('Client (company)','client','text','full','list="clientList" autocomplete="off" placeholder="Start typing to pick a past client"')}
+      ${field('Property name','property','text','full','list="propList" autocomplete="off" placeholder="e.g. Metro Center Senior"')}
+      <datalist id="clientList">${clientNames().map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+      <datalist id="propList">${propsFor(p.client).map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+      ${field('Contact name','contactName')}
+      ${field('Contact phone','contactPhone','tel')}
+      ${field('Contact email','contactEmail','email','full')}
+      <label class="f full">Job site address<textarea data-k="siteAddress" id="f-siteAddress" rows="2" ${dis}>${esc(p.siteAddress??'')}</textarea></label>
+    </div></fieldset>
+    <fieldset><legend>What they need</legend>
+      <div class="svcpick" role="group" aria-label="Services requested">${svcs.map(v=>`<label class="chip ${picked.includes(v)?'on':''}"><input type="checkbox" data-lis="${esc(v)}" ${picked.includes(v)?'checked':''} ${dis}> ${esc(v)}</label>`).join('')||'<span class="note" style="margin:0">Add your services in Settings.</span>'}</div>
+      <label class="f" style="margin-top:8px">Details<textarea id="f-notes" data-k="notes" rows="3" ${dis} placeholder="e.g. 6-story office, exterior glass only, wants it done before the holidays">${esc(p.notes??'')}</textarea></label>
+      <div class="grid2">
+        <label class="f">Timing<select data-li="timing" ${dis}>${opts(TIMING, li.timing)}</select></label>
+        <label class="f">Walkthrough date<input type="date" data-li="walkthrough" value="${esc(li.walkthrough||'')}" ${dis}></label>
+      </div></fieldset>
+    <fieldset><legend>Assignment &amp; credit</legend><div class="grid2">
+      ${sel('Assign to estimator','sentBy',names, !(isManager() || role()==='BD Rep'))}
+      ${sel('BD rep','bdRep',bds, role()==='BD Rep')}
+      ${sel('Client type','clientType',S.clientTypes.map(c=>c[0]))}
+      ${sel('Lead source','leadSource',S.leadSources)}
+    </div><div class="note">Client type sets the BD commission rate. The estimator is notified on their Leads tab.</div></fieldset>
+    ${!isNew ? `<fieldset><legend>Activity</legend>
+      <div class="actadd"><select id="actKind" aria-label="Type"><option value="note">Note</option><option value="follow_up">Follow-up</option></select><input id="actNote" placeholder="e.g. Walkthrough set with the engineer for Tuesday" aria-label="Activity note"><button type="button" class="btn small" id="actAdd">Add</button></div>
+      <div class="actlist" id="actList">${activityItems()}</div></fieldset>` : ''}
+  </div>
+  <div class="dfoot"><span class="msg" id="dmsg">${ed?'':'View only'}</span>
+    <button class="btn ghost" id="cancelD">Cancel</button>
+    ${!isNew && canReview() ? '<button class="btn ghost" id="closeLead">Close lead</button>' : ''}
+    <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create lead':'Save lead'}</button></div>`;
+}
+$('#drawer').addEventListener('change', e=>{
+  const t=e.target; if(!draft) return;
+  if(t.dataset.lis!=null){ const li=draft.leadInfo||(draft.leadInfo={}); const set=new Set(li.services||[]); t.checked?set.add(t.dataset.lis):set.delete(t.dataset.lis); li.services=[...set]; t.closest('.chip')?.classList.toggle('on',t.checked); }
+  if(t.dataset.li){ const li=draft.leadInfo||(draft.leadInfo={}); li[t.dataset.li]=t.value; }
+});
+
+// ---------- follow-up email ----------
+function fuFallback(p){ const step=fuStep(p)||1, first=(p.contactName||'').trim().split(/\s+/)[0]||'there', place=p.property||p.client, scope=(p.items||[]).filter(i=>i.type!=='Add-on'&&i.description).slice(0,3).map(i=>i.description).join(', ')||'the work', sent=parse(p.dateSent)?.toLocaleDateString('en-US',{month:'long',day:'numeric'});
+  const exp=parse(p.dateSent); if(exp) exp.setDate(exp.getDate()+S.expiryDays);
+  const subject = step===1?`Proposal ${p.num} – ${place}`: step===2?`Following up: ${place} proposal`: step===3?`Checking in on your ${place} proposal`:`Still interested? ${place} proposal`;
+  const body = step===1?`I wanted to make sure you received our proposal (${p.num}) for ${scope} at ${place}, sent on ${sent}. Let me know if you have any questions or if anything should be adjusted.`
+    : step===2?`Following up on the proposal we sent on ${sent} for ${scope} at ${place} (${money(p.amount)}). Do you have any questions, or would you like us to get it on the schedule?`
+    : step===3?`Checking in on our proposal for ${scope} at ${place}. If timing or budget has changed, we are happy to walk the site again or adjust the scope.`
+    : `Our proposal for ${scope} at ${place} is still valid until ${exp?exp.toLocaleDateString('en-US',{month:'long',day:'numeric'}):''}. Is this still something you would like to move forward with? A quick yes or no helps us plan our schedule.`;
+  return {step, to:p.contactEmail||'', subject, text:`Hi ${first},\n\n${body}\n\nThank you very much for the opportunity.\n\n${p.sentBy||'PF Building Services'}\nPF Building Services\n(510) 359-5181`}; }
+async function fuOpen(){
+  const box=$('#fuBox'); if(!box) return; box.hidden=false; box.innerHTML='<div class="note">Writing the email…</div>';
+  let e=null; try{ const r=await sb.rpc('followup_email',{p_num:draft.num}); if(!r.error && r.data) e=r.data; }catch(_){}
+  if(!e) e=fuFallback(draft);
+  box.innerHTML=`<label class="f">To<input id="fuTo" type="email" value="${esc(e.to||draft.contactEmail||'')}" placeholder="client@company.com"></label>
+    <label class="f">Subject<input id="fuSubj" value="${esc(e.subject)}"></label>
+    <label class="f">Message<textarea id="fuBody" rows="9">${esc(e.text)}</textarea></label>
+    <div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn small" data-fusend="owa">Open in Outlook</button><button type="button" class="btn ghost small" data-fusend="mailto">Open in mail app</button><button type="button" class="btn ghost small" data-fusend="copy">Copy text</button></div>
+    <div class="note">Follow-up #${e.step||fuStep(draft)||1}. Opening it logs the follow-up, so the next one is scheduled.</div>`;
+  box.dataset.step=e.step||fuStep(draft)||1;
+}
+async function fuSend(kind){
+  const to=$('#fuTo').value.trim(), subj=$('#fuSubj').value, body=$('#fuBody').value, enc=encodeURIComponent;
+  if(kind==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(subj)}&body=${enc(body)}`,'_blank','noopener');
+  else if(kind==='mailto') location.href=`mailto:${enc(to)}?subject=${enc(subj)}&body=${enc(body)}`;
+  else { try{ await navigator.clipboard.writeText(`Subject: ${subj}\n\n${body}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } }
+  const ok=await addActivity(draft.num,'follow_up',`Follow-up email #${$('#fuBox').dataset.step}: ${subj}`);
+  if(ok){ const t=iso(today()); draft.lastFollowUp=t; const o=P.find(x=>x.num===draft.num); if(o) o.lastFollowUp=t; const ol=$('#openline'); if(ol) ol.innerHTML=openLine(draft); loadActivity(draft.num); if(kind!=='copy') toast('Follow-up logged'); }
+}
+$('#drawer').addEventListener('click', e=>{ const t=e.target.closest('button'); if(!t) return; if(t.id==='fuBtn') fuOpen(); else if(t.dataset.fusend) fuSend(t.dataset.fusend);
+  else if(t.id==='spPick') spPicker(); else if(t.id==='spUse') spUse().catch(err=>toast('SharePoint: '+err.message)); });
+$('#drawer').addEventListener('change', e=>{ if(e.target.id==='spClient'){ $('#spProp').value=''; spFill(true).catch(err=>toast(err.message)); } else if(e.target.id==='spProp'||e.target.id==='spSvc') spFill(false).catch(err=>toast(err.message)); });
+
 // ---------- remember clients & properties from past proposals ----------
 const norm = v => String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
 function clientNames(){ const m=new Map(); for(const x of P){ const k=norm(x.client); if(k && !m.has(k)) m.set(k, String(x.client).trim()); } return [...m.values()].sort((a,b)=>a.localeCompare(b)); }
@@ -674,7 +806,10 @@ $('#drawer').addEventListener('click', e=>{
   else if(t.dataset.del!=null){ draft.items.splice(+t.dataset.del,1); rerenderItems(); }
   else if(t.id==='approveSend'){ const note=$('#revNote')?.value.trim(); draft.dateSent=iso(today()); setStatus('Sent'); save(async num=>{ await addActivity(num,'review_approved',note||null); }); }
   else if(t.id==='sendBack'){ const note=$('#revNote')?.value.trim(); if(!note){ $('#revNote').focus(); toast('Add a reason so the estimator knows what to fix.'); return; } setStatus('Estimating'); save(async num=>{ await addActivity(num,'review_sent_back',note); }); }
-  else if(t.id==='startEst'){ if(!draft.sentBy){ toast('Assign an estimator first.'); return; } setStatus('Estimating'); if(!(draft.items||[]).length) draft.items=[{type:'Service',service:'',qty:1,frequency:'',amount:'',description:'',note:''}]; save(); }
+  else if(t.id==='startEst'){ if(!draft.sentBy){ toast('Assign an estimator first.'); return; }
+    if(!(draft.items||[]).length){ const sv=(draft.leadInfo?.services)||[]; draft.items=(sv.length?sv:['']).map(v=>({type:'Service',service:v,qty:1,frequency:'',amount:'',description:v,note:''})); }
+    draft.status='Estimating'; save(null,{reopen:true}); }
+  else if(t.id==='closeLead'){ draft.status='Withdrawn'; draft.dateResolved=iso(today()); save(); }
   else if(t.id==='actAdd'){ const note=$('#actNote').value.trim(); if(!note) return; addActivity(draft.num, $('#actKind').value, note).then(ok=>{ if(ok){ $('#actNote').value=''; loadActivity(draft.num); } }); }
   else if(t.dataset.st) setStatus(t.dataset.st);
 });
@@ -812,7 +947,7 @@ $('#drawer').addEventListener('click', e=>{
 // ---------- estimate editor ----------
 let EI=null, E=null, CALC={type:'swing'};
 let EST_RO=false;
-function openEst(i){ EI=i; const it=draft.items[i]; EST_RO = isLocked() || !canEditDraft(); E=structuredClone(it.estimate || newEstimate()); renderEst(); $('#est').hidden=false; }
+function openEst(i){ EI=i; const it=draft.items[i]; EST_RO = isLocked() || !canEditDraft(); E=structuredClone(it.estimate || newEstimate(sheetFor(it.description))); E.sheet=E.sheet||'WC'; CALC={type:E.sheet==='SP'?'solar':E.sheet==='PW'?'pw':(CALC.type&&!['solar','pw'].includes(CALC.type)?CALC.type:'swing'), rent:CALC.rent, fuel:CALC.fuel, dep:CALC.dep, mix:CALC.mix, open:['SP','PW'].includes(E.sheet)}; renderEst(); $('#est').hidden=false; }
 function closeEst(){ $('#est').hidden=true; EI=null; E=null; }
 const SECS = [['materials','Materials','Markup on cost; sales tax applies to material cost'],['rentals','Subcontractors / rentals','Billed to the client with markup (pass-through)'],['equipment','PFBS equipment','Your own equipment, e.g. depreciation per use'],['misc','Miscellaneous','Shipping, fuel, other costs']];
 function rowsHTML(sec){
@@ -826,24 +961,33 @@ function renderEst(){
   const it=draft.items[EI], roles=S.est.labor.map(r=>r[0]);
   $('#est').innerHTML = `
   <div class="esthead"><div><b id="estTitle">Estimate</b><div class="sub">${esc(it.description||'Line '+(EI+1))} · per visit</div></div>
-    <button class="btn ghost small" id="estClose">Close</button></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="f inline" style="margin:0">Bid sheet<select id="estSheet" aria-label="Bid sheet">${Object.entries(SHEETS).map(([k,v])=>`<option value="${k}" ${k===E.sheet?'selected':''}>${v.label}</option>`).join('')}</select></label>
+    <button class="btn ghost small" id="estClose">Close</button></div></div>
   <div class="estbody"><div class="estmain">
     <section class="card"><h3>Labor</h3>
-      <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Bill rate ($/hr)</th><th class="r">Total</th><th></th></tr></thead><tbody>
+      ${(E.units||[]).length ? `<div class="note" style="margin:0 0 6px">Priced per ${esc(SHEETS[E.sheet]?.unit?.per||'unit')}, like the ${esc(E.sheet)} bid sheet. Tech hours below are for wage cost (bill rate 0).</div>
+      <div class="tablewrap"><table class="et"><thead><tr><th>Priced by unit</th><th>Qty</th><th>Rate ($/unit)</th><th class="r">Total</th><th></th></tr></thead><tbody>
+      ${E.units.map((r,i)=>`<tr><td><input data-e="units.${i}.desc" value="${esc(r.desc||'')}" aria-label="Description"></td>
+        <td><input data-e="units.${i}.qty" type="number" step="any" inputmode="decimal" value="${esc(r.qty??'')}" aria-label="Quantity"></td>
+        <td><input data-e="units.${i}.rate" type="number" step="any" inputmode="decimal" list="unitRates" value="${esc(r.rate??'')}" aria-label="Rate per unit"></td>
+        <td class="r num" id="et-units-${i}"></td><td><button type="button" class="x" data-erm="units.${i}" aria-label="Remove row">×</button></td></tr>`).join('')}
+      </tbody></table></div><datalist id="unitRates">${(SHEETS[E.sheet]?.unit?.rates||[]).map(v=>`<option value="${v}">`).join('')}</datalist><div style="height:10px"></div>` : ''}
+      <div class="tablewrap"><table class="et"><thead><tr><th>Role</th><th>Hours</th><th>Bill rate ($/hr)</th><th>Wage ($/hr)</th><th class="r">Total</th><th></th></tr></thead><tbody>
       ${E.labor.map((r,i)=>`<tr><td><select data-e="labor.${i}.role" aria-label="Role">${roles.map(x=>`<option ${x===r.role?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
         <td><input data-e="labor.${i}.hours" type="number" step="any" inputmode="decimal" value="${esc(r.hours??'')}" aria-label="Hours"></td>
         <td><input data-e="labor.${i}.rate" type="number" step="any" inputmode="decimal" value="${esc(r.rate??'')}" aria-label="Bill rate"></td>
+        <td><input data-e="labor.${i}.wage" type="number" step="any" inputmode="decimal" value="${esc(r.wage??'')}" placeholder="${esc(costRate(r.role))}" aria-label="Wage per hour" ${r.role==='Administration'?'disabled':''}></td>
         <td class="r num" id="et-labor-${i}"></td><td><button type="button" class="x" data-erm="labor.${i}" aria-label="Remove row">×</button></td></tr>`).join('')}
       </tbody></table></div>
-      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Labor line</button><span class="note" style="margin:0">One line per tech. Wage cost per role is set in Settings.</span></div>
+      <div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="labor">+ Labor line</button>${(E.units||[]).length?'':'<button type="button" class="btn ghost small" data-eadd="units">+ Price by unit</button>'}<span class="note" style="margin:0">One line per tech. Blank wage uses the role's wage from Settings.</span></div>
       <details class="calcbox" ${CALC.open?'open':''}><summary>Hours calculator</summary>${calcHTML()}</details>
     </section>
     ${SECS.map(([sec,title,help])=>`<section class="card"><h3>${title}</h3><div class="note" style="margin:0 0 6px">${help}</div>
       <div class="tablewrap"><table class="et"><thead><tr><th>Description</th><th>Unit cost</th><th>Qty${sec==='equipment'?' / days':''}</th><th>Markup %</th><th class="r">Total</th><th></th></tr></thead><tbody>${rowsHTML(sec)}</tbody></table></div>
       ${sec==='materials'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="materials">+ Material</button><label class="f inline">Sales tax %<input data-e="taxRate" data-pct="1" type="number" step="any" value="${esc(Math.round(num(E.taxRate)*100000)/1000)}"></label></div>`:''}
       ${sec==='rentals'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="rentals">+ Rental / sub</button></div><details class="calcbox"><summary>Lift rental calculator</summary>${rentalHTML()}</details>`:''}
-      ${sec==='equipment'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="equipment">+ Equipment</button></div>`:''}
-      ${sec==='misc'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="misc">+ Cost</button></div><details class="calcbox"><summary>Fuel calculator</summary>${fuelHTML()}</details>`:''}
+      ${sec==='equipment'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="equipment">+ Equipment</button></div><details class="calcbox"><summary>Depreciation calculator (cost per use)</summary>${depHTML()}</details>`:''}
+      ${sec==='misc'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="misc">+ Cost</button></div><details class="calcbox"><summary>Fuel calculator</summary>${fuelHTML()}</details>${E.sheet==='PW'?`<details class="calcbox"><summary>Batch mixing guide</summary>${mixHTML()}</details>`:''}`:''}
     </section>`).join('')}
   </div>
   <aside class="esttot card" id="estTot"></aside></div>`;
@@ -873,12 +1017,13 @@ function marginCheckHTML(c, price){
 function updateEstTotals(){
   const c=estCalc(E), n=v=>num(v)||0;
   E.labor.forEach((r,i)=>{ const el=$('#et-labor-'+i); if(el) el.textContent=usd(n(r.hours)*n(r.rate)); });
+  (E.units||[]).forEach((r,i)=>{ const el=$('#et-units-'+i); if(el) el.textContent=usd(n(r.qty)*n(r.rate)); });
   for(const [sec] of SECS) (E[sec]||[]).forEach((r,i)=>{ const el=$(`#et-${sec}-${i}`); if(el) el.textContent=usd(n(r.unit)*n(r.qty)*(1+n(r.markup))); });
   const rnd=Math.floor(c.total), floor=S.marginFloor, gpp=c.total?c.gp/c.total:null;
   const roles=Object.entries(c.byRole);
   $('#estTot').innerHTML = `<h3>Margin check</h3>${marginCheckHTML(c, rnd)}<h3 style="margin-top:14px">Totals</h3>
     <dl class="tots">
-      <dt>Labor</dt><dd>${usd(c.laborPrice)}</dd>
+      <dt>Labor${c.unitsPrice?' (incl. per-unit)':''}</dt><dd>${usd(c.laborPrice)}</dd>
       <dt>Materials</dt><dd>${usd(c.matP)}</dd>
       <dt>Tax on materials</dt><dd>${usd(c.tax)}</dd>
       <dt>Subs / rentals</dt><dd>${usd(c.rentP)}</dd>
@@ -886,11 +1031,12 @@ function updateEstTotals(){
       <dt>Miscellaneous</dt><dd>${usd(c.miscP)}</dd>
       <dt class="big">Price</dt><dd class="big">${usd(c.total)}</dd>
     </dl>
+    ${SHEETS[E.sheet]?.monthly ? `<h4>Monthly billing (quarterly service)</h4><dl class="tots"><dt>Basic (× 1.5 ÷ 3)</dt><dd>${usd(c.total*1.5/3)}</dd><dt>Standard (× 2 ÷ 3)</dt><dd>${usd(c.total*2/3)}</dd><dt>Premium (× 2.25 ÷ 3)</dt><dd>${usd(c.total*2.25/3)}</dd><dt class="sm" style="grid-column:1/-1">Same Q 2 M options as the PW bid sheet.</dt></dl>` : ''}
     <h4>Crew plan</h4>
     <div class="crewbox">${c.crew.techs ? crewText(c) : 'Add tech hours in Labor to see the crew plan.'}</div>
     <h4>Actual labor</h4>
     <dl class="tots">
-      ${roles.length ? roles.map(([r,b])=>`<dt>${esc(r)} ${fmtH(b.hours)} hrs × ${usd(b.wage)}</dt><dd>${usd(b.cost)}</dd>`).join('') : '<dt>No tech hours yet</dt><dd>—</dd>'}
+      ${roles.length ? roles.map(([r,b])=>`<dt>${esc(b.role)} ${fmtH(b.hours)} hrs × ${usd(b.wage)}</dt><dd>${usd(b.cost)}</dd>`).join('') : '<dt>No tech hours yet</dt><dd>—</dd>'}
       ${c.burden?`<dt>Wages</dt><dd>${usd(c.wages)}</dd><dt>Labor burden ${pct(c.burden)}</dt><dd>${usd(c.burdenCost)}</dd>`:''}
       <dt><b>Total labor cost</b> (${fmtH(c.techHours)} hrs)</dt><dd><b>${usd(c.laborCost)}</b></dd>
       <dt>Labor billed</dt><dd>${usd(c.laborPrice)}</dd>
@@ -916,6 +1062,8 @@ function updateEstTotals(){
     <div class="note">Price rounds down to the whole dollar. You can still edit the line amount after.</div>`;
 }
 const CALC_DEF = {
+  solar:    {label:'Solar panels (SP)', inputs:[['panels','# of solar panels'],['techs','# of techs'],['pph','# of panels cleaned / hr']]},
+  pw:       {label:'Pressure washing (PW)', inputs:[['techs','# of techs'],['sqfthr','# of sq ft / hr']], areas:true},
   swing:    {label:'Swing stage', inputs:[['techs','# of techs'],['wpt','# of windows / tech'],['floors','# of floors'],['mins','Minutes / window'],['drops','# of drops'],['dpd','Est. drops / day']], rig:true},
   bosun:    {label:'Bosun chair / RDS', inputs:[['techs','# of techs'],['wpt','# of windows / tech'],['floors','# of floors'],['mins','Min / window'],['drops','# of drops'],['rdpt','Recommended drops / tech']]},
   interior: {label:'Interior', inputs:[['windows','# of windows'],['mins','Minutes / window'],['techs','# of techs'],['floors','# of floors']]},
@@ -923,13 +1071,15 @@ const CALC_DEF = {
 };
 function calcHTML(){
   const t=CALC.type, d=CALC_DEF[t], v=k=>esc(CALC[k]??''), inp=(k,l)=>`<label class="f">${l}<input data-c="${k}" type="number" step="any" inputmode="decimal" value="${v(k)}"></label>`;
+  if(t==='pw'){ CALC.areas=CALC.areas||[{name:'',l:'',w:''}]; if(CALC.techs==null) CALC.techs=2; if(CALC.sqfthr==null) CALC.sqfthr=1000; }
   return `<div class="grid2 cgrid"><label class="f">Calculator<select data-c="type">${Object.entries(CALC_DEF).map(([k,x])=>`<option value="${k}" ${k===t?'selected':''}>${x.label}</option>`).join('')}</select></label>
     ${d.rig?`<label class="f">Rig<select data-c="rig"><option value="1" ${CALC.rig!=='1.5'?'selected':''}>RR / no balance (+1 hr / drop)</option><option value="1.5" ${CALC.rig==='1.5'?'selected':''}>GR / RR balance (+1.5 hr / drop)</option></select></label>`:''}
     ${d.inputs.map(([k,l])=>inp(k,l)).join('')}</div>
+    ${d.areas?`<div class="tablewrap" style="margin-top:6px"><table class="et"><thead><tr><th>Location</th><th>Length (ft)</th><th>Width (ft)</th><th class="r">Sq ft</th><th></th></tr></thead><tbody>${CALC.areas.map((a,i)=>`<tr><td><input data-ca="${i}.name" value="${esc(a.name||'')}" placeholder="e.g. Front sidewalk" aria-label="Location"></td><td><input data-ca="${i}.l" type="number" step="any" value="${esc(a.l??'')}" aria-label="Length"></td><td><input data-ca="${i}.w" type="number" step="any" value="${esc(a.w??'')}" aria-label="Width"></td><td class="r num" id="ca-${i}">${fmtH((num(a.l)||0)*(num(a.w)||0))}</td><td><button type="button" class="x" data-carm="${i}" aria-label="Remove location">×</button></td></tr>`).join('')}</tbody></table></div><button type="button" class="btn ghost small" id="caAdd" style="margin-top:6px">+ Location</button>`:''}
     ${t==='bosun'?'<div class="note">Drops / tech guide (chair): 20–15 floors 1–2.5 · 15–10 floors 2.5–3.5 · 10–5 floors 3.5–4.5 · 6–4 floors 4.5–5.5</div>':''}
     ${t==='swing'?'<div class="note">Drops / day guide: 20–15 floors 3–4.5 · 15–10 floors 4.5–5.5 · 10–5 floors 5.5–6.5 · 6–4 floors 6.5–8.5</div>':''}
     <div class="calcout" id="calcOut">${calcOut().html}</div>
-    <div class="toolbar"><button type="button" class="btn small" id="calcApply">Set tech hours</button><button type="button" class="btn ghost small" id="calcAdd">Add to tech hours (another location)</button></div>`;
+    <div class="toolbar"><button type="button" class="btn small" id="calcApply">${['solar','pw'].includes(t)?'Set quantity &amp; tech hours':'Set tech hours'}</button><button type="button" class="btn ghost small" id="calcAdd">Add to tech hours (another location)</button></div>`;
 }
 // Same formulas as the Calculator tab of the WC bid sheet.
 function calcOut(){
@@ -947,13 +1097,22 @@ function calcOut(){
     const hpt=div(n('windows')*n('mins')/60,T), tot=hpt==null?null:n('floors')*hpt;
     rows.push(['# of hours / tech',hpt],['Total project hours',tot]); per = n('floors') ? tot : hpt;
   }
+  if(t==='solar'){ // ' Time' tab of the SP bid sheet
+    const tot=div(n('panels'),n('pph')), hpt=tot==null?null:div(tot,T), dpt=hpt==null?null:hpt/8;
+    rows.push(['Total cleaning hours',tot],['Hrs / tech',hpt],['Days / tech',dpt]); per=hpt;
+  }
+  if(t==='pw'){ // ' Time' tab + Site Survey sq ft of the PW bid sheet
+    const sq=(CALC.areas||[]).reduce((s,a)=>s+(num(a.l)||0)*(num(a.w)||0),0), hpt=(n('sqfthr')&&T)? sq/n('sqfthr')/T : null;
+    rows.push(['Total sq ft',sq],['Est. hrs / tech',hpt],['Gallons of mix (sq ft ÷ 1,600)',sq/1600]); per=hpt;
+  }
   if(t==='exterior'){
     const hpt=T? n('windows')*n('mins')/60/T+1 : null;
     rows.push(['Total hrs / tech',hpt]); per=hpt;
   }
   const html = `<table class="cres">${rows.map(([l,x],i)=>`<tr class="${i===rows.length-1?'last':''}"><td>${l}</td><td class="r num">${f(x)}</td></tr>`).join('')}</table>`
     + (per!=null && T ? `<div class="note" style="margin:6px 0 0">Applies <b>${f(per)} hrs</b> to each of ${T} tech line${T===1?'':'s'}${t==='interior'&&!n('floors')?' (no floors entered, so hours / tech)':''}.</div>` : '');
-  return {per, techs:T, html};
+  const qty = t==='solar' ? n('panels') : t==='pw' ? (CALC.areas||[]).reduce((s,a)=>s+(num(a.l)||0)*(num(a.w)||0),0) : null;
+  return {per, techs:T, html, qty};
 }
 const fmtH = h => (Math.round(h*100)/100).toLocaleString('en-US');
 function rentalHTML(){ const R=CALC.rent||(CALC.rent={desc:'Boom lift',amount:'',delivery:S.est.rentalDelivery,pickup:S.est.rentalPickup,tax:Math.round(S.est.rentalTax*100000)/1000,protection:S.est.rentalProtection,misc:S.est.rentalMisc}); const inp=(k,l,t='number')=>`<label class="f">${l}<input data-r="${k}" type="${t}" step="any" value="${esc(R[k]??'')}"></label>`;
@@ -962,6 +1121,15 @@ function rentTotal(){ const R=CALC.rent||{}, n=k=>num(R[k])||0, base=n('amount')
 function rentText(){ return `Estimated charges: <b>${usd(rentTotal())}</b>`; }
 function fuelHTML(){ const F=CALC.fuel||(CALC.fuel={miles:'',mpg:12,price:5,trips:1}); const inp=(k,l)=>`<label class="f">${l}<input data-fu="${k}" type="number" step="any" value="${esc(F[k]??'')}"></label>`;
   return `<div class="grid2 cgrid">${inp('miles','Trip distance one way (mi)')}${inp('mpg','Fuel efficiency (MPG)')}${inp('price','Fuel price ($/gal)')}${inp('trips','Round trips (days)')}</div><div class="calcout" id="fuelOut">${fuelText()}</div><button type="button" class="btn small" id="fuelApply">Set fuel cost</button>`; }
+function depHTML(){ const D=CALC.dep||(CALC.dep={desc:'',cost:'',life:5,uses:12}); const inp=(k,l,t='number')=>`<label class="f">${l}<input data-dp="${k}" type="${t}" step="any" value="${esc(D[k]??'')}"></label>`;
+  return `<div class="grid2 cgrid">${inp('desc','Equipment','text')}${inp('cost','Equipment cost ($)')}${inp('life','Useful life (years)')}${inp('uses','Uses per year')}</div><div class="calcout" id="depOut">${depText()}</div><button type="button" class="btn small" id="depApply">Add as equipment line</button>`; }
+function depPer(){ const D=CALC.dep||{}, n=k=>num(D[k])||0; return (n('life')&&n('uses')) ? n('cost')/n('life')/n('uses') : 0; }
+function depText(){ const D=CALC.dep||{}, n=k=>num(D[k])||0; return `Annual depreciation ${usd(n('life')?n('cost')/n('life'):0)} · <b>${usd(depPer())} per use</b>`; }
+const MIXES=[['X-Jet 1:1',10,3,2],['Downstreaming 10:1',12.5,0.5,10],['Hand pump sprayer',12.5,6,1]];
+function mixHTML(){ const M=CALC.mix||(CALC.mix=MIXES.map(m=>({gal:'',sh:m[1],need:m[2]})));
+  return MIXES.map((m,i)=>`<div class="note" style="margin:8px 0 2px"><b>${m[0]}</b></div><div class="grid2 cgrid" style="grid-template-columns:repeat(3,minmax(0,1fr))"><label class="f">Batch gallons<input data-mx="${i}.gal" type="number" step="any" value="${esc(M[i].gal)}"></label><label class="f">SH % strength<input data-mx="${i}.sh" type="number" step="any" value="${esc(M[i].sh)}"></label><label class="f">SH % needed<input data-mx="${i}.need" type="number" step="any" value="${esc(M[i].need)}"></label></div><div class="calcout" id="mx-${i}">${mixText(i)}</div>`).join(''); }
+function mixText(i){ const M=CALC.mix[i], g=num(M.gal)||0, sh=num(M.sh)||0, need=num(M.need)||0, shg=sh? g/sh*need*MIXES[i][3] : 0;
+  return `SH ${fmtH(shg)} gal · water ${fmtH(g-shg)} gal · surfactant ${fmtH(g)} fl oz (if needed)`; }
 function fuelRT(){ const F=CALC.fuel||{}, n=k=>num(F[k])||0; return n('mpg')? n('miles')/n('mpg')*n('price')*2 : 0; }
 function fuelText(){ return `Round trip: <b>${usd(fuelRT())}</b> × ${num(CALC.fuel?.trips)||0}`; }
 
@@ -972,29 +1140,40 @@ $('#est').addEventListener('input', e=>{
   if(t.dataset.c && t.dataset.c!=='type'){ CALC[t.dataset.c]=t.value; const o=$('#calcOut'); if(o) o.innerHTML=calcOut().html; }
   if(t.dataset.r){ CALC.rent[t.dataset.r]=t.value; $('#rentOut').innerHTML=rentText(); }
   if(t.dataset.fu){ CALC.fuel[t.dataset.fu]=t.value; $('#fuelOut').innerHTML=fuelText(); }
+  if(t.dataset.dp){ CALC.dep[t.dataset.dp]=t.value; $('#depOut').innerHTML=depText(); }
+  if(t.dataset.mx){ const [i,k]=t.dataset.mx.split('.'); CALC.mix[+i][k]=t.value; $('#mx-'+i).innerHTML=mixText(+i); }
+  if(t.dataset.ca){ const [i,k]=t.dataset.ca.split('.'); CALC.areas[+i][k]=t.value; const a=CALC.areas[+i], el=$('#ca-'+i); if(el) el.textContent=fmtH((num(a.l)||0)*(num(a.w)||0)); const o=$('#calcOut'); if(o) o.innerHTML=calcOut().html; }
 });
 $('#est').addEventListener('change', e=>{
   const t=e.target;
+  if(t.id==='estSheet'){ const v=t.value, c=estCalc(E); if(Math.abs(c.total-estCalc(newEstimate(E.sheet)).total)>0.01 && !confirm('Switch bid sheet? This replaces the lines in this estimate.')){ t.value=E.sheet; return; }
+    E=newEstimate(v); CALC.type = v==='SP'?'solar' : v==='PW'?'pw' : (['solar','pw'].includes(CALC.type)?'swing':CALC.type); CALC.open=['SP','PW'].includes(v)||CALC.open; renderEst(); return; }
   if(t.dataset.c==='type'){ CALC.type=t.value; CALC.open=true; renderEst(); }
   else if(t.dataset.c==='rig'){ CALC.rig=t.value; $('#calcOut').innerHTML=calcOut().html; }
-  else if(t.dataset.e && t.tagName==='SELECT'){ const [a,i,f]=t.dataset.e.split('.'); E[a][+i][f]=t.value; const r=S.est.labor.find(x=>x[0]===t.value); if(f==='role' && r) E[a][+i].rate=r[1]; renderEst(); }
+  else if(t.dataset.e && t.tagName==='SELECT'){ const [a,i,f]=t.dataset.e.split('.'); E[a][+i][f]=t.value; const r=S.est.labor.find(x=>x[0]===t.value), T=SHEETS[E.sheet]||{}, L=E[a][+i];
+    if(f==='role' && r){ if(t.value==='Administration'){ L.rate=r[1]; L.wage=''; } else if(T.unit){ L.rate=0; L.wage=T.wages[t.value]??''; } else if(T.bill){ L.rate=T.bill; L.wage=T.wages[t.value]??''; } else { L.rate=r[1]; L.wage=''; } } renderEst(); }
 });
 $('#est').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='estClose'){ closeEst(); return; }
   if(t.dataset.eadd){ const sec=t.dataset.eadd;
-    if(sec==='labor'){ const r=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0]; E.labor.push({role:r[0],hours:0,rate:r[1]}); }
+    if(sec==='labor'){ const r=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0], T=SHEETS[E.sheet]||{}; E.labor.push(T.unit?{role:r[0],hours:0,rate:0,wage:T.wages[r[0]]??''}:T.bill?{role:r[0],hours:0,rate:T.bill,wage:T.wages[r[0]]??''}:{role:r[0],hours:0,rate:r[1]}); }
+    else if(sec==='units'){ E.units=[...(E.units||[]), {desc:'', qty:0, rate:''}]; }
     else E[sec].push({desc:'',unit:'',qty:1,markup: sec==='materials'?S.est.matMarkup : sec==='rentals'?S.est.rentMarkup : sec==='equipment'?S.est.equipMarkup : 0});
     renderEst(); return; }
   if(t.dataset.erm){ const [sec,i]=t.dataset.erm.split('.'); E[sec].splice(+i,1); renderEst(); return; }
+  if(t.id==='caAdd'){ CALC.areas.push({name:'',l:'',w:''}); CALC.open=true; renderEst(); return; }
+  if(t.dataset.carm!=null){ CALC.areas.splice(+t.dataset.carm,1); if(!CALC.areas.length) CALC.areas.push({name:'',l:'',w:''}); CALC.open=true; renderEst(); return; }
+  if(t.id==='depApply'){ const per=Math.round(depPer()*100)/100; if(!per){ toast('Fill in the cost, life and uses first.'); return; } E.equipment.push({desc:CALC.dep.desc||'Equipment',unit:per,qty:1,markup:S.est.equipMarkup}); renderEst(); toast('Equipment line added'); return; }
   if(t.id==='calcApply' || t.id==='calcAdd'){ const o=calcOut(); if(!o.per || !o.techs){ toast('Fill in the calculator first.'); return; }
-    const add=t.id==='calcAdd', hrs=Math.round(o.per*100)/100, ex=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0];
+    if(o.qty!=null && (E.units||[]).length && t.id==='calcApply'){ E.units[0].qty=Math.round(o.qty*100)/100; }
+    const T=SHEETS[E.sheet]||{}, add=t.id==='calcAdd', hrs=Math.round(o.per*100)/100, ex0=S.est.labor.find(x=>x[0]==='Expert/Chair')||S.est.labor[0], ex=T.unit?[ex0[0],0]:T.bill?[ex0[0],T.bill]:ex0;
     const keep=E.labor.filter(r=>r.role==='Administration'), techs=E.labor.filter(r=>r.role!=='Administration');
     const count=Math.max(o.techs, add?techs.length:0), lines=[];
-    for(let k=0;k<count;k++){ const prev=techs[k]; const base=add?(num(prev?.hours)||0):0; lines.push({role:prev?.role||ex[0], hours:Math.round((base+(k<o.techs?hrs:0))*100)/100, rate:prev?.rate??ex[1]}); }
+    for(let k=0;k<count;k++){ const prev=techs[k]; const base=add?(num(prev?.hours)||0):0; lines.push({role:prev?.role||ex[0], hours:Math.round((base+(k<o.techs?hrs:0))*100)/100, rate:prev?.rate??ex[1], wage:prev?.wage??(T.wages?.[ex[0]]??'')}); }
     E.labor=[...keep,...lines]; CALC.open=true; renderEst(); toast(add?`Added ${fmtH(hrs)} hrs to ${o.techs} tech line${o.techs===1?'':'s'}`:`Set ${o.techs} tech line${o.techs===1?'':'s'} to ${fmtH(hrs)} hrs`); return; }
   if(t.id==='rentApply'){ const tot=rentTotal(); if(!tot){ toast('Fill in the rental first.'); return; } E.rentals.push({desc:CALC.rent.desc||'Rental',unit:Math.round(tot*100)/100,qty:1,markup:S.est.rentMarkup}); renderEst(); toast('Rental line added'); return; }
-  if(t.id==='fuelApply'){ const rt=Math.round(fuelRT()*100)/100; let f=E.misc.find(r=>/fuel/i.test(r.desc)); if(!f){ f={desc:'Fuel',unit:0,qty:0,markup:0}; E.misc.push(f); } f.unit=rt; f.qty=num(CALC.fuel.trips)||1; renderEst(); toast('Fuel cost set'); return; }
+  if(t.id==='fuelApply'){ const rt=Math.round(fuelRT()*100)/100; let f=E.misc.find(r=>/fuel|gas/i.test(r.desc)); if(!f){ f={desc:'Fuel',unit:0,qty:0,markup:0}; E.misc.push(f); } f.unit=rt; f.qty=num(CALC.fuel.trips)||1; renderEst(); toast('Fuel cost set'); return; }
   if(t.id==='estPdf'){ const it=draft.items[EI]; makeEstimatePdf(draft, [[it, E]]); return; }
   if(t.id==='estTarget'){ const it=draft.items[EI]; it.estimate=structuredClone(E); it.amount=+t.dataset.price; closeEst(); rerenderItems(); toast(`Line price set to ${money(it.amount)} for target margin. Save the proposal to keep it.`); return; }
   if(t.id==='estUse' || t.id==='estSave'){
@@ -1008,6 +1187,81 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#est').hidd
 let LOGO=null;
 async function logoData(){ if(LOGO) return LOGO; try{ const b=await (await fetch('logo.jpg')).blob(); LOGO=await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(b); }); }catch(_){ LOGO=''; } return LOGO; }
 const usd = v => (num(v)==null?'':'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
+// ---------- SharePoint: save PDFs straight into the client's folder ----------
+// Needs SP_CLIENT_ID and SP_TENANT_ID in config.js (an Entra "Single-page application" registration; no secret).
+const SPC = { clientId: window.PFBS_CONFIG?.SP_CLIENT_ID || '', tenant: window.PFBS_CONFIG?.SP_TENANT_ID || '',
+  site: window.PFBS_CONFIG?.SP_SITE || 'pfwindowcleaning.sharepoint.com:/sites/team', library: window.PFBS_CONFIG?.SP_LIBRARY || 'Clients' };
+const SP_SCOPES=['Files.ReadWrite.All','Sites.ReadWrite.All'];
+const SVC_FOLDER={'Window Cleaning':'Window Cleaning','Pressure Wash':'Presure Wash','Solar Panel Cleaning':'Solar Panel Cleaning','Gates & Doors':'G&D','Gutter Cleaning':'Gutter Cleaning','Janitorial':'Janitorial','Graffiti Removal':'Graffiti Removal','Lights - Decor':'Lights - Decor'};
+let MSAL=null, SP_DRIVE=null;
+const spOn = () => !!(SPC.clientId && SPC.tenant);
+function loadScript(src){ return new Promise((ok,bad)=>{ const e=document.createElement('script'); e.src=src; e.onload=ok; e.onerror=()=>bad(new Error('Could not load '+src)); document.head.appendChild(e); }); }
+async function spToken(){
+  if(!MSAL){ if(!window.msal) await loadScript('https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js');
+    MSAL=new msal.PublicClientApplication({auth:{clientId:SPC.clientId, authority:'https://login.microsoftonline.com/'+SPC.tenant, redirectUri:new URL('auth.html', location.href).href}, cache:{cacheLocation:'localStorage'}});
+    if(MSAL.initialize) await MSAL.initialize(); }
+  const acct=MSAL.getAllAccounts().find(a=>(a.username||'').toLowerCase()===(me?.email||'').toLowerCase()) || MSAL.getAllAccounts()[0];
+  if(acct){ try{ return (await MSAL.acquireTokenSilent({scopes:SP_SCOPES, account:acct})).accessToken; }catch(_){} }
+  return (await MSAL.acquireTokenPopup({scopes:SP_SCOPES, loginHint:me?.email})).accessToken;
+}
+async function graph(path, opt={}){
+  const tok=await spToken(); const r=await fetch(path.startsWith('http')?path:'https://graph.microsoft.com/v1.0'+path, {...opt, headers:{Authorization:'Bearer '+tok, ...(opt.headers||{})}});
+  if(!r.ok){ let m=r.status+''; try{ m=(await r.json()).error?.message||m; }catch(_){} const e=new Error(m); e.status=r.status; throw e; }
+  return r.status===204 ? null : r.json();
+}
+async function spDrive(){ if(SP_DRIVE) return SP_DRIVE; const d=await graph(`/sites/${SPC.site}:/drives?$select=id,name,webUrl`);
+  SP_DRIVE=(d.value||[]).find(x=>x.name===SPC.library || decodeURIComponent(x.webUrl||'').endsWith('/'+SPC.library)); if(!SP_DRIVE) throw new Error(`Library "${SPC.library}" not found on the site`); return SP_DRIVE; }
+const encPath = p => p.split('/').map(encodeURIComponent).join('/');
+async function spChildren(path){ const d=await spDrive(); try{ const r=await graph(`/drives/${d.id}/root${path?':/'+encPath(path)+':':''}/children?$select=name,folder&$top=500`); return (r.value||[]).filter(x=>x.folder).map(x=>x.name).sort((a,b)=>a.localeCompare(b)); }catch(e){ if(e.status===404) return []; throw e; } }
+function bestMatch(list, ...hints){ const n=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); for(const h of hints){ const k=n(h); if(!k) continue; const hit=list.find(x=>n(x)===k) || list.find(x=>n(x).startsWith(k)||k.startsWith(n(x))&&n(x).length>3) || list.find(x=>n(x).includes(k.split(' ').slice(0,2).join(' '))); if(hit) return hit; } return ''; }
+async function spPicker(){
+  const box=$('#spBox'); if(!box) return; box.hidden=false; box.innerHTML='<div class="note">Connecting to SharePoint…</div>';
+  try{
+    const clients=await spChildren('');
+    const c=bestMatch(clients, draft.client) || draft.client || '';
+    box.innerHTML=`<div class="grid2">
+      <label class="f">Client folder<input id="spClient" list="spCl" value="${esc(c)}"></label><datalist id="spCl">${clients.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+      <label class="f">Property folder<input id="spProp" list="spPr" placeholder="e.g. 100 Village Ln, Foster City"></label><datalist id="spPr"></datalist>
+      <label class="f">Service folder<input id="spSvc" list="spSv"></label><datalist id="spSv"></datalist>
+      <div class="f" style="align-self:end"><button type="button" class="btn small" id="spUse">Use this folder</button></div></div>
+      <div class="note" id="spPathNote"></div>`;
+    await spFill(true);
+  }catch(e){ box.innerHTML=`<div class="note" style="color:var(--warn)">SharePoint: ${esc(e.message)}</div>`; }
+}
+async function spFill(guess){
+  const cl=$('#spClient').value.trim(); const props=cl?await spChildren(cl):[]; $('#spPr').innerHTML=props.map(x=>`<option value="${esc(x)}">`).join('');
+  const addr1=String(draft.siteAddress||'').split(/\n|,/)[0];
+  if(guess && !$('#spProp').value) $('#spProp').value = bestMatch(props, addr1, draft.property) || '';
+  const pr=$('#spProp').value.trim(); const svcs=(cl&&pr)?await spChildren(cl+'/'+pr):[]; const want=Object.values(SVC_FOLDER);
+  $('#spSv').innerHTML=[...new Set([...svcs,...want])].map(x=>`<option value="${esc(x)}">`).join('');
+  if(guess && !$('#spSvc').value) $('#spSvc').value = SVC_FOLDER[draft.service] || SVC_FOLDER[guessService((draft.items||[])[0]?.description)] || '';
+  $('#spPathNote').textContent = `${SPC.library} / ${[cl,pr,$('#spSvc').value.trim()].filter(Boolean).join(' / ')}${props.length&&pr&&!props.includes(pr)?' · new property folder will be created':''}`;
+}
+async function spEnsure(path){ const d=await spDrive(); let parent=''; for(const part of path.split('/').filter(Boolean)){
+  try{ await graph(`/drives/${d.id}/root${parent?':/'+encPath(parent)+':':''}/children`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:part, folder:{}, '@microsoft.graph.conflictBehavior':'fail'})}); }catch(e){ if(e.status!==409) throw e; }
+  parent = parent ? parent+'/'+part : part; }
+  return graph(`/drives/${d.id}/root:/${encPath(parent)}?$select=id,webUrl`); }
+async function spUse(){
+  const parts=[$('#spClient').value.trim(), $('#spProp').value.trim(), $('#spSvc').value.trim()]; if(!parts[0]||!parts[1]){ toast('Pick the client and property folders.'); return; }
+  const it=await spEnsure(parts.filter(Boolean).join('/')); draft.folderLink=it.webUrl; const el=$('#f-folderLink'); if(el) el.value=it.webUrl;
+  if(!isNew && draft.num){ const {error}=await sb.from('proposals').update({folder_link:it.webUrl}).eq('num',draft.num); if(!error){ const o=P.find(x=>x.num===draft.num); if(o) o.folderLink=it.webUrl; } }
+  $('#spBox').hidden=true; $('#spLine').innerHTML=spLine(draft); toast('SharePoint folder set. PDFs will save there.');
+}
+function spLine(p){ if(!spOn()) return ''; return /^https:\/\/[^/]*sharepoint\.com\//.test(p.folderLink||'') ? `PDFs save to <a href="${esc(p.folderLink)}" target="_blank" rel="noopener">${esc(decodeURIComponent(p.folderLink.split('/sites/')[1]||p.folderLink).split('/').slice(1).join(' / '))}</a>` : 'Pick the client folder once and every PDF from this proposal saves there.'; }
+async function spUpload(blob, name, folderUrl){
+  const d=await spDrive(); const share='u!'+btoa(unescape(encodeURIComponent(folderUrl))).replace(/=+$/,'').replace(/\//g,'_').replace(/\+/g,'-');
+  const folder=await graph(`/shares/${share}/driveItem?$select=id,parentReference`);
+  const driveId=folder.parentReference?.driveId || d.id;
+  return graph(`/drives/${driveId}/items/${folder.id}:/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=replace`, {method:'PUT', headers:{'Content-Type':'application/pdf'}, body:blob});
+}
+async function deliverPdf(doc, name, p, what){
+  doc.save(name);
+  if(!spOn()){ toast(`${what} downloaded`); return; }
+  if(!/sharepoint\.com/.test(p.folderLink||'')){ toast(`${what} downloaded. Set the SharePoint folder (Files) to also save it there.`); return; }
+  try{ const r=await spUpload(doc.output('blob'), name, p.folderLink); toast(`${what} downloaded and saved to SharePoint`);
+    if(p.num) addActivity(p.num,'note',`${what} saved to SharePoint: ${name}`).then(()=>{ if(draft&&draft.num===p.num) loadActivity(p.num); }); }
+  catch(e){ toast(`${what} downloaded. SharePoint save failed: ${e.message}`); }
+}
 async function makePdf(p){
   if(!window.jspdf){ toast('PDF tools did not load. Check your connection and reload.'); return; }
   const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), NAVY=[31,42,92], L0=56, R0=566, W=R0-L0, logo=await logoData();
@@ -1085,8 +1339,8 @@ async function makePdf(p){
   const n=doc.getNumberOfPages();
   for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'}); }
   const code=SVC_CODE[p.service]||'PROP', place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().replace(/\s+/g,' ').slice(0,40);
-  doc.save(`${p.num}${(p.rev||1)>1?'_Rev'+p.rev:''}_${code}_${place}_${p.dateSent||iso(today())}.pdf`);
-  toast('PDF downloaded');
+  const dt=parse(p.dateSent)||today();
+  await deliverPdf(doc, `${code} ${dt.getMonth()+1}-${dt.getDate()}-${dt.getFullYear()} ${place} - ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}.pdf`, p, 'Proposal PDF');
 }
 async function makeEstimatePdf(p, pairs){
   if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
@@ -1115,7 +1369,8 @@ async function makeEstimatePdf(p, pairs){
     [`Property: ${p.property||'—'}`,`Line: ${it.description||'—'}${it.frequency?'  ·  '+it.frequency:''}${num(it.qty)>1?'  ·  qty '+it.qty:''}`,`Estimator: ${p.sentBy||'—'}  ·  Printed ${fmtLong(iso(today()))}  ·  Amounts are per visit`].forEach(t=>{ doc.text(t,L0,y); y+=11; });
     y+=6;
     const R=v=>({content:v,styles:{halign:'right'}});
-    tbl('LABOR',['Role','Hours','Bill rate','Total','Wage','Wage cost'], (e.labor||[]).filter(r=>n(r.hours)).map(r=>[r.role, R(fmtH(n(r.hours))), R(usd(r.rate)), R(usd(n(r.hours)*n(r.rate))), R(r.role==='Administration'?'—':usd(costRate(r.role))), R(usd(n(r.hours)*costRate(r.role)))]),
+    tbl('PRICED BY UNIT'+(e.sheet&&e.sheet!=='WC'?' ('+e.sheet+' BID SHEET)':''),['Description','Qty','Rate','Total'], (e.units||[]).filter(r=>n(r.qty)).map(r=>[r.desc||'', R(fmtH(n(r.qty))), R(usd(r.rate)), R(usd(n(r.qty)*n(r.rate)))]));
+    tbl('LABOR',['Role','Hours','Bill rate','Total','Wage','Wage cost'], (e.labor||[]).filter(r=>n(r.hours)).map(r=>[r.role, R(fmtH(n(r.hours))), R(usd(r.rate)), R(usd(n(r.hours)*n(r.rate))), R(r.role==='Administration'?'—':usd(wageOf(r))), R(usd(n(r.hours)*wageOf(r)))]),
       ['Total', R(fmtH(c.techHours)+' tech'), '', R(usd(c.laborPrice)), '', R(usd(c.wages))]);
     const line=(sec)=>(e[sec]||[]).filter(r=>n(r.unit)*n(r.qty)).map(r=>[r.desc||'', R(usd(r.unit)), R(fmtH(n(r.qty))), R(usd(n(r.unit)*n(r.qty))), R(pct(n(r.markup))), R(usd(n(r.unit)*n(r.qty)*(1+n(r.markup))))]);
     const H=['Description','Unit cost','Qty','Cost','Markup','Price'];
@@ -1141,7 +1396,7 @@ async function makeEstimatePdf(p, pairs){
   });
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120); doc.text(`PF Building Services · internal estimate · ${p.num||''} · page ${i} of ${pages}`,306,775,{align:'center'}); }
   const place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40);
-  doc.save(`${p.num||'NEW'}${(p.rev||1)>1?'_Rev'+p.rev:''}_Estimate_${place}.pdf`); toast('Estimate PDF downloaded');
+  await deliverPdf(doc, `${p.num||'NEW'}${(p.rev||1)>1?' Rev '+p.rev:''} Estimate ${place}.pdf`, p, 'Estimate PDF');
 }
 async function makeCoPdf(p, co){
   if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
@@ -1169,7 +1424,7 @@ async function makeCoPdf(p, co){
   ['Client Name: _______________________________________     Date: _____________','Signature: __________________________________________________________________','Title / Company: _____________________________________________________________'].forEach(t=>{ doc.text(t,L0,y); y+=22; });
   y+=10; doc.text('PF Building Services: ______________________________     Date: _____________',L0,y);
   doc.setFontSize(8); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'});
-  doc.save(`${id}_${String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40)}.pdf`); toast('Change order PDF downloaded');
+  await deliverPdf(doc, `${id} ${String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40)}.pdf`, p, 'Change order PDF');
 }
 function fmtLong(s){ const d=parse(s); return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+'/'+d.getFullYear(); }
 
@@ -1210,7 +1465,19 @@ $('#score').addEventListener('click', async e=>{
 let SB_COUNTS=null;
 async function loadSendBacks(){ const {data,error}=await sb.from('proposal_activity').select('num').eq('kind','review_sent_back'); SB_COUNTS={}; if(!error) for(const r of data||[]) SB_COUNTS[r.num]=(SB_COUNTS[r.num]||0)+1; }
 function daysToQuote(list){ const d=list.filter(p=>p.quotedAt).map(p=>(new Date(p.quotedAt)-new Date(p.leadAt||p.createdAt))/864e5).filter(x=>x>=0); return d.length? d.reduce((a,b)=>a+b,0)/d.length : null; }
+async function openReport(m){
+  const box=$('#rep'); box.hidden=false; const t=today(); m = m || iso(new Date(t.getFullYear(), t.getMonth()-1, 1));
+  box.innerHTML=`<div class="esthead"><div><b>Monthly report</b><div class="sub">The same report Zapier emails you on the 1st.</div></div><div style="display:flex;gap:8px;align-items:center"><input type="month" id="repMonth" value="${m.slice(0,7)}" aria-label="Month"><button class="btn ghost small" id="repPrint">Print / PDF</button><button class="btn ghost small" id="repClose">Close</button></div></div><div class="estbody" style="display:block"><div class="card" id="repBody">Loading…</div></div>`;
+  const {data,error}=await sb.rpc('monthly_report',{m});
+  $('#repBody').innerHTML = error ? `<div class="note" style="color:var(--warn)">${/function|schema/i.test(error.message)?'Run database update 007 to turn on the monthly report.':esc(error.message)}</div>` : `<div class="rephtml">${data.html}</div>`;
+}
+$('#rep').addEventListener('click', e=>{ const t=e.target.closest('button'); if(!t) return; if(t.id==='repClose') $('#rep').hidden=true;
+  if(t.id==='repPrint'){ const w=window.open('','_blank'); if(!w) return; w.document.write(`<!doctype html><title>PFBS monthly report</title><body style="margin:24px">${$('.rephtml')?.innerHTML||''}</body>`); w.document.close(); w.focus(); w.print(); } });
+$('#rep').addEventListener('change', e=>{ if(e.target.id==='repMonth' && e.target.value) openReport(e.target.value+'-01'); });
+$('#repBtn').addEventListener('click', ()=>openReport());
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#rep').hidden){ e.stopImmediatePropagation(); $('#rep').hidden=true; } }, true);
 function renderScore(){
+  $('#repBtn').hidden=!isManager();
   if(SB_COUNTS===null){ loadSendBacks().then(()=>{ if(!$('#view-scorecard').hidden) renderScore(); }); }
   const est=group('sentBy', TEAM.filter(t=>t.role!=='BD Rep').map(t=>t.name)).filter(r=>r.mine.length||TEAM.find(t=>t.name===r.n)?.active);
   const bd=group('bdRep', TEAM.filter(t=>t.role==='BD Rep').map(t=>t.name));
@@ -1229,6 +1496,97 @@ function renderScore(){
   <div class="card"><h3>By lead source</h3>${table(['Lead source','Proposals','Won','Win rate','Won $'], src.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt)]), 'Pick a Lead source on new proposals and this fills in.')}</div>
   <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $','Actual margin'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt),r.jcN?`${pct(r.actM)} <span class="note" style="margin:0">(${r.jcN} job${r.jcN===1?'':'s'})</span>`:'—']), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
 }
+
+// ---------- Leads tab: leads waiting for an estimate + BD prospects ----------
+let PROS=[], prosOK=true, prosFilter='To contact', PR=null;
+const canProspect = () => isManager() || role()==='BD Rep';
+const STAGES=['New','Contacted','Meeting set','Walkthrough','Converted','Not now'];
+async function loadProspects(){ if(!canProspect()) return; const {data,error}=await sb.from('prospects').select('*').order('next_touch',{ascending:true}); prosOK=!error; PROS=data||[]; if(current()==='leads') renderLeads(); }
+const touchDue = x => !['Converted','Not now'].includes(x.stage) && (!x.next_touch || parse(x.next_touch)<=today());
+function renderLeads(){
+  $('#leadBtn2').hidden=!canLead(); $('#prospBtn').hidden=!canProspect();
+  const leads=P.filter(p=>p.status==='Lead').sort((a,b)=>String(a.leadAt||a.createdAt).localeCompare(String(b.leadAt||b.createdAt)));
+  const wait=p=>days(parse(p.leadAt||p.createdAt), today());
+  const leadRows = leads.length ? leads.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="hide-sm wrap">${esc((p.leadInfo?.services||[]).join(', '))}</td><td class="hide-sm num">${p.leadInfo?.walkthrough?fmtD(p.leadInfo.walkthrough):''}</td><td class="hide-sm">${esc(p.bdRep)}</td><td>${p.sentBy?esc(p.sentBy):'<span class="flag warn">Not assigned</span>'}</td><td class="r num"><span class="${wait(p)>3?'flag bad':''}">${wait(p)}</span></td></tr>`).join('')
+    : `<tr><td colspan="8" class="empty">No leads waiting. ${canLead()?'Log one with + New lead.':''}</td></tr>`;
+  let pros='';
+  if(canProspect()){
+    const F={'To contact':touchDue, 'Active':x=>!['Converted','Not now'].includes(x.stage), 'Converted':x=>x.stage==='Converted', 'Not now':x=>x.stage==='Not now', 'All':()=>true};
+    const list=PROS.filter(F[prosFilter]||F.All);
+    pros = `<div class="card" style="margin-top:16px"><h3>Prospects</h3>
+      <div class="note" style="margin:0 0 8px">Buildings and contacts BD is working on before there's a request. Log each call, email or visit and set the next touch date. When they ask for a price, click <b>Convert to lead</b>.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="prosChips">${Object.keys(F).map(k=>`<button class="chip" data-pf="${k}" aria-pressed="${k===prosFilter}">${k} <span class="c">${PROS.filter(F[k]).length}</span></button>`).join('')}</div>
+      ${!prosOK?'<div class="note" style="color:var(--warn)">Run database update 007 to turn on prospects.</div>':''}
+      <div class="tablewrap"><table><thead><tr><th>Company</th><th class="hide-sm">Property</th><th class="hide-sm">Contact</th><th>Stage</th><th class="hide-sm">Last touch</th><th>Next touch</th>${isManager()?'<th class="hide-sm">BD rep</th>':''}</tr></thead><tbody id="prosRows">
+      ${list.length?list.map(x=>`<tr data-pid="${x.id}" tabindex="0"><td><b>${esc(x.company)}</b></td><td class="hide-sm wrap">${esc(x.property)}</td><td class="hide-sm">${esc(x.contact_name)}${x.contact_title?` <span class="note" style="margin:0">· ${esc(x.contact_title)}</span>`:''}</td><td><span class="pill ${x.stage==='Converted'?'p-won':x.stage==='Not now'?'p-neutral':x.stage==='New'?'p-lead':'p-review'}">${esc(x.stage)}</span>${x.converted_num?` <span class="note" style="margin:0">${esc(x.converted_num)}</span>`:''}</td><td class="hide-sm num">${fmtD(x.last_touch)}</td><td class="num">${x.next_touch?`<span class="${touchDue(x)?'flag warn':''}">${fmtD(x.next_touch)}${touchDue(x)?' · due':''}</span>`:(touchDue(x)?'<span class="flag warn">Set a date</span>':'—')}</td>${isManager()?`<td class="hide-sm">${esc(x.bd_rep)}</td>`:''}</tr>`).join('')
+        : `<tr><td colspan="7" class="empty">${prosFilter==='To contact'?'Nobody to contact today.':'No prospects here yet.'} Add one with + Prospect.</td></tr>`}
+      </tbody></table></div></div>`;
+  }
+  $('#leadsBody').innerHTML = `<div class="card"><h3>Leads waiting for an estimate (${leads.length})</h3>
+    <div class="tablewrap"><table><thead><tr><th>PFBS #</th><th>Client</th><th class="hide-sm">Property</th><th class="hide-sm">Services</th><th class="hide-sm">Walkthrough</th><th class="hide-sm">BD rep</th><th>Estimator</th><th class="r">Days waiting</th></tr></thead><tbody>${leadRows}</tbody></table></div>
+    <div class="note">Red after 3 days. The estimator opens the lead and clicks <b>Start estimate</b>, which turns it into a proposal with these services as lines.</div></div>${pros}`;
+}
+function drawProspect(){
+  const x=PR, ed=canProspect(), dis=ed?'':'disabled', isN=!x.id;
+  const inp=(l,k,t='text',cls='',extra='')=>`<label class="f ${cls}">${l}<input data-pk="${k}" type="${t}" value="${esc(x[k]??'')}" ${extra} ${dis}></label>`;
+  const bds=TEAM.filter(t=>t.active&&t.role==='BD Rep').map(t=>t.name);
+  $('#drawer').innerHTML = `
+  <div class="dhead"><div class="t"><b id="dTitle">${isN?'New prospect':esc(x.company)}</b><div class="sub">${isN?'Someone BD is working on before they ask for a price.':esc(x.stage)+(x.converted_num?' · became '+esc(x.converted_num):'')}</div></div>
+    <button class="btn ghost small" id="closeD">Close</button></div>
+  <div class="dbody">
+    <fieldset><legend>Company &amp; contact</legend><div class="grid2">
+      ${inp('Company','company','text','full','list="clientList" autocomplete="off"')}<datalist id="clientList">${clientNames().map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+      ${inp('Property / building','property','text','full')}
+      ${inp('Contact name','contact_name')}${inp('Title','contact_title','text','','placeholder="e.g. Property manager"')}
+      ${inp('Phone','phone','tel')}${inp('Email','email','email')}
+      <label class="f full">Address<textarea data-pk="address" rows="2" ${dis}>${esc(x.address??'')}</textarea></label>
+    </div></fieldset>
+    <fieldset><legend>Where it stands</legend><div class="grid2">
+      <label class="f">Stage<select data-pk="stage" ${dis}>${STAGES.map(v=>`<option ${v===x.stage?'selected':''}>${v}</option>`).join('')}</select></label>
+      ${inp('Next touch','next_touch','date')}
+      ${isManager()?`<label class="f">BD rep<select data-pk="bd_rep" ${dis}>${opts(bds,x.bd_rep)}</select></label>`:''}
+    </div>
+    <label class="f">Notes<textarea data-pk="notes" rows="3" ${dis} placeholder="e.g. Manages 4 buildings in Oakland; current vendor contract ends in March">${esc(x.notes??'')}</textarea></label></fieldset>
+    ${!isN?`<fieldset><legend>Touches</legend>
+      <div class="actadd"><select id="tKind" aria-label="Touch type">${['Call','Email','Visit','Meeting','Event'].map(v=>`<option>${v}</option>`).join('')}</select><input id="tNote" placeholder="e.g. Left voicemail; try again Thursday" aria-label="Touch note"><button type="button" class="btn small" id="tAdd">Log</button></div>
+      <div class="actlist">${(x.touches||[]).slice().reverse().map(t=>`<div><span class="when">${fmtD(t.date)}</span> <span class="who">${esc(t.by||'')}</span> <b>${esc(t.kind)}</b>${t.note?': '+esc(t.note):''}</div>`).join('')||'<div class="note" style="margin:0">No touches yet.</div>'}</div></fieldset>`:''}
+  </div>
+  <div class="dfoot"><span class="msg" id="dmsg"></span>
+    <button class="btn ghost" id="cancelD">Cancel</button>
+    ${!isN && isManager()?'<button class="btn ghost" id="prDel">Delete</button>':''}
+    ${!isN && x.stage!=='Converted' && canLead()?'<button class="btn ghost" id="prConvert">Convert to lead</button>':''}
+    <button class="btn" id="prSave" ${ed?'':'disabled'}>${isN?'Add prospect':'Save'}</button></div>`;
+}
+function openProspect(id){ draft=null; const x=id?PROS.find(p=>p.id===id):null; PR = x ? structuredClone(x) : {company:'', stage:'New', bd_rep: role()==='BD Rep'?me.name:'', touches:[], next_touch: iso(today())}; drawProspect(); $('#scrim').hidden=false; $('#drawer').hidden=false; }
+async function saveProspect(close=true){
+  if(!PR.company.trim()){ $('#dmsg').textContent='Add the company name.'; return false; }
+  if(isManager() && !PR.bd_rep){ $('#dmsg').textContent='Pick the BD rep.'; return false; }
+  const keys=['company','property','contact_name','contact_title','phone','email','address','stage','next_touch','last_touch','touches','bd_rep','notes'];
+  const row={}; for(const k of keys){ let v=PR[k]; if(v==='') v=null; row[k]=v; } if(!row.touches) row.touches=[];
+  const res = PR.id ? await sb.from('prospects').update(row).eq('id',PR.id).select().single() : await sb.from('prospects').insert(row).select().single();
+  if(res.error){ $('#dmsg').textContent=res.error.message; return false; }
+  PR=res.data; const nm=PR.company; await loadProspects(); if(close){ closeDrawer(); toast(`Saved ${nm}`); } return true;
+}
+$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.pk; if(k && PR) PR[k]=e.target.value; });
+$('#drawer').addEventListener('change', e=>{ const k=e.target.dataset.pk; if(k && PR) PR[k]=e.target.value; });
+$('#drawer').addEventListener('click', async e=>{
+  const t=e.target.closest('button'); if(!t || !PR || draft) return;
+  if(t.id==='prSave') saveProspect();
+  if(t.id==='tAdd'){ const note=$('#tNote').value.trim(), kind=$('#tKind').value; PR.touches=[...(PR.touches||[]), {date:iso(today()), kind, note, by:me.name}]; PR.last_touch=iso(today()); if(PR.stage==='New') PR.stage='Contacted';
+    if(!PR.next_touch || parse(PR.next_touch)<=today()){ const n=new Date(today()); n.setDate(n.getDate()+7); PR.next_touch=iso(n); }
+    if(await saveProspect(false)){ drawProspect(); toast(`Logged. Next touch ${fmtD(PR.next_touch)}`); } }
+  if(t.id==='prDel'){ if(!t.dataset.armed){ t.dataset.armed='1'; t.textContent='Confirm delete'; return; } const {error}=await sb.from('prospects').delete().eq('id',PR.id); if(error){ toast(error.message); return; } closeDrawer(); loadProspects(); }
+  if(t.id==='prConvert'){ if(!(await saveProspect(false))) return; const x=PR; PR=null;
+    await openDrawer(null,{lead:true}); Object.assign(draft,{client:x.company, property:x.property||'', contactName:x.contact_name||'', contactPhone:x.phone||'', contactEmail:x.email||'', siteAddress:x.address||'', bdRep:x.bd_rep||draft.bdRep, leadSource:S.leadSources.find(v=>/bd/i.test(v))||draft.leadSource||'', clientType:S.clientTypes[0]?.[0]||'', notes:x.notes||'', _fromProspect:x.id}); drawDrawer(); $('#dmsg').textContent='Add what they need and assign an estimator, then create the lead.'; }
+});
+$('#leadsBody').addEventListener('click', e=>{
+  const c=e.target.closest('[data-pf]'); if(c){ prosFilter=c.dataset.pf; renderLeads(); return; }
+  const r=e.target.closest('tr[data-id]'); if(r){ openDrawer(r.dataset.id); return; }
+  const q=e.target.closest('tr[data-pid]'); if(q) openProspect(+q.dataset.pid);
+});
+$('#leadsBody').addEventListener('keydown', e=>{ if(e.key!=='Enter') return; const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); const q=e.target.closest('tr[data-pid]'); if(q) openProspect(+q.dataset.pid); });
+$('#leadBtn2').addEventListener('click', ()=>openDrawer(null,{lead:true}));
+$('#prospBtn').addEventListener('click', ()=>openProspect(null));
 
 // ---------- My Sales (BD dashboard) ----------
 let salesPer='month', salesRep=null;
@@ -1410,14 +1768,14 @@ $('#settingsBody').addEventListener('change', async e=>{
 });
 
 // ---------- tabs / views ----------
-function show(view){ for(const v of ['login','blocked','setup','pipeline','sales','scorecard','settings']) $('#view-'+v).hidden = v!==view; }
+function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','scorecard','settings']) $('#view-'+v).hidden = v!==view; }
 $('#tabs').addEventListener('click', e=>{
   const b=e.target.closest('[data-tab]'); if(!b) return;
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x===b);
   show(b.dataset.tab); renderAll();
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
-function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='scorecard') renderScore(); if(c==='settings') renderSettings(); }
+function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='scorecard') renderScore(); if(c==='settings') renderSettings(); }
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
@@ -1425,6 +1783,7 @@ async function loadSettings(){ const {data}=await sb.from('settings').select('da
 async function loadProposals(){
   const {data,error}=await sb.from('proposals').select('*').order('num',{ascending:false});
   if(error){ $('#asof').textContent='Could not load proposals: '+error.message; return; }
+  if(data && data[0]) COLS=new Set(Object.keys(data[0]));
   P=(data||[]).map(fromRow);
   $('#asof').textContent=`${P.length} proposals · updated ${new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`;
   renderAll();
@@ -1454,7 +1813,7 @@ async function start(session){
   $('#salesTab').hidden = !(m.role==='BD Rep' || ['Owner','Admin','Senior Estimator'].includes(m.role));
   $('#salesTab').textContent = m.role==='BD Rep' ? 'My Sales' : 'BD Sales';
   if(m.role==='BD Rep'){ for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab==='sales'); show('sales'); } else show('pipeline');
-  await loadProposals();
+  await loadProposals(); loadProspects();
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(loadProposals,400); })
     .on('postgres_changes',{event:'*',schema:'public',table:'settings'},async()=>{ await loadSettings(); renderAll(); })
