@@ -166,6 +166,9 @@ dl.tots .sm{font-size:12px}
 .calcbox{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}.calcbox summary{font-weight:600;color:var(--accent)}
 .cgrid{margin:8px 0}table.cres{border-collapse:collapse;width:auto;min-width:300px;font-size:14px}table.cres td{padding:3px 10px 3px 0;border:0;white-space:nowrap}table.cres tr.last td{font-weight:700;border-top:1px solid var(--line);padding-top:6px}.calcout{font-size:14px;margin:6px 0 8px}
 label.f.inline{display:flex;align-items:center;gap:6px}label.f.inline input{width:90px}
+td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
+.vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
+table.cmp td,table.cmp th{white-space:nowrap}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
 td input,td select{padding:5px 8px}
 
@@ -261,10 +264,10 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications'};
 const READONLY = {reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ let v=p[f]; if(v==='') v=null; if(c==='items'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ let v=p[f]; if(v==='') v=null; if(c==='items'||c==='actuals'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -367,6 +370,7 @@ const FILTERS = [
   ['Past 90 days', p=>{const d=daysOpen(p); return d!=null && d>S.expiryDays;}],
   ['Won', p=>outcome(p)==='Won'],
   ['Lost', p=>outcome(p)==='Lost'],
+  ['Needs actuals', p=>['Invoiced','Paid'].includes(p.status) && !(p.actuals||[]).length],
   ['All', ()=>true]
 ];
 function renderPipeline(){
@@ -493,6 +497,9 @@ function drawDrawer(){
     <div id="calc2">${calc2(p)}</div>
     <div class="note">Date paid fills in when you mark it Paid. Commission payouts are recorded from the Scorecards page.${p.commPaidOn?` BD commission paid ${fmtD(p.commPaidOn)}.`:''}${p.estCommPaidOn?` Estimator commission paid ${fmtD(p.estCommPaidOn)}.`:''} Owners don't earn estimator commission.</div>
     </fieldset>` : ''}
+    ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Job actuals</legend>
+      <div class="note" style="margin:0 0 8px">Log each visit from the techs' sign-in sheets. Leave a cost blank if it matched the estimate.</div>
+      <div id="actBox">${actualsHTML(p, ed)}</div></fieldset>` : ''}
     <fieldset><legend>Files</legend><div class="grid2">
       ${field('Bid sheet link (SharePoint)','bidLink','url','full','placeholder="https://…sharepoint.com/…"')}
       ${field('Proposal folder link','folderLink','url','full','placeholder="https://…sharepoint.com/…"')}
@@ -605,6 +612,56 @@ $('#q').addEventListener('input', e=>{ query=e.target.value; renderPipeline(); }
 $('#newBtn').addEventListener('click', ()=>openDrawer(null));
 
 
+
+// ---------- job actuals (estimated vs actual) ----------
+function estPerVisit(p){
+  const L=countedItems(p).filter(i=>i.estimate);
+  if(!L.length) return null;
+  const z={hrs:0,labor:0,mat:0,rent:0,eq:0,misc:0,cost:0,techs:0,hpt:0};
+  for(const i of L){ const c=estCalc(i.estimate); z.hrs+=c.techHours; z.labor+=c.laborCost; z.mat+=c.mat+c.tax; z.rent+=c.rent; z.eq+=c.eq; z.misc+=c.misc; z.cost+=c.cost; z.techs=Math.max(z.techs,c.crew.techs); z.hpt=Math.max(z.hpt,c.crew.maxHrs); }
+  return z;
+}
+function jobCompare(p){
+  const V=(p.actuals||[]).filter(v=>v && (num(v.techs)||num(v.hpt)||v.date)); if(!V.length) return null;
+  const est=estPerVisit(p), price=num(p.amount)||0, n=V.length, burden=num(S.est.burden)||0;
+  const wage = est && est.hrs ? est.labor/est.hrs : costRate('Expert/Chair')*(1+burden);
+  const estCostPV = est ? est.cost : (num(p.gp)!=null ? price-num(p.gp) : null);
+  let actHrs=0, actCost=0;
+  for(const v of V){ const h=(num(v.techs)||0)*(num(v.hpt)||0) + (num(v.extraHrs)||0); actHrs+=h;
+    const pick=(k,e)=> (v[k]===''||v[k]==null) ? (est?est[e]:0) : (num(v[k])||0);
+    actCost += h*wage + pick('mat','mat') + pick('rent','rent') + (est?est.eq:0) + pick('misc','misc'); }
+  const estHrs = est ? est.hrs*n : null, estCost = estCostPV!=null ? estCostPV*n : null, rev=price*n;
+  return {n, estHrs, actHrs, estCost, actCost, rev, estGP: estCost!=null?rev-estCost:null, actGP: rev-actCost,
+          hrsVar: estHrs ? (actHrs-estHrs)/estHrs : null};
+}
+function actualsHTML(p, ed){
+  const V=p.actuals||[], dis=ed?'':'disabled', est=estPerVisit(p);
+  const inp=(i,k,l,extra='')=>`<label class="f">${l}<input ${k==='date'?'type="date"':k==='notes'?'':'type="number" step="any" inputmode="decimal"'} data-av="${i}.${k}" value="${esc((V[i]||{})[k]??'')}" ${extra} ${dis}></label>`;
+  const cards=V.map((v,i)=>`<div class="item visit"><div class="itop"><span class="ibadge">Visit ${i+1}</span><span style="flex:1"></span>${ed?`<button type="button" class="btn ghost small" data-avdel="${i}">Remove</button>`:''}</div>
+    <div class="vgrid">${inp(i,'date','Date')}${inp(i,'techs','Techs')}${inp(i,'hpt','Hrs / tech')}
+      ${inp(i,'rent','Lift / sub $',`placeholder="${est?Math.round(est.rent)+' est.':'0'}"`)}${inp(i,'mat','Materials $',`placeholder="${est?Math.round(est.mat)+' est.':'0'}"`)}${inp(i,'misc','Other $',`placeholder="${est?Math.round(est.misc)+' est.':'0'}"`)}
+      <div class="full">${inp(i,'notes','Notes','placeholder="e.g. finished early, no screens on east side"')}</div></div></div>`).join('');
+  return `<div class="items">${cards}</div>
+    ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="avAdd">+ Log visit</button>${est?`<span class="note" style="margin:0">Estimated per visit: ${est.techs} techs × ${fmtH(est.hpt)} hrs</span>`:''}</div>`:''}
+    <div id="cmpBox">${compareHTML(p)}</div>`;
+}
+function compareHTML(p){
+  const c=jobCompare(p); if(!c) return '';
+  const d=(a,b,better)=>{ if(a==null||b==null) return '<td class="r">—</td>'; const x=b-a, good = better==='lower' ? x<=0 : x>=0; return `<td class="r num ${Math.abs(x)<0.005?'':good?'up':'down'}">${x>0?'+':x<0?'−':''}${money(Math.abs(x))}</td>`; };
+  const m=(gp)=> c.rev ? pct(gp/c.rev) : '—';
+  return `<div class="tablewrap" style="margin-top:10px"><table class="cmp"><thead><tr><th>${c.n} visit${c.n===1?'':'s'}</th><th class="r">Estimated</th><th class="r">Actual</th><th class="r">Difference</th></tr></thead><tbody>
+    <tr><td>Tech hours</td><td class="r num">${c.estHrs==null?'—':fmtH(c.estHrs)}</td><td class="r num">${fmtH(c.actHrs)}</td>${(()=>{ if(c.estHrs==null) return '<td class="r">—</td>'; const x=c.actHrs-c.estHrs; return `<td class="r num ${Math.abs(x)<0.005?'':x<=0?'up':'down'}">${x>0?'+':x<0?'−':''}${fmtH(Math.abs(x))}${c.hrsVar!=null?` (${c.hrsVar>0?'+':c.hrsVar<0?'−':''}${pct(Math.abs(c.hrsVar))})`:''}</td>`; })()}</tr>
+    <tr><td>Job cost</td><td class="r num">${c.estCost==null?'—':money(c.estCost)}</td><td class="r num">${money(c.actCost)}</td>${d(c.estCost,c.actCost,'lower')}</tr>
+    <tr><td>Gross profit</td><td class="r num">${c.estGP==null?'—':money(c.estGP)}</td><td class="r num"><b>${money(c.actGP)}</b></td>${d(c.estGP,c.actGP,'higher')}</tr>
+    <tr><td>Margin</td><td class="r num">${c.estGP==null?'—':m(c.estGP)}</td><td class="r num"><b>${m(c.actGP)}</b></td><td></td></tr>
+  </tbody></table></div>${estPerVisit(p)?'':'<div class="note" style="color:var(--warn)">No estimate on this proposal: enter every actual cost (lift, materials, other) or the margin will look too high. Hours cannot be compared.</div>'}`;
+}
+$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.av; if(!k) return; const [i,f]=k.split('.'); draft.actuals[+i][f]=e.target.value; const b=$('#cmpBox'); if(b) b.innerHTML=compareHTML(draft); }, true);
+$('#drawer').addEventListener('click', e=>{
+  const t=e.target.closest('button'); if(!t) return;
+  if(t.id==='avAdd'){ const est=estPerVisit(draft); draft.actuals=[...(draft.actuals||[]), {date:iso(today()), techs: est?est.techs:'', hpt:'', rent:'', mat:'', misc:'', notes:''}]; $('#actBox').innerHTML=actualsHTML(draft, canEditDraft()); }
+  if(t.dataset.avdel!=null){ draft.actuals.splice(+t.dataset.avdel,1); $('#actBox').innerHTML=actualsHTML(draft, canEditDraft()); }
+});
 
 // ---------- estimate editor ----------
 let EI=null, E=null, CALC={type:'swing'};
@@ -898,7 +955,8 @@ function group(key, names){
   return names.map(n=>{
     const mine=P.filter(p=>p[key]===n), won=mine.filter(p=>outcome(p)==='Won'), lost=mine.filter(p=>outcome(p)==='Lost'), open=mine.filter(p=>outcome(p)==='Open');
     const sum=(a,f)=>a.reduce((s,p)=>s+(num(f(p))||0),0);
-    return {n,mine,won,lost,open,wonAmt:sum(won,p=>p.amount),openAmt:sum(open,p=>p.amount),gpWon:sum(won,p=>p.gp),gpBase:sum(won.filter(p=>num(p.gp)!=null),p=>p.amount),
+    const closed=mine.map(jobCompare).filter(c=>c && c.estHrs), eh=closed.reduce((s,c)=>s+c.estHrs,0), ah=closed.reduce((s,c)=>s+c.actHrs,0), withAct=mine.map(jobCompare).filter(Boolean), rv=withAct.reduce((s,c)=>s+c.rev,0), egp=withAct.filter(c=>c.estGP!=null).reduce((s,c)=>s+c.estGP,0), agp=withAct.reduce((s,c)=>s+c.actGP,0);
+    return {closedN:withAct.length, hrsVar: eh?(ah-eh)/eh:null, estMargin: rv?egp/rv:null, actMargin: rv?agp/rv:null, n,mine,won,lost,open,wonAmt:sum(won,p=>p.amount),openAmt:sum(open,p=>p.amount),gpWon:sum(won,p=>p.gp),gpBase:sum(won.filter(p=>num(p.gp)!=null),p=>p.amount),
       rate:(won.length+lost.length)?won.length/(won.length+lost.length):null, due:open.filter(p=>{const f=followUp(p);return f&&f<=today();}).length, stale:open.filter(p=>daysOpen(p)>S.expiryDays).length,
       bdEarned:sum(mine,bdComm), bdPaid:sum(mine.filter(p=>p.commPaidOn),bdComm), estEarned:sum(mine,estComm), estPaid:sum(mine.filter(p=>p.estCommPaidOn),estComm)};
   });
@@ -922,15 +980,16 @@ function renderScore(){
   const lineAmt=(p,svc)=>{ const L=countedItems(p); return L.length ? L.filter(i=>i.service===svc).reduce((s,i)=>s+(num(i.amount)||0),0) : (p.service===svc?(num(p.amount)||0):0); };
   const hasSvc=(p,svc)=>{ const L=(p.items||[]); return L.length ? L.some(i=>i.type!=='Add-on' && i.service===svc) || countedItems(p).some(i=>i.service===svc) : p.service===svc; };
   const svc=S.services.filter(x=>x!=='Multiple services').concat(['Other']).filter((v,i,a)=>a.indexOf(v)===i).map(n=>{ const mine=P.filter(p=>hasSvc(p,n)), won=mine.filter(p=>outcome(p)==='Won'), lost=mine.filter(p=>outcome(p)==='Lost'), open=mine.filter(p=>outcome(p)==='Open');
-    return {n,mine,won,rate:(won.length+lost.length)?won.length/(won.length+lost.length):null,wonAmt:won.reduce((s,p)=>s+lineAmt(p,n),0),openAmt:open.reduce((s,p)=>s+lineAmt(p,n),0)}; }).filter(r=>r.mine.length);
+    const jc=won.map(jobCompare).filter(Boolean), rv=jc.reduce((s,c)=>s+c.rev,0), ag=jc.reduce((s,c)=>s+c.actGP,0);
+    return {n,mine,won,rate:(won.length+lost.length)?won.length/(won.length+lost.length):null,wonAmt:won.reduce((s,p)=>s+lineAmt(p,n),0),openAmt:open.reduce((s,p)=>s+lineAmt(p,n),0),actM: rv?ag/rv:null, jcN:jc.length}; }).filter(r=>r.mine.length);
   $('#score').innerHTML = `
-  <div class="card"><h3>Estimators</h3>${table(['Estimator','Sent','Won','Lost','Open','Win rate','Won $','GP won $','Avg GP %','Open $','Follow-ups due','Past 90 days','Commission earned','Commission owed'].concat(canPayComm()?['']:[]),
-    est.map(r=>[esc(r.n),r.mine.length,r.won.length,r.lost.length,r.open.length,pct(r.rate),money(r.wonAmt),money(r.gpWon),r.gpBase?pct(r.gpWon/r.gpBase):'—',money(r.openAmt),r.due,r.stale,isEstimator(r.n)?money(r.estEarned):'owner',isEstimator(r.n)?money(r.estEarned-r.estPaid):'—'].concat(canPayComm()?[payBtn('est',r.n,isEstimator(r.n)?r.estEarned-r.estPaid:0)]:[])), 'No proposals yet.')}</div>
+  <div class="card"><h3>Estimators</h3><div class="note" style="margin:0 0 8px">Hours vs estimate: green within ±15% (accurate bids), red outside. Based on jobs with logged actuals.</div>${table(['Estimator','Sent','Won','Lost','Open','Win rate','Won $','GP won $','Avg GP %','Open $','Follow-ups due','Past 90 days','Commission earned','Commission owed','Closed jobs','Hours vs estimate','Est. margin','Actual margin'].concat(canPayComm()?['']:[]),
+    est.map(r=>[esc(r.n),r.mine.length,r.won.length,r.lost.length,r.open.length,pct(r.rate),money(r.wonAmt),money(r.gpWon),r.gpBase?pct(r.gpWon/r.gpBase):'—',money(r.openAmt),r.due,r.stale,isEstimator(r.n)?money(r.estEarned):'owner',isEstimator(r.n)?money(r.estEarned-r.estPaid):'—', r.closedN, r.hrsVar==null?'—':`<span class="${Math.abs(r.hrsVar)<=0.15?'up':'down'}">${r.hrsVar>0?'+':r.hrsVar<0?'−':''}${pct(Math.abs(r.hrsVar))}</span>`, pct(r.estMargin), pct(r.actMargin)].concat(canPayComm()?[payBtn('est',r.n,isEstimator(r.n)?r.estEarned-r.estPaid:0)]:[])), 'No proposals yet.')}</div>
   <div class="card"><h3>Business development</h3>${table(['BD rep','Leads','Won','Won $','GP won $','Commission earned','Paid','Owed'],
     bd.map(r=>[esc(r.n),r.mine.length,r.won.length,money(r.wonAmt),money(r.gpWon),money(r.bdEarned),money(r.bdPaid),money(r.bdEarned-r.bdPaid)].concat(canPayComm()?[payBtn('bd',r.n,r.bdEarned-r.bdPaid)]:[])), 'No BD reps yet. Add them on the Settings tab when you hire.')}
     <div class="note">Commission counts only proposals with a Date paid. Owed = earned with no “Commission paid on” date.</div></div>
   <div class="card"><h3>By lead source</h3>${table(['Lead source','Proposals','Won','Win rate','Won $'], src.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt)]), 'Pick a Lead source on new proposals and this fills in.')}</div>
-  <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt)]), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
+  <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $','Actual margin'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt),r.jcN?`${pct(r.actM)} <span class="note" style="margin:0">(${r.jcN} job${r.jcN===1?'':'s'})</span>`:'—']), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
 }
 
 // ---------- settings ----------
