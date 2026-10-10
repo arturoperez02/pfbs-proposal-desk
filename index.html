@@ -169,6 +169,8 @@ label.f.inline{display:flex;align-items:center;gap:6px}label.f.inline input{widt
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
+.revb{display:inline-block;font-size:10.5px;font-weight:700;color:var(--info);background:var(--info-bg);border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:middle}.revb.rnw{color:var(--warn);background:var(--warn-bg)}
+.revline{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:6px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
 td input,td select{padding:5px 8px}
 
@@ -264,10 +266,10 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications'};
 const READONLY = {reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ let v=p[f]; if(v==='') v=null; if(c==='items'||c==='actuals'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ let v=p[f]; if(v==='') v=null; if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -355,9 +357,24 @@ function syncFromItems(p){
 }
 const SVC_CODE = {'Window Cleaning':'WC','Pressure Wash':'PW','Solar Panel Cleaning':'SP','Janitorial':'JAN','Gutter Cleaning':'GC','Graffiti Removal':'GR','Gates & Doors':'GD','Lights - Decor':'LD','Multiple services':'MULTI'};
 function bdRate(p){ if(!p.bdRep || !p.clientType) return null; const t=S.clientTypes.find(x=>x[0]===p.clientType); if(!t) return null; const g=gpPct(p); return t[1]*((g!=null && g<S.marginFloor)?S.belowFloorShare:1); }
-function bdComm(p){ const r=bdRate(p); return (p.datePaid && r!=null && num(p.gp)!=null) ? num(p.gp)*r : null; }
+const FREQ_MONTHS={'Annual':12,'Semi-annual':6,'Quarterly':3,'Bi-monthly':2,'Monthly':12,'Weekly':12};
+function addMonths(s,m){ const d=parse(s); const t=new Date(d.getFullYear(), d.getMonth()+m, d.getDate()); return iso(t); }
+function suggestRenewal(p){
+  if(outcome(p)!=='Won') return null; const m=FREQ_MONTHS[p.frequency]; if(!m) return null;
+  const visits=(p.actuals||[]).map(v=>v.date).filter(Boolean).sort();
+  const base = (['Monthly','Weekly'].includes(p.frequency) ? null : visits.at(-1)) || p.dateResolved || p.dateSent; if(!base) return null;
+  return addMonths(base, m);
+}
+function renewalOf(p){ return p.renewalDate || suggestRenewal(p); }
+function renewalDue(p){ const r=renewalOf(p); if(!r || outcome(p)!=='Won') return false; return days(today(), parse(r)) <= 30; }
+function renewalKind(p){ return ['Monthly','Weekly'].includes(p.frequency) ? 'Contract renewal' : 'Next service / re-quote'; }
+function approvedCOs(p){ return (p.changeOrders||[]).filter(c=>c.status==='Approved'); }
+function coRevenue(p){ return approvedCOs(p).reduce((s,c)=>s+(num(c.amount)||0),0); }
+function coGP(p){ return approvedCOs(p).reduce((s,c)=>s+(num(c.amount)||0)-(num(c.cost)||0),0); }
+function gpAll(p){ return num(p.gp)!=null ? num(p.gp)+coGP(p) : null; }
+function bdComm(p){ const r=bdRate(p); return (p.datePaid && r!=null && gpAll(p)!=null) ? gpAll(p)*r : null; }
 function estRate(p){ const g=gpPct(p); if(g==null) return null; let r=S.estTiers[0][1]; for(const [min,rate] of S.estTiers) if(g>=min) r=rate; return r; }
-function estBase(p){ return num(p.amount)!=null ? num(p.amount)-(num(p.passThrough)||0) : null; }
+function estBase(p){ return num(p.amount)!=null ? num(p.amount)-(num(p.passThrough)||0)+coRevenue(p) : null; }
 function isEstimator(name){ const m=TEAM.find(t=>t.name===name); return m && ['Estimator','Senior Estimator'].includes(m.role); }
 function estComm(p){ if(!p.datePaid || !isEstimator(p.sentBy)) return null; const r=estRate(p), b=estBase(p); return (r!=null&&b!=null)? b*r : null; }
 function pillClass(st){ if(WON.includes(st)) return 'p-won'; if(LOST.includes(st)) return 'p-lost'; if(OPEN.includes(st)) return 'p-open'; if(PRE.includes(st)) return 'p-review'; return 'p-neutral'; }
@@ -370,6 +387,7 @@ const FILTERS = [
   ['Past 90 days', p=>{const d=daysOpen(p); return d!=null && d>S.expiryDays;}],
   ['Won', p=>outcome(p)==='Won'],
   ['Lost', p=>outcome(p)==='Lost'],
+  ['Renewals due', p=>renewalDue(p)],
   ['Needs actuals', p=>['Invoiced','Paid'].includes(p.status) && !(p.actuals||[]).length],
   ['All', ()=>true]
 ];
@@ -391,7 +409,7 @@ function renderPipeline(){
   const list=P.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   $('#rows').innerHTML = list.length ? list.map(p=>{
     const d=daysOpen(p), f=followUp(p);
-    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
+    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">${P.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
   $('#newBtn').hidden = !canCreate();
 }
@@ -410,7 +428,7 @@ async function openDrawer(id){
 function closeDrawer(){ $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; }
 function calc1(p){ const g=gpPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
 function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null){ const o=outcome(p); return (o==='Won'||o==='Lost') && p.dateResolved ? `<div class="gpline">${o} on ${fmtD(p.dateResolved)}${p.datePaid?' · paid '+fmtD(p.datePaid):''}</div>` : ''; } const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
-function calc2(p){ const br=bdRate(p), er=estRate(p); return `<div class="calc">
+function calc2(p){ const br=bdRate(p), er=estRate(p); return `${approvedCOs(p).length?`<div class="gpline" style="margin:0 0 6px">Includes approved change orders: +${money(coRevenue(p))} revenue, +${money(coGP(p))} GP</div>`:''}<div class="calc">
       <div><span>BD rate</span><b class="num">${br==null?'—':pct(br)}</b></div>
       <div><span>BD commission</span><b class="num">${money(bdComm(p))}</b></div>
       <div><span>Estimator rate</span><b class="num">${isEstimator(p.sentBy)&&er!=null?pct(er):'—'}</b></div>
@@ -460,6 +478,8 @@ function drawDrawer(){
       <div class="stages">${STATUSES.map(s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`).join('')}</div>
       ${!canReview()&&PRE.includes(orig?.status??'Estimating')?'<div class="note">Move it to Needs Review when it is ready. The senior estimator sends it.</div>':''}
       <div id="openline">${openLine(p)}</div>
+      ${!isNew ? `<div class="revline"><span>Revision <b>${p.rev||1}</b>${(p.revisions||[]).length?` · ${(p.revisions||[]).map(r=>`Rev ${r.rev}: ${money(r.amount)} on ${fmtD(r.date)}`).join(' · ')}`:''}</span>${ed && !PRE.includes(p.status) && outcome(p)!=='Won' ? `<button type="button" class="btn ghost small" id="revBtn">${draft._revArmed?'Confirm: start Rev '+((p.rev||1)+1):'Create revision'}</button>`:''}</div>`:''}
+      ${p.renewalOf?`<div class="gpline">Renewal of <a href="#" data-open="${esc(p.renewalOf)}">${esc(p.renewalOf)}</a></div>`:''}
       ${LOST.includes(p.status)?`<div class="grid2" style="margin-top:6px">${sel('Lost reason','lostReason',S.lostReasons)}</div>`:''}
       <div class="hist">${hist.map(h=>`<div>${fmtD(h.changed_at)} — ${esc(h.status)}${h.changed_by?' · '+esc(h.changed_by):''}</div>`).join('')}${p.reviewedBy?`<div>Reviewed by ${esc(p.reviewedBy)}</div>`:''}</div>
     </fieldset>
@@ -497,6 +517,12 @@ function drawDrawer(){
     <div id="calc2">${calc2(p)}</div>
     <div class="note">Date paid fills in when you mark it Paid. Commission payouts are recorded from the Scorecards page.${p.commPaidOn?` BD commission paid ${fmtD(p.commPaidOn)}.`:''}${p.estCommPaidOn?` Estimator commission paid ${fmtD(p.estCommPaidOn)}.`:''} Owners don't earn estimator commission.</div>
     </fieldset>` : ''}
+    ${outcome(p)==='Won' && FREQ_MONTHS[p.frequency] ? `<fieldset><legend>Renewal</legend>
+      <div class="grid2"><label class="f">${renewalKind(p)} date<input type="date" id="f-renewalDate" data-k="renewalDate" value="${esc(renewalOf(p)||'')}" ${dis}></label>
+      <div class="gpline" style="align-self:end">${p.renewalDate?'Set by you':'Suggested from '+esc(p.frequency.toLowerCase())+' frequency'}${renewalDue(p)?' · <b style="color:var(--warn)">due now</b>':''}</div></div>
+      ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn small" id="rnRequote">Re-quote as new proposal</button><button type="button" class="btn ghost small" id="rnDone">Handled, next ${renewalOf(p)?fmtD(addMonths(renewalOf(p),FREQ_MONTHS[p.frequency])):''}</button></div>`:''}
+      <div class="note">Shows under "Renewals due" 30 days before this date.</div></fieldset>` : ''}
+    ${outcome(p)==='Won' ? `<fieldset><legend>Change orders</legend><div id="coBox">${coHTML(p, ed)}</div></fieldset>` : ''}
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Job actuals</legend>
       <div class="note" style="margin:0 0 8px">Log each visit from the techs' sign-in sheets. Leave a cost blank if it matched the estimate.</div>
       <div id="actBox">${actualsHTML(p, ed)}</div></fieldset>` : ''}
@@ -613,6 +639,52 @@ $('#newBtn').addEventListener('click', ()=>openDrawer(null));
 
 
 
+// ---------- change orders ----------
+function coHTML(p, ed){
+  const C=p.changeOrders||[], dis=ed?'':'disabled';
+  const cards=C.map((c,i)=>`<div class="item ${c.status==='Approved'?'':'addon'}"><div class="itop"><span class="ibadge">${esc(p.num)}-CO${c.no}</span>
+      <select data-co="${i}.status" ${dis} aria-label="Change order status">${['Pending','Approved','Declined'].map(x=>`<option ${x===c.status?'selected':''}>${x}</option>`).join('')}</select><span style="flex:1"></span>
+      <button type="button" class="btn ghost small" data-copdf="${i}">PDF</button>${ed?`<button type="button" class="btn ghost small" data-codel="${i}">Remove</button>`:''}</div>
+    <div class="vgrid">
+      <label class="f">Date<input type="date" data-co="${i}.date" value="${esc(c.date||'')}" ${dis}></label>
+      <label class="f">Amount to client ($)<input type="number" step="any" data-co="${i}.amount" value="${esc(c.amount??'')}" ${dis}></label>
+      <label class="f">Your cost ($)<input type="number" step="any" data-co="${i}.cost" value="${esc(c.cost??'')}" ${dis} placeholder="labor, lift, materials"></label>
+      <div class="full"><label class="f">Description<input data-co="${i}.description" value="${esc(c.description||'')}" ${dis} placeholder="e.g. Add interior lobby glass, 40 panes"></label></div>
+    </div></div>`).join('');
+  return `<div class="items">${cards}</div>
+    ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="coAdd">+ Change order</button></div>`:''}
+    ${C.length?coTotHTML(p):'<div class="note" style="margin:0">Scope added after approval goes here, so the job price, margin and commission stay right.</div>'}`;
+}
+function coTotHTML(p){ return `<div class="itot">Approved: <b>${money(coRevenue(p))}</b> added to the job · GP <b>${money(coGP(p))}</b>. Approved change orders count toward commission.</div>`; }
+$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; }, true);
+$('#drawer').addEventListener('change', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; if(e.target.tagName==='SELECT') $('#coBox').innerHTML=coHTML(draft, canEditDraft()); else { const t=$('#coBox .itot'); if(t) t.outerHTML=coTotHTML(draft); } refreshCalcs(); }, true);
+$('#drawer').addEventListener('click', async e=>{
+  const a=e.target.closest('[data-open]'); if(a){ e.preventDefault(); openDrawer(a.dataset.open); return; }
+  const t=e.target.closest('button'); if(!t) return;
+  if(t.id==='coAdd'){ const C=draft.changeOrders||[]; const no=C.reduce((m,c)=>Math.max(m,c.no||0),0)+1; draft.changeOrders=[...C,{no,date:iso(today()),description:'',amount:'',cost:'',status:'Pending'}]; $('#coBox').innerHTML=coHTML(draft, canEditDraft()); }
+  if(t.dataset.codel!=null){ draft.changeOrders.splice(+t.dataset.codel,1); $('#coBox').innerHTML=coHTML(draft, canEditDraft()); refreshCalcs(); }
+  if(t.dataset.copdf!=null){ makeCoPdf(draft, draft.changeOrders[+t.dataset.copdf]); }
+  if(t.id==='revBtn'){
+    if(!draft._revArmed){ draft._revArmed=true; drawDrawer(); return; }
+    delete draft._revArmed;
+    draft.revisions=[...(draft.revisions||[]), {rev:draft.rev||1, date:draft.dateSent||iso(today()), amount:num(draft.amount), status:draft.status, items:structuredClone(draft.items||[])}];
+    draft.rev=(draft.rev||1)+1; draft.status='Estimating'; draft.dateSent=null; draft.dateResolved=null; draft.lostReason=null;
+    drawDrawer(); $('#dmsg').textContent=`Rev ${draft.rev} started. Change the scope or price, then send it for review and save.`;
+  }
+  if(t.id==='rnDone'){ const r=renewalOf(draft); if(!r) return; draft.renewalDate=addMonths(r, FREQ_MONTHS[draft.frequency]); drawDrawer(); $('#dmsg').textContent='Next renewal set. Save to keep it.'; }
+  if(t.id==='rnRequote'){
+    const src=draft, r=renewalOf(src);
+    const copy={dateSent:null, sentBy:me.name, status:'Estimating', client:src.client, property:src.property, contactName:src.contactName, contactPhone:src.contactPhone, contactEmail:src.contactEmail,
+      billAddress:src.billAddress, siteAddress:src.siteAddress, clientType:'House account', leadSource:'Repeat client', items:structuredClone(src.items||[]).map(i=>({...i, accepted:false})),
+      clarifications:src.clarifications, pricingOption:src.pricingOption, renewalOf:src.num, notes:`Renewal of ${src.num}.`};
+    syncFromItems(copy); const row=toRow(copy); delete row.num;
+    const res=await sb.from('proposals').insert(row).select().single();
+    if(res.error){ toast(res.error.message); return; }
+    if(r) await sb.from('proposals').update({renewal_date:addMonths(r, FREQ_MONTHS[src.frequency])}).eq('num', src.num);
+    toast(`Created ${res.data.num} from ${src.num}`); closeDrawer(); await loadProposals(); openDrawer(res.data.num);
+  }
+});
+
 // ---------- job actuals (estimated vs actual) ----------
 function estPerVisit(p){
   const L=countedItems(p).filter(i=>i.estimate);
@@ -630,7 +702,8 @@ function jobCompare(p){
   for(const v of V){ const h=(num(v.techs)||0)*(num(v.hpt)||0) + (num(v.extraHrs)||0); actHrs+=h;
     const pick=(k,e)=> (v[k]===''||v[k]==null) ? (est?est[e]:0) : (num(v[k])||0);
     actCost += h*wage + pick('mat','mat') + pick('rent','rent') + (est?est.eq:0) + pick('misc','misc'); }
-  const estHrs = est ? est.hrs*n : null, estCost = estCostPV!=null ? estCostPV*n : null, rev=price*n;
+  const coR=coRevenue(p), coC=approvedCOs(p).reduce((s,c)=>s+(num(c.cost)||0),0);
+  const estHrs = est ? est.hrs*n : null, estCost = estCostPV!=null ? estCostPV*n + coC : null, rev=price*n + coR; actCost += coC;
   return {n, estHrs, actHrs, estCost, actCost, rev, estGP: estCost!=null?rev-estCost:null, actGP: rev-actCost,
           hrsVar: estHrs ? (actHrs-estHrs)/estHrs : null};
 }
@@ -869,7 +942,7 @@ async function makePdf(p){
   ['7172 Calais Pl  |  Newark, CA 94560','(510) 359-5181  |  info@pfbuildingservices.com','License #114036'].forEach((t,i)=>doc.text(t,51,117+i*11));
   doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...NAVY); doc.text('PROPOSAL CONTRACT',R0,66,{align:'right'});
   doc.setFontSize(8.5); doc.setTextColor(0);
-  [`Proposal # ${p.num}`,`Date: ${p.dateSent?fmtLong(p.dateSent):fmtLong(iso(today()))}`,`Expires: After ${S.expiryDays} Days`].forEach((t,i)=>doc.text(t,R0,84+i*12,{align:'right'}));
+  [`Proposal # ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`,`Date: ${p.dateSent?fmtLong(p.dateSent):fmtLong(iso(today()))}`,`Expires: After ${S.expiryDays} Days`].forEach((t,i)=>doc.text(t,R0,84+i*12,{align:'right'}));
   doc.setDrawColor(...NAVY); doc.setLineWidth(1.5); doc.line(40,150,572,150);
   // bill to / site
   doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text('BILL TO',51,172); doc.text('PROPERTY / JOB SITE',320,172);
@@ -934,8 +1007,36 @@ async function makePdf(p){
   const n=doc.getNumberOfPages();
   for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'}); }
   const code=SVC_CODE[p.service]||'PROP', place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().replace(/\s+/g,' ').slice(0,40);
-  doc.save(`${p.num}_${code}_${place}_${p.dateSent||iso(today())}.pdf`);
+  doc.save(`${p.num}${(p.rev||1)>1?'_Rev'+p.rev:''}_${code}_${place}_${p.dateSent||iso(today())}.pdf`);
   toast('PDF downloaded');
+}
+async function makeCoPdf(p, co){
+  if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
+  if(!co.description || num(co.amount)==null){ toast('Add a description and amount first.'); return; }
+  const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), NAVY=[31,42,92], L0=56, R0=566, W=R0-L0, logo=await logoData(), id=`${p.num}-CO${co.no}`;
+  if(logo) doc.addImage(logo,'JPEG',51,41,142,33);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(0); doc.text('PF Building Services',51,104);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); ['7172 Calais Pl  |  Newark, CA 94560','(510) 359-5181  |  info@pfbuildingservices.com','License #114036'].forEach((t,i)=>doc.text(t,51,117+i*11));
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...NAVY); doc.text('CHANGE ORDER',R0,66,{align:'right'});
+  doc.setFontSize(8.5); doc.setTextColor(0); [`Change Order # ${id}`,`Date: ${fmtLong(co.date||iso(today()))}`,`Original proposal: ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`].forEach((t,i)=>doc.text(t,R0,84+i*12,{align:'right'}));
+  doc.setDrawColor(...NAVY); doc.setLineWidth(1.5); doc.line(40,150,572,150);
+  doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text('BILL TO',51,172); doc.text('PROPERTY / JOB SITE',320,172);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0);
+  const bill=[p.client,p.contactName,...String(p.billAddress||'').split('\n'),p.contactEmail,p.contactPhone].map(x=>(x||'').trim()).filter(Boolean);
+  const site=(p.siteAddress?String(p.siteAddress).split('\n'):[p.property]).map(x=>(x||'').trim()).filter(Boolean);
+  bill.forEach((t,i)=>doc.text(t,51,188+i*13)); site.forEach((t,i)=>doc.text(doc.splitTextToSize(t,230)[0],320,188+i*13));
+  let y=188+Math.max(bill.length,site.length)*13+18;
+  doc.autoTable({startY:y, margin:{left:L0,right:612-R0}, head:[['DESCRIPTION OF CHANGE','AMOUNT']], body:[[{content:String(co.description).toUpperCase(),styles:{fontStyle:'bold'}}, usd(co.amount)]],
+    theme:'grid', styles:{font:'helvetica',fontSize:8.5,cellPadding:6,lineColor:[200,200,200],lineWidth:0.5,textColor:20}, headStyles:{fillColor:NAVY,textColor:255,fontStyle:'bold',fontSize:7.5},
+    columnStyles:{1:{cellWidth:90,halign:'right'}}, didParseCell:d=>{ if(d.section==='head'&&d.column.index===1) d.cell.styles.halign='right'; } });
+  y=doc.lastAutoTable.finalY+22;
+  doc.setFontSize(8); const txt=doc.splitTextToSize(`This change order modifies the scope and price of proposal ${p.num} as described above, under Section 3 (Change Orders) of the PF Building Services Terms and Conditions. All other terms of the original proposal remain in effect. Work on this change begins after both parties sign.`, W);
+  doc.text(txt,L0,y); y+=txt.length*11+28;
+  doc.setFontSize(9.5);
+  ['Client Name: _______________________________________     Date: _____________','Signature: __________________________________________________________________','Title / Company: _____________________________________________________________'].forEach(t=>{ doc.text(t,L0,y); y+=22; });
+  y+=10; doc.text('PF Building Services: ______________________________     Date: _____________',L0,y);
+  doc.setFontSize(8); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'});
+  doc.save(`${id}_${String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40)}.pdf`); toast('Change order PDF downloaded');
 }
 function fmtLong(s){ const d=parse(s); return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+'/'+d.getFullYear(); }
 
