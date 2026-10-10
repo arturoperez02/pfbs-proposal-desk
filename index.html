@@ -337,7 +337,7 @@ const STATUSES = ['Lead','Estimating','Needs Review','Sent','Follow-up','Approve
 const WON = ['Approved','Scheduled','Invoiced','Paid'], LOST = ['Declined','Expired'], OPEN = ['Sent','Follow-up'], PRE = ['Estimating','Needs Review'], PRELOCK = ['Lead','Estimating','Needs Review'];
 const ROLES = ['Owner','Admin','Senior Estimator','Estimator','BD Rep'];
 const DEFAULTS = {
-  goals: [], services: [], frequencies: [['One-time',1],['Annual',1]], leadSources: [], lostReasons: [],
+  reportAppUrl: 'https://pfbs-reports.arturo-perez408.workers.dev', goals: [], services: [], frequencies: [['One-time',1],['Annual',1]], leadSources: [], lostReasons: [],
   clientTypes: [['New client',0.10],['Existing client - new property',0.05],['House account',0]],
   marginFloor: 0.35, belowFloorShare: 0.5, estTiers: [[0,0.02],[0.35,0.035],[0.45,0.05]], expiryDays: 90,
   clarifications: [['All','This pricing does not cover removal of hard water deposits, adhesive residue, paint overspray, or silicone buildup.'],['All','Client/building management is responsible for supplying any inspection certificates required prior to the start of work.']],
@@ -351,7 +351,7 @@ const DEFAULTS = {
 };
 // DB column  <->  app field
 const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer'};
-const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp'};
+const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp',report_sent_on:'reportSentOn',report_url:'reportUrl'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
 const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
@@ -518,6 +518,7 @@ const FILTERS = [
   ['Needs actuals', p=>['Invoiced','Paid'].includes(p.status) && !(p.actuals||[]).length],
   ['Parts to order', p=>outcome(p)==='Won' && partsOpen(p)>0],
   ['Rentals', p=>rentAlerts(p).length>0],
+  ['No service report', p=>['Invoiced','Paid'].includes(p.status) && !p.reportSentOn],
   ['All', ()=>true]
 ];
 function renderPipeline(){
@@ -694,6 +695,10 @@ function drawDrawer(){
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Job actuals</legend>
       <div class="note" style="margin:0 0 8px">Log each visit from the techs' sign-in sheets. Leave a cost blank if it matched the estimate.</div>
       <div id="actBox">${actualsHTML(p, ed)}</div></fieldset>` : ''}
+    ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Service report</legend>
+      <div class="gpline" style="margin:0 0 8px">${p.reportSentOn?`<b style="color:var(--good)">Sent to the client ${fmtD(p.reportSentOn)}</b>${safeLink(p.reportUrl)?` · <a href="${esc(safeLink(p.reportUrl))}" target="_blank" rel="noopener">open the report</a>`:''}`:`Not sent yet.${p.hcpJob?' HCP job '+esc(p.hcpJob)+'.':''}`}</div>
+      ${safeLink(S.reportAppUrl)?`<a class="btn ghost small" href="${esc(safeLink(S.reportAppUrl))}" target="_blank" rel="noopener">Open service report app ↗</a>`:''}
+      <div class="note">Reports are written in the service report app after the crew taps FINISH in HousecallPro. When Oscar approves one, it shows here as sent.</div></fieldset>` : ''}
     <fieldset><legend>Files</legend><div class="grid2">
       ${field('Bid sheet link (SharePoint)','bidLink','url','full','placeholder="https://…sharepoint.com/…"')}
       ${field('Proposal folder link','folderLink','url','full','placeholder="https://…sharepoint.com/…"')}
@@ -2122,7 +2127,8 @@ function renderSettings(){
     <div class="card listedit"><h3>Guardrails</h3>
       <label class="f">Margin floor (GP %)<input id="s-floor" type="number" step="any" value="${S.marginFloor*100}" ${ro}></label>
       <label class="f">BD rate below floor (% of normal)<input id="s-share" type="number" step="any" value="${S.belowFloorShare*100}" ${ro}></label>
-      <label class="f">Proposal valid for (days)<input id="s-exp" type="number" value="${S.expiryDays}" ${ro}></label></div>
+      <label class="f">Proposal valid for (days)<input id="s-exp" type="number" value="${S.expiryDays}" ${ro}></label>
+      <label class="f">Service report app link<input id="s-rpt" type="url" value="${esc(S.reportAppUrl||'')}" ${ro}></label></div>
     ${ta('s-svc','Services', lines(S.services), 'One per line.')}
     ${ta('s-freq','Frequencies', lines(S.frequencies), 'Name | visits per year.')}
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
@@ -2180,7 +2186,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
-      marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, expiryDays:Number($('#s-exp').value)||90 };
+      reportAppUrl:$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, expiryDays:Number($('#s-exp').value)||90 };
     const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
     if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
   }

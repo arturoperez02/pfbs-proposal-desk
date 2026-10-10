@@ -7,13 +7,16 @@
 --   • lift / equipment rentals tracked in the same list (kind = rental)
 --   • monthly report: parts still to order and rentals needing action
 --   • follow-up emails: no price, no signature (your Outlook signature is added)
+--   • service reports: the report app logs 'report sent' on the job (zap_report_sent)
 -- Run once in Supabase: SQL Editor → New query → paste → Run. Safe to run twice.
 -- Needs update 007 first.
 -- =====================================================================
 
 alter table public.proposals
   add column if not exists parts jsonb not null default '[]'::jsonb,
-  add column if not exists buyer text;
+  add column if not exists buyer text,
+  add column if not exists report_sent_on date,     -- service report sent (from the report app, via Zapier)
+  add column if not exists report_url text;
 
 -- parts still to order and rentals needing action, as an HTML block for the monthly report
 create or replace function public.parts_open_html() returns text
@@ -88,6 +91,30 @@ begin
     'text', array_to_string(lines, E'\n\n'),
     'html', (select string_agg('<p>' || public.h(l) || '</p>', '') from unnest(lines) l));
 end $$;
+
+-- Service report app → Proposal Desk: when Oscar approves a report, log it on the job.
+-- ref: any text with the PFBS number; hcp_job: the HousecallPro job ID (same one the HCP Zaps send)
+create or replace function public.zap_report_sent(token text, ref text default null, hcp_job text default null, report_url text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare n text; mt text[]; p public.proposals;
+begin
+  perform public.zap_check(token);
+  perform set_config('pfbs.actor', 'Service report app', true);
+  mt := regexp_match(coalesce(ref,''), 'PFBS[\s#:-]*0*([0-9]{1,6})', 'i');
+  if mt is not null then n := 'PFBS-' || lpad(mt[1], 4, '0'); end if;
+  if n is not null then select * into p from public.proposals where num = n;
+  elsif coalesce(hcp_job,'') <> '' then select * into p from public.proposals pr where pr.hcp_job = zap_report_sent.hcp_job order by pr.num desc limit 1;
+  end if;
+  if p.num is null then return jsonb_build_object('ok', false, 'reason', 'No proposal found for this job.'); end if;
+  update public.proposals set report_sent_on = current_date,
+         report_url = coalesce(nullif(zap_report_sent.report_url,''), public.proposals.report_url)
+   where num = p.num;
+  insert into public.proposal_activity(num, by_name, kind, note)
+  values (p.num, 'Service report app', 'note', 'Service report approved and emailed to the client');
+  return jsonb_build_object('ok', true, 'num', p.num);
+end $$;
+revoke execute on function public.zap_report_sent(text, text, text, text) from public;
+grant execute on function public.zap_report_sent(text, text, text, text) to anon, authenticated;
 
 revoke execute on function public.parts_open_html(), public.with_parts(jsonb) from public, anon, authenticated;
 revoke execute on function public.monthly_report(date), public.zap_monthly_report(text, date) from public;

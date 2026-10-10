@@ -43,17 +43,27 @@ Each one is logged as a follow-up on the proposal, so it moves to the next step.
 
 The same report is in the app: Scorecards → **Monthly report** (any month, with Print / PDF).
 
-## Zap 3 and 4: HousecallPro → Proposal Desk
+## HousecallPro → Proposal Desk (add steps to your existing Zaps)
 
 In HousecallPro, put the PFBS number in the job description when you create the job, for example `PFBS-0801`.
+Use the HCP **Job ID** (the long number) for `hcp_job` everywhere, the same ID your service report Zap already sends.
 
-- **Zap 3 trigger:** Housecall Pro → New Scheduled Job. **Action:** Webhooks POST to `.../rpc/zap_hcp` with data
-  `token` = your key, `event` = `scheduled`, `ref` = the job description (add notes/tags too if you like), `hcp_job` = the job number or ID.
-  The proposal moves to **Scheduled** and gets the HCP job #.
-- **Zap 4 trigger:** Housecall Pro → New Completed Job. Same action with `event` = `completed`. The proposal moves to **Invoiced**.
+- **Job scheduled:** new Zap, trigger Housecall Pro → New Scheduled Job. Action: Webhooks POST to `.../rpc/zap_hcp` with data
+  `token` = your key, `event` = `scheduled`, `ref` = the job description, `hcp_job` = Job ID.
+  The proposal moves to **Scheduled** and gets the HCP job ID.
+- **Job finished:** don't make a new Zap. Open your existing **"PFBS – Job finished → Service report"** Zap and add one more step at the end:
+  Webhooks POST to `.../rpc/zap_hcp` with `token`, `event` = `completed`, `ref` = the job description, `hcp_job` = Job ID.
+  The proposal moves to **Invoiced** at the same moment the service report is created.
 
-HousecallPro's Zapier connection has no "invoice paid" trigger, so **Paid** is still marked in the Proposal Desk (one click in the status dropdown).
-Every change is written to the proposal's activity log as "HousecallPro".
+HousecallPro's Zapier connection has no "invoice paid" trigger, so **Paid** is still marked in the Proposal Desk.
+
+## Service report app → Proposal Desk
+
+Open your Zap that runs when Oscar approves a report (the one that makes the Outlook draft) and add a step:
+Webhooks POST to `.../rpc/zap_report_sent` with `token` = your key, `hcp_job` = the job_id from the report,
+`ref` = the job number or notes (anything containing the PFBS number also works), and `report_url` = the report link if the step has one.
+The job in the Proposal Desk then shows **"Service report sent"** with the date, and the **No service report** filter on the Pipeline
+lists finished jobs whose report hasn't gone out.
 
 ## SharePoint auto-save
 
