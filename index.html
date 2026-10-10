@@ -59,7 +59,7 @@ h3{font-family:var(--display);font-size:19px;margin:0 0 8px;letter-spacing:.02em
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;cursor:pointer;font-size:13px;font-weight:600}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .chip .c{opacity:.75;margin-left:4px}
-input[type=search],input[type=text],input[type=number],input[type=date],input[type=url],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
+input[type=search],input[type=text],input[type=email],input[type=tel],input:not([type]),input[type=number],input[type=date],input[type=url],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
 input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .search{flex:1 1 220px;max-width:340px}
 .btn{border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer}
@@ -131,6 +131,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
 .acc{display:flex;gap:6px;align-items:center;font-size:13px;flex:1}
 .igrid{display:grid;grid-template-columns:1.4fr .7fr 1fr 1fr;gap:8px}.igrid .full{grid-column:1/-1}
 @media (max-width:720px){.igrid{grid-template-columns:1fr 1fr}}
+.sumline{display:flex;gap:6px 16px;flex-wrap:wrap;align-items:baseline;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:14px}
 .itot{margin-top:10px;font-size:13px;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
 td input,td select{padding:5px 8px}
@@ -315,7 +316,7 @@ function opts(list,val){ return '<option value=""></option>'+list.map(v=>`<optio
 function canEditDraft(){ return isNew ? canCreate() : (isManager() || (role()==='Estimator' && orig?.sentBy===me.name)); }
 async function openDrawer(id){
   isNew=!id; orig = id ? P.find(p=>p.num===id) : null;
-  draft = orig ? structuredClone(orig) : {num:'', dateSent:iso(today()), sentBy: me.name, status:'Estimating'};
+  draft = orig ? structuredClone(orig) : {num:'', dateSent:iso(today()), sentBy: me.name, status:'Estimating', items:[{type:'Service',service:'',qty:1,frequency:'',amount:'',description:'',note:''}]};
   hist=[]; drawDrawer();
   $('#scrim').hidden=false; $('#drawer').hidden=false; $('#closeD')?.focus();
   if(id){ const {data}=await sb.from('proposal_history').select('status,changed_at,changed_by').eq('num',id).order('changed_at',{ascending:false}).limit(8); hist=data||[]; if(draft&&draft.num===id) drawDrawer(); }
@@ -359,7 +360,8 @@ function itemsHTML(p, ed){
 }
 function itotText(p){ const L=countedItems(p), per=L.reduce((s,i)=>s+(num(i.amount)||0),0); const off=(p.items||[]).filter(i=>i.type==='Add-on'&&!i.accepted);
   return `Counted: ${L.length} line${L.length===1?'':'s'} · <b>${money(per)}</b> per visit · <b>${money(annual(p))}</b> per year${off.length?` · ${off.length} add-on${off.length===1?'':'s'} offered, not accepted`:''}`; }
-function rerenderItems(){ syncFromItems(draft); const box=$('#itemsBox'); if(box) box.innerHTML=itemsHTML(draft, canEditDraft()); const a=$('#f-amountRO'); if(a) a.value=draft.amount??''; refreshCalcs(); }
+function sumLine(p){ return `<span>Total per visit <b>${money(p.amount)}</b></span><span>${esc(p.service||'—')}</span><span>${esc(p.frequency || ([...new Set(countedItems(p).map(i=>i.frequency).filter(Boolean))].length>1 ? 'Mixed frequencies' : '—'))}</span><span class="note" style="margin:0">Filled in from Scope &amp; pricing below</span>`; }
+function rerenderItems(){ syncFromItems(draft); const box=$('#itemsBox'); if(box) box.innerHTML=itemsHTML(draft, canEditDraft()); const a=$('#sumline'); if(a) a.innerHTML=sumLine(draft); refreshCalcs(); }
 function drawDrawer(){
   const p=draft, ed=canEditDraft();
   const dis = ed?'':'disabled';
@@ -383,7 +385,7 @@ function drawDrawer(){
       ${sel('Estimator (sent by)','sentBy',names,'',!isManager())}
       ${field('Client (company)','client','text','full')}
       ${field('Property name / short label','property','text','full')}
-      ${(p.items||[]).length ? `<label class="f">Service<input value="${esc(p.service||'')}" disabled></label><label class="f">Frequency<input value="${esc(p.frequency||'Mixed')}" disabled></label><label class="f">Amount per visit ($)<input id="f-amountRO" value="${esc(p.amount??'')}" disabled></label>` : `${sel('Service','service',S.services)}${sel('Frequency','frequency',S.frequencies.map(f=>f[0]))}${field('Amount per visit ($)','amount','number')}`}
+      <div class="full sumline" id="sumline">${sumLine(p)}</div>
       ${field('Est. gross profit ($)','gp','number')}
       ${field('Pass-through costs ($)','passThrough','number','','placeholder="lifts, subs"')}
       ${field('HCP job #','hcpJob')}
@@ -454,7 +456,7 @@ function itemEvent(e, final){
   const f=e.target.dataset.it; if(!f) return false; const i=+e.target.closest('[data-i]').dataset.i, it=draft.items[i];
   it[f] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
   if(final && (e.target.tagName==='SELECT' || e.target.type==='checkbox' || f==='group')) { if(f==='service' && !it.description) it.description=it.service; rerenderItems(); }
-  else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); const a=$('#f-amountRO'); if(a) a.value=draft.amount??''; refreshCalcs(); }
+  else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); const a=$('#sumline'); if(a) a.innerHTML=sumLine(draft); refreshCalcs(); }
   return true;
 }
 $('#drawer').addEventListener('input', e=>{ if(itemEvent(e,false)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
@@ -464,7 +466,7 @@ $('#drawer').addEventListener('click', e=>{
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
   else if(t.id==='saveD') save();
   else if(t.id==='pdfD') makePdf(draft);
-  else if(t.dataset.add){ draft.items=[...(draft.items||[])]; if(!draft.items.length && t.dataset.add==='Service' && draft.service && num(draft.amount)!=null) draft.items.push({type:'Service',service:draft.service,qty:1,frequency:draft.frequency||'',amount:num(draft.amount),description:draft.service}); else draft.items.push({type:t.dataset.add,service:t.dataset.add==='Add-on'?'':(draft.service||''),qty:1,frequency:draft.frequency||'',amount:'',description:'',accepted:false}); rerenderItems(); }
+  else if(t.dataset.add){ draft.items=[...(draft.items||[])]; if(!draft.items.length && t.dataset.add==='Service' && num(draft.amount)!=null) draft.items.push({type:'Service',service:draft.service||'',qty:1,frequency:draft.frequency||'',amount:num(draft.amount),description:draft.service||''}); else draft.items.push({type:t.dataset.add,service:t.dataset.add==='Add-on'?'':(draft.service||''),qty:1,frequency:draft.frequency||'',amount:'',description:'',accepted:false}); rerenderItems(); }
   else if(t.dataset.del!=null){ draft.items.splice(+t.dataset.del,1); rerenderItems(); }
   else if(t.id==='approveSend'){ draft.dateSent=iso(today()); setStatus('Sent'); save(); }
   else if(t.dataset.st) setStatus(t.dataset.st);
