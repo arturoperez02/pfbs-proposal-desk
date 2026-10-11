@@ -216,6 +216,7 @@ a.linkout{font-size:12px;font-weight:600;color:var(--accent)}
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
+input.qa{width:86px;padding:6px 8px} table.qatable td{vertical-align:middle}
 .revb{display:inline-block;font-size:10.5px;font-weight:700;color:var(--info);background:var(--info-bg);border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:middle}.revb.rnw{color:var(--warn);background:var(--warn-bg)}
 .revline{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:6px}
 .p-lead{background:var(--gold-soft);color:var(--ink)}
@@ -235,7 +236,7 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="pipeline" aria-selected="true">Pipeline</button>
     <button role="tab" data-tab="leads" aria-selected="false">Leads</button>
     <button role="tab" data-tab="sales" aria-selected="false" id="salesTab" hidden>My Sales</button>
-    <button role="tab" data-tab="orders" aria-selected="false" id="ordersTab" hidden>Orders</button>
+    <button role="tab" data-tab="orders" aria-selected="false" id="ordersTab" hidden>Jobs</button>
     <button role="tab" data-tab="scorecard" aria-selected="false">Scorecards</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
@@ -269,6 +270,7 @@ td input,td select{padding:5px 8px}
     <div class="toolbar">
       <div id="chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       <input type="search" class="search" id="q" placeholder="Search client, property, PFBS #" aria-label="Search proposals">
+      <select id="byEst" hidden aria-label="Estimator" style="max-width:200px"></select>
     </div>
     <div class="tablewrap"><table>
       <thead><tr><th>PFBS #</th><th class="hide-sm">Sent</th><th>Client</th><th class="hide-sm">Property</th><th class="r">Amount</th><th>Status</th><th class="hide-sm r">Days open</th><th class="hide-sm">Follow-up</th><th class="hide-sm">By</th></tr></thead>
@@ -288,7 +290,8 @@ td input,td select{padding:5px 8px}
     <div class="toolbar" style="justify-content:space-between">
       <div><h2 id="salesTitle">My Sales</h2><div class="sub" id="salesSub"></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <select id="salesRep" hidden aria-label="BD rep"></select>
+        <div id="salesKind" hidden style="display:flex;gap:6px"><button class="chip" data-kind="est" aria-pressed="true">Estimators</button><button class="chip" data-kind="bd" aria-pressed="false">BD reps</button></div>
+        <select id="salesRep" hidden aria-label="Person"></select>
         <div id="salesPeriod" style="display:flex;gap:6px"><button class="chip" data-per="month" aria-pressed="true">This month</button><button class="chip" data-per="quarter" aria-pressed="false">This quarter</button><button class="chip" data-per="year" aria-pressed="false">This year</button></div>
         <button class="btn" id="salesLead">+ New lead</button>
       </div>
@@ -297,8 +300,9 @@ td input,td select{padding:5px 8px}
   </section>
 
   <section id="view-orders" hidden>
-    <div class="toolbar" style="justify-content:space-between"><div><h2>Orders</h2><div class="sub">Lift rentals and parts for approved jobs. Click a row to open the job.</div></div>
-      <div id="ordChips" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
+    <div class="toolbar" style="justify-content:space-between"><div><h2>Jobs</h2><div class="sub">Approved work: what's coming up, hours to log, and the parts and rentals to handle. Click a row to open the job.</div></div></div>
+    <div id="jobsBody"></div>
+    <div class="toolbar" style="justify-content:space-between;margin-top:20px"><h3 style="margin:0">Parts &amp; rentals</h3><div id="ordChips" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
     <div id="ordersBody"></div>
   </section>
 
@@ -514,15 +518,20 @@ const FILTERS = [
   ['Won', p=>outcome(p)==='Won'],
   ['Lost', p=>outcome(p)==='Lost'],
   ['Renewals due', p=>renewalDue(p)],
-  ['Needs actuals', p=>['Invoiced','Paid'].includes(p.status) && !(p.actuals||[]).length],
+  ['Needs actuals', p=>['Invoiced','Paid'].includes(p.status) && !hasActuals(p)],
   ['Parts to order', p=>outcome(p)==='Won' && partsOpen(p)>0],
   ['Rentals', p=>rentAlerts(p).length>0],
   ['No service report', p=>['Invoiced','Paid'].includes(p.status) && !p.reportSentOn],
   ['All', ()=>true]
 ];
+let byEst='';
+function estNames(){ return [...new Set(TEAM.filter(t=>t.role!=='BD Rep'&&t.active).map(t=>t.name).concat(P.map(p=>p.sentBy).filter(Boolean)))].sort(); }
 function renderPipeline(){
-  const open=P.filter(p=>outcome(p)==='Open'), won=P.filter(p=>outcome(p)==='Won'), lost=P.filter(p=>outcome(p)==='Lost');
-  const due=P.filter(FILTERS[2][1]).length, stale=P.filter(FILTERS[3][1]).length, review=P.filter(FILTERS[1][1]).length;
+  const bsel=$('#byEst'); bsel.hidden=!isManager();
+  if(isManager()){ const n=estNames(); if(byEst && !n.includes(byEst)) byEst=''; bsel.innerHTML=`<option value="">Everyone</option>`+n.map(x=>`<option ${x===byEst?'selected':''}>${esc(x)}</option>`).join(''); }
+  const PV = byEst ? P.filter(p=>p.sentBy===byEst) : P;
+  const open=PV.filter(p=>outcome(p)==='Open'), won=PV.filter(p=>outcome(p)==='Won'), lost=PV.filter(p=>outcome(p)==='Lost');
+  const due=PV.filter(FILTERS[2][1]).length, stale=PV.filter(FILTERS[3][1]).length, review=PV.filter(FILTERS[1][1]).length;
   const sum=a=>a.reduce((s,p)=>s+(num(p.amount)||0),0);
   const rate=(won.length+lost.length)?won.length/(won.length+lost.length):null;
   $('#kpis').innerHTML = [
@@ -533,13 +542,13 @@ function renderPipeline(){
     ['Follow-ups due', due, 'call or email this week', due?'warn':''],
     ['Past 90 days', stale, 'mark Expired or re-issue', stale?'alert':'']
   ].map(([l,v,s,c])=>`<div class="kpi ${c}"><div class="l">${l}</div><div class="v num">${v}</div><div class="sub">${s}</div></div>`).join('');
-  $('#chips').innerHTML = FILTERS.map(([n,f])=>`<button class="chip" aria-pressed="${filter===n}" data-f="${esc(n)}">${n}<span class="c num">${P.filter(f).length}</span></button>`).join('');
+  $('#chips').innerHTML = FILTERS.map(([n,f])=>`<button class="chip" aria-pressed="${filter===n}" data-f="${esc(n)}">${n}<span class="c num">${PV.filter(f).length}</span></button>`).join('');
   const fn=FILTERS.find(f=>f[0]===filter)[1], q=query.trim().toLowerCase();
-  const list=P.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
+  const list=PV.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   $('#rows').innerHTML = list.length ? list.map(p=>{
     const d=daysOpen(p), f=followUp(p);
     return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}${outcome(p)==='Won'&&partsOpen(p)?` <span class="revb ${partsLate(p)?'ptlate':''}" title="${partsOpen(p)} part(s) still to order">Parts</span>`:''}${rentAlerts(p).length?` <span class="revb ${rentAlerts(p).some(a=>a[0]==='bad')?'ptlate':''}" title="${esc(rentAlerts(p).map(a=>a[1]).join('; '))}">Lift</span>`:''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
-  }).join('') : `<tr><td colspan="9" class="empty">${P.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
+  }).join('') : `<tr><td colspan="9" class="empty">${PV.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
   $('#newBtn').hidden = !canCreate(); $('#leadBtn').hidden = !canLead();
 }
 
@@ -694,7 +703,6 @@ function drawDrawer(){
     <fieldset><legend>Lift &amp; equipment rentals</legend><div id="rtBox">${rentalsTrackHTML(p, ed)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Change orders</legend><div id="coBox">${coHTML(p, ed)}</div></fieldset>` : ''}
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Job actuals</legend>
-      <div class="note" style="margin:0 0 8px">Log each visit from the techs' sign-in sheets. Leave a cost blank if it matched the estimate.</div>
       <div id="actBox">${actualsHTML(p, ed)}</div></fieldset>` : ''}
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Service report</legend>
       <div class="gpline" style="margin:0 0 8px">${p.reportSentOn?`<b style="color:var(--good)">Sent to the client ${fmtD(p.reportSentOn)}</b>${safeLink(p.reportUrl)?` · <a href="${esc(safeLink(p.reportUrl))}" target="_blank" rel="noopener">open the report</a>`:''}`:`Not sent yet.${p.hcpJob?' HCP job '+esc(p.hcpJob)+'.':''}`}</div>
@@ -731,7 +739,7 @@ async function save(after, o={}){
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
   if(draft.status==='Lead' && !draft.sentBy){ $('#dmsg').textContent='Assign an estimator before saving the lead.'; return; }
   const btn=$('#saveD'); btn.disabled=true; $('#dmsg').textContent='Saving…';
-  syncFromItems(draft); const jc=jobCompare(draft); draft.actualsSummary = jc ? {rev:Math.round(jc.rev), estGP:jc.estGP==null?null:Math.round(jc.estGP), actGP:Math.round(jc.actGP), estHrs:jc.estHrs, actHrs:jc.actHrs, lastDate:(draft.actuals||[]).map(v=>v.date).filter(Boolean).sort().at(-1)||iso(today())} : null;
+  syncFromItems(draft); draft.actualsSummary = actSummary(draft);
   const row=toRow(draft); if(isNew) delete row.num;
   if(!canPayComm()){ delete row.comm_paid_on; delete row.est_comm_paid_on; }
   const res = isNew ? await sb.from('proposals').insert(row).select().single()
@@ -946,6 +954,50 @@ function renderOrders(){
 $('#ordChips').addEventListener('click', e=>{ const b=e.target.closest('[data-of]'); if(b){ ordFilter=b.dataset.of; renderOrders(); } });
 $('#ordersBody').addEventListener('click', e=>{ if(e.target.closest('a')) return; const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
 $('#ordersBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); } });
+
+
+// ---------- Jobs tab: approved work, hours to log (office / project manager) ----------
+function renderJobs(){
+  const up=P.filter(p=>['Approved','Scheduled'].includes(p.status)).sort((a,b)=>(a.status==='Approved'?0:1)-(b.status==='Approved'?0:1) || String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
+  const hrs=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !hasActuals(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
+  const job=p=>`<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`;
+  const needs=p=>{ const n=[]; const po=partsOpen(p), ra=rentAlerts(p);
+    if(p.status==='Approved') n.push('<span class="flag warn">Not scheduled</span>');
+    if(po) n.push(`<span class="flag ${partsLate(p)?'bad':'warn'}">${po} part${po===1?'':'s'} to order</span>`);
+    for(const a of ra) n.push(`<span class="flag ${a[0]}">${esc(a[1])}</span>`);
+    return n.join('<br>') || '<span class="note" style="margin:0">Ready</span>'; };
+  const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
+  $('#jobsBody').innerHTML = `<div class="cards">
+  <div class="card"><h3>Approved &amp; scheduled (${up.length})</h3>
+    <div class="tablewrap"><table><thead><tr><th>Job</th><th>Status</th><th class="hide-sm">Approved</th><th class="hide-sm">Estimator</th><th class="r">Amount</th><th>Needs</th></tr></thead><tbody>
+    ${up.length?up.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm num">${fmtD(p.dateResolved)}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${money(wonAmt(p))}</td><td>${needs(p)}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="empty">No approved or scheduled jobs right now.</td></tr>'}</tbody></table></div>
+    <div class="note">Change the status to Scheduled once the job is on the calendar, and to Invoiced when it's done.</div></div>
+  <div class="card"><h3>Log actual hours (${hrs.length})</h3>
+    <div class="note" style="margin:0 0 8px">Finished jobs with no hours yet. Type the total tech hours from the crew's text (2 techs × 3 days × 8 hrs = 48) and any lift or material bills, then Save. Leave a cost blank if it matched the estimate.</div>
+    <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th class="r hide-sm">Estimated</th><th>Tech hours</th><th>Lift / sub $</th><th>Materials $</th><th>Other $</th><th></th></tr></thead><tbody>
+    ${hrs.length?hrs.map(p=>{ const e=estPerVisit(p), n=visits(p)>1?' /visit':'';
+      return `<tr data-qrow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="r num hide-sm">${e?fmtH(e.hrs)+' hrs'+n:'—'}</td><td>${cell(p,'hrs',e?fmtH(e.hrs):'hrs')}</td><td>${cell(p,'rent',e?Math.round(e.rent):'0')}</td><td>${cell(p,'mat',e?Math.round(e.mat):'0')}</td><td>${cell(p,'misc',e?Math.round(e.misc):'0')}</td><td>${canEditRow(p)?`<button class="btn small" data-qsave="${esc(p.num)}">Save</button>`:''}</td></tr>`; }).join('')
+      : '<tr><td colspan="7" class="empty">All finished jobs have their hours. Nice.</td></tr>'}</tbody></table></div>
+    <div class="note">Recurring contracts: log one visit here, then add more visits from the job.</div></div>
+  </div>`;
+}
+$('#jobsBody').addEventListener('click', async e=>{
+  const o=e.target.closest('[data-open]'); if(o){ e.preventDefault(); openDrawer(o.dataset.open); return; }
+  const b=e.target.closest('[data-qsave]');
+  if(b){ const p=P.find(x=>x.num===b.dataset.qsave); if(!p) return; const tr=b.closest('tr'), v={date:iso(today())};
+    for(const i of tr.querySelectorAll('[data-qa]')) v[i.dataset.qa]=i.value.trim();
+    if(!(num(v.hrs)>0)){ toast('Type the total tech hours first.'); tr.querySelector('[data-qa="hrs"]').focus(); return; }
+    b.disabled=true; const next={...p, actuals:[v]}; const row={actuals:next.actuals}; if(!COLS||COLS.has('actuals_summary')) row.actuals_summary=actSummary(next);
+    const {error}=await sb.from('proposals').update(row).eq('num',p.num);
+    if(error){ b.disabled=false; toast(error.message); return; }
+    p.actuals=next.actuals; p.actualsSummary=row.actuals_summary??p.actualsSummary;
+    const jc=jobCompare(p); await addActivity(p.num,'note',`Actual hours logged: ${fmtH(num(v.hrs))} tech hours${jc&&jc.rev?` · actual margin ${pct(jc.actGP/jc.rev)}`:''}`);
+    toast(`${p.num}: ${fmtH(num(v.hrs))} hours saved${jc&&jc.rev?` · actual margin ${pct(jc.actGP/jc.rev)}`:''}`); renderJobs(); return; }
+  if(e.target.closest('input,button,a')) return;
+  const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id);
+});
+$('#jobsBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const q=e.target.closest('tr[data-qrow]'); if(q){ q.querySelector('[data-qsave]')?.click(); return; } const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); } });
 
 // ---------- photos (stored in Supabase Storage, printed on the client PDF) ----------
 const PH_BUCKET='proposal-photos', PHURL={};
@@ -1166,6 +1218,7 @@ $('#rows').addEventListener('change', async e=>{
 $('#rows').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id);} });
 $('#chips').addEventListener('click', e=>{ const b=e.target.closest('[data-f]'); if(b){ filter=b.dataset.f; renderPipeline(); } });
 $('#q').addEventListener('input', e=>{ query=e.target.value; renderPipeline(); });
+$('#byEst').addEventListener('change', e=>{ byEst=e.target.value; renderPipeline(); });
 $('#newBtn').addEventListener('click', ()=>openDrawer(null));
 $('#leadBtn').addEventListener('click', ()=>openDrawer(null,{lead:true}));
 
@@ -1225,13 +1278,17 @@ function estPerVisit(p){
   for(const i of L){ const c=estCalc(i.estimate); z.hrs+=c.techHours; z.labor+=c.laborCost; z.mat+=c.mat+c.tax; z.rent+=c.rent; z.eq+=c.eq; z.misc+=c.misc; z.cost+=c.cost; z.techs=Math.max(z.techs,c.crew.techs); z.hpt=Math.max(z.hpt,c.crew.maxHrs); }
   return z;
 }
+const visitHrs = v => (v && v.hrs!=null && v.hrs!=='') ? (num(v.hrs)||0) : (num(v?.techs)||0)*(num(v?.hpt)||0) + (num(v?.extraHrs)||0);
+const hasActuals = p => (p.actuals||[]).some(v=>visitHrs(v)>0);
+const isRecurring = p => visits(p)>1;
+function actSummary(p){ const jc=jobCompare(p); return jc ? {rev:Math.round(jc.rev), estGP:jc.estGP==null?null:Math.round(jc.estGP), actGP:Math.round(jc.actGP), estHrs:jc.estHrs, actHrs:jc.actHrs, lastDate:(p.actuals||[]).map(v=>v.date).filter(Boolean).sort().at(-1)||iso(today())} : null; }
 function jobCompare(p){
-  const V=(p.actuals||[]).filter(v=>v && (num(v.techs)||num(v.hpt)||v.date)); if(!V.length) return null;
+  const V=(p.actuals||[]).filter(v=>visitHrs(v)>0); if(!V.length) return null;
   const est=estPerVisit(p), price=num(p.amount)||0, n=V.length, burden=num(S.est.burden)||0;
   const wage = est && est.hrs ? est.labor/est.hrs : costRate(expertRole()[0])*(1+burden);
   const estCostPV = est ? est.cost : (num(p.gp)!=null ? price-num(p.gp) : null);
   let actHrs=0, actCost=0;
-  for(const v of V){ const h=(num(v.techs)||0)*(num(v.hpt)||0) + (num(v.extraHrs)||0); actHrs+=h;
+  for(const v of V){ const h=visitHrs(v); actHrs+=h;
     const pick=(k,e)=> (v[k]===''||v[k]==null) ? (est?est[e]:0) : (num(v[k])||0);
     actCost += h*wage + pick('mat','mat') + pick('rent','rent') + (est?est.eq:0) + pick('misc','misc'); }
   const coR=coRevenue(p), coC=approvedCOs(p).reduce((s,c)=>s+(num(c.cost)||0),0);
@@ -1240,14 +1297,17 @@ function jobCompare(p){
           hrsVar: estHrs ? (actHrs-estHrs)/estHrs : null};
 }
 function actualsHTML(p, ed){
-  const V=p.actuals||[], dis=ed?'':'disabled', est=estPerVisit(p);
-  const inp=(i,k,l,extra='')=>`<label class="f">${l}<input ${k==='date'?'type="date"':k==='notes'?'':'type="number" step="any" inputmode="decimal"'} data-av="${i}.${k}" value="${esc((V[i]||{})[k]??'')}" ${extra} ${dis}></label>`;
-  const cards=V.map((v,i)=>`<div class="item visit"><div class="itop"><span class="ibadge">Visit ${i+1}</span><span style="flex:1"></span>${ed?`<button type="button" class="btn ghost small" data-avdel="${i}">Remove</button>`:''}</div>
-    <div class="vgrid">${inp(i,'date','Date')}${inp(i,'techs','Techs')}${inp(i,'hpt','Hrs / tech')}
-      ${inp(i,'rent','Lift / sub $',`placeholder="${est?Math.round(est.rent)+' est.':'0'}"`)}${inp(i,'mat','Materials $',`placeholder="${est?Math.round(est.mat)+' est.':'0'}"`)}${inp(i,'misc','Other $',`placeholder="${est?Math.round(est.misc)+' est.':'0'}"`)}
-      <div class="full">${inp(i,'notes','Notes','placeholder="e.g. finished early, no screens on east side"')}</div></div></div>`).join('');
-  return `<div class="items">${cards}</div>
-    ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="avAdd">+ Log visit</button>${est?`<span class="note" style="margin:0">Estimated per visit: ${est.techs} techs × ${fmtH(est.hpt)} hrs</span>`:''}</div>`:''}
+  const rec=isRecurring(p), est=estPerVisit(p), dis=ed?'':'disabled';
+  const V=(p.actuals||[]).length ? p.actuals : [{}];   // one whole-job entry; recurring contracts add one per visit
+  const val=(v,k)=> k==='hrs' ? ((v.hrs!=null&&v.hrs!=='') ? v.hrs : (visitHrs(v)||'')) : (k==='date' ? (v.date||'') : (v[k]??''));
+  const inp=(i,v,k,l,extra='')=>`<label class="f">${l}<input ${k==='date'?'type="date"':k==='notes'?'':'type="number" step="any" inputmode="decimal"'} data-av="${i}.${k}" value="${esc(val(v,k))}" ${extra} ${dis}></label>`;
+  const cards=V.map((v,i)=>`<div class="item visit"><div class="itop"><span class="ibadge">${rec?'Visit '+(i+1):V.length>1?'Part '+(i+1):'Whole job'}</span><span style="flex:1"></span>${ed&&V.length>1?`<button type="button" class="btn ghost small" data-avdel="${i}">Remove</button>`:''}</div>
+    <div class="vgrid">${inp(i,v,'hrs','Total tech hours',`placeholder="${est?fmtH(est.hrs)+' est.':'all techs, all days'}"`)}${inp(i,v,'date',rec?'Visit date':'Date finished')}
+      ${inp(i,v,'rent','Lift / sub $',`placeholder="${est?Math.round(est.rent)+' est.':'0'}"`)}${inp(i,v,'mat','Materials $',`placeholder="${est?Math.round(est.mat)+' est.':'0'}"`)}${inp(i,v,'misc','Other $',`placeholder="${est?Math.round(est.misc)+' est.':'0'}"`)}
+      <div class="full">${inp(i,v,'notes','Notes','placeholder="e.g. finished a day early, no screens on east side"')}</div></div></div>`).join('');
+  return `<div class="note" style="margin:0 0 8px">Add up every tech's hours for the ${rec?'visit':'whole job'}: 2 techs × 3 days × 8 hrs = <b>48</b>.${est?` Estimated: <b>${fmtH(est.hrs)} tech hours</b> (${est.techs} tech${est.techs===1?'':'s'}).`:''} Leave a cost blank if it matched the estimate.</div>
+    <div class="items">${cards}</div>
+    ${ed&&rec?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="avAdd">+ Log another visit</button><span class="note" style="margin:0">${esc(p.frequency)} contract: one entry per visit.</span></div>`:''}
     <div id="cmpBox">${compareHTML(p)}</div>`;
 }
 function compareHTML(p){
@@ -1261,10 +1321,13 @@ function compareHTML(p){
     <tr><td>Margin</td><td class="r num">${c.estGP==null?'—':m(c.estGP)}</td><td class="r num"><b>${m(c.actGP)}</b></td><td></td></tr>
   </tbody></table></div>${estPerVisit(p)?'':'<div class="note" style="color:var(--warn)">No estimate on this proposal: enter every actual cost (lift, materials, other) or the margin will look too high. Hours cannot be compared.</div>'}`;
 }
-$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.av; if(!k) return; const [i,f]=k.split('.'); draft.actuals[+i][f]=e.target.value; const b=$('#cmpBox'); if(b) b.innerHTML=compareHTML(draft); }, true);
+$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.av; if(!k) return; const [i,f]=k.split('.');
+  if(!(draft.actuals||[]).length) draft.actuals=[{date:iso(today())}];
+  const v=draft.actuals[+i]; v[f]=e.target.value; if(f==='hrs'){ delete v.techs; delete v.hpt; delete v.extraHrs; }
+  const b=$('#cmpBox'); if(b) b.innerHTML=compareHTML(draft); }, true);
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
-  if(t.id==='avAdd'){ const est=estPerVisit(draft); draft.actuals=[...(draft.actuals||[]), {date:iso(today()), techs: est?est.techs:'', hpt:'', rent:'', mat:'', misc:'', notes:''}]; $('#actBox').innerHTML=actualsHTML(draft, canEditDraft()); }
+  if(t.id==='avAdd'){ draft.actuals=[...((draft.actuals||[]).length?draft.actuals:[{date:iso(today())}]), {date:iso(today()), hrs:'', rent:'', mat:'', misc:'', notes:''}]; $('#actBox').innerHTML=actualsHTML(draft, canEditDraft()); }
   if(t.dataset.avdel!=null){ draft.actuals.splice(+t.dataset.avdel,1); $('#actBox').innerHTML=actualsHTML(draft, canEditDraft()); }
 });
 
@@ -2043,12 +2106,17 @@ function funnelHTML(mine, per){
   return rows.map(([l,n,of],i)=>`${i===2?'<div style="height:6px"></div>':''}<div class="stage"><div><b>${l}</b></div><div class="track"><div class="fill ${l==='Won'?'done':''}" style="width:${(n?Math.max(3,n/max*100):0).toFixed(1)}%"></div></div><div class="r">${n}${of!=null?` <span class="note" style="margin:0">· ${of?pct(n/of):'—'}</span>`:''}</div></div>`).join('')
     + `<div class="note">Prospects and leads started ${PER_LABEL[per]}, and how far they've gotten. The % is the share that made it past the line above.</div>`;
 }
+let salesKind='est', estRep=null;
 function renderSales(){
+  if(role()==='BD Rep') salesKind='bd'; else if(role()==='Estimator') salesKind='est';
+  $('#salesKind').hidden=!isManager();
+  for(const b of document.querySelectorAll('#salesKind [data-kind]')) b.setAttribute('aria-pressed', b.dataset.kind===salesKind);
+  if(salesKind==='est') return renderEstSales();
   const mgr=isManager(), names=bdNames();
   if(role()==='BD Rep') salesRep=me.name; else if(!names.includes(salesRep)) salesRep=names[0]||null;
   const pick=$('#salesRep'); pick.hidden=!mgr || !names.length;
   if(mgr) pick.innerHTML=names.map(n=>`<option ${n===salesRep?'selected':''}>${esc(n)}</option>`).join('');
-  $('#salesTitle').textContent = role()==='BD Rep' ? 'My Sales' : 'BD Sales';
+  $('#salesTitle').textContent = role()==='BD Rep' ? 'My Sales' : 'Sales';
   $('#salesLead').hidden=!canLead();
   for(const b of document.querySelectorAll('#salesPeriod [data-per]')) b.setAttribute('aria-pressed', b.dataset.per===salesPer);
   if(!salesRep){ $('#salesSub').textContent=''; $('#salesBody').innerHTML=`<div class="card"><div class="empty">No BD reps yet. When you hire one, add them on the Settings tab with the BD Rep role and credit them on proposals (BD rep field). Their dashboard shows up here.</div></div>`; return; }
@@ -2112,8 +2180,81 @@ function renderSales(){
       <div class="note">Commission = gross profit (with approved change orders) × your client-type rate, half rate below the ${pct(S.marginFloor)} margin floor. Shows jobs paid ${L} plus anything still owed.</div></div>
   </div>`;
 }
+
+function renderEstSales(){
+  const mgr=isManager(), names=estNames();
+  if(!mgr) estRep=me.name; else if(!names.includes(estRep)) estRep = names.includes(me.name) ? me.name : (names[0]||null);
+  const pick=$('#salesRep'); pick.hidden=!mgr || !names.length;
+  if(mgr) pick.innerHTML=names.map(n=>`<option ${n===estRep?'selected':''}>${esc(n)}</option>`).join('');
+  $('#salesTitle').textContent = mgr ? 'Sales' : 'My Sales';
+  $('#salesLead').hidden=true;
+  for(const b of document.querySelectorAll('#salesPeriod [data-per]')) b.setAttribute('aria-pressed', b.dataset.per===salesPer);
+  const per=salesPer, L=PER_LABEL[per], mine=P.filter(p=>p.sentBy===estRep), comm=isEstimator(estRep);
+  const sum=(a,f)=>a.reduce((s,p)=>s+(num(f(p))||0),0);
+  const toQuote=mine.filter(p=>p.status==='Lead'||PRE.includes(p.status));
+  const sent=mine.filter(p=>p.dateSent && !PRELOCK.includes(p.status) && inPer(p.dateSent,per));
+  const out=mine.filter(p=>outcome(p)==='Open');
+  const due=out.filter(p=>{ const f=followUp(p); return f && f<=today(); });
+  const won=mine.filter(p=>outcome(p)==='Won' && inPer(p.dateResolved||p.dateSent,per));
+  const lost=mine.filter(p=>outcome(p)==='Lost' && inPer(p.dateResolved||p.dateSent,per));
+  const rate=(won.length+lost.length)? won.length/(won.length+lost.length) : null;
+  const wg=won.filter(p=>num(p.gp)!=null), margin=sum(wg,p=>p.amount) ? sum(wg,gpAll)/sum(wg,wonAmt) : null;
+  const earned=mine.filter(p=>estComm(p)!=null && inPer(p.datePaid,per)), owed=mine.filter(p=>estComm(p)>0 && !p.estCommPaidOn);
+  const closed=mine.map(p=>({p,c:jobCompare(p)})).filter(x=>x.c).sort((a,b)=>String(b.p.actualsSummary?.lastDate||b.p.num).localeCompare(String(a.p.actualsSummary?.lastDate||a.p.num)));
+  const ch=closed.filter(x=>x.c.estHrs), eh=ch.reduce((s,x)=>s+x.c.estHrs,0), ah=ch.reduce((s,x)=>s+x.c.actHrs,0), hv=eh?(ah-eh)/eh:null;
+  const waitDays=p=>days(parse(leadDate(p)), today());
+  const sgn=v=>v>0?'+':v<0?'−':'';
+  if(!estRep){ $('#salesSub').textContent=''; $('#salesBody').innerHTML='<div class="card"><div class="empty">No estimators yet.</div></div>'; return; }
+  $('#salesSub').textContent = `${estRep} · ${L} (${fmtD(iso(perStart(per)))} – ${fmtD(iso(new Date(perEnd(per)-864e5)))})`;
+  const kpi=(l,v,cls='',sub='')=>`<div class="kpi ${cls}"><div class="l">${l}</div><div class="v">${v}</div>${sub?`<div class="note" style="margin:2px 0 0">${sub}</div>`:''}</div>`;
+  const late=toQuote.filter(p=>waitDays(p)>3).length;
+  const st=[['To quote',toQuote],['Out',out],['Won',won]];
+  const maxAmt=Math.max(1,...st.map(([,a])=>sum(a,wonAmt))), maxN=Math.max(1,...st.map(([,a])=>a.length));
+  const stage=st.map(([n,a])=>{ const amt=sum(a,wonAmt), w=maxAmt>1? amt/maxAmt : a.length/maxN;
+    return `<div class="stage"><div><b>${n}</b></div><div class="track"><div class="fill ${n==='Won'?'done':''}" style="width:${(Math.max(a.length?3:0,w*100)).toFixed(1)}%"></div></div><div class="r">${a.length} · ${money(amt)}</div></div>`; }).join('');
+  const g=goalFor(estRep), wonQ=sum(mine.filter(p=>outcome(p)==='Won' && inPer(p.dateResolved||p.dateSent,'quarter')),wonAmt);
+  const recent=mine.filter(p=>outcome(p)==='Won' && (p.dateResolved||p.dateSent) && days(parse(p.dateResolved||p.dateSent),today())<=90).sort((a,b)=>String(b.dateResolved).localeCompare(String(a.dateResolved)));
+  const stmt=mine.filter(p=>estComm(p)!=null && (inPer(p.datePaid,per) || (!p.estCommPaidOn && estComm(p)>0))).sort((a,b)=>String(b.datePaid).localeCompare(String(a.datePaid)));
+  const jm=p=>{ const c=jobCompare(p); return c&&c.rev ? pct(c.actGP/c.rev) : '—'; };
+  $('#salesBody').innerHTML = `
+  <div class="kpis">
+    ${kpi('To quote',toQuote.length, late?'alert':'', late?`${late} waiting over 3 days`:'leads and estimates in progress')}
+    ${kpi('Proposals sent',sent.length,'',money(sum(sent,wonAmt))+' '+L)}
+    ${kpi('Out with clients',money(sum(out,wonAmt)), due.length?'warn':'', `${out.length} open${due.length?` · ${due.length} follow-up${due.length===1?'':'s'} due`:''}`)}
+    ${kpi('Won',money(sum(won,wonAmt)),'',`${won.length} job${won.length===1?'':'s'} ${L}`)}
+    ${kpi('Win rate',pct(rate),'',`${won.length} won · ${lost.length} lost`)}
+    ${kpi('Margin on won',pct(margin), margin!=null&&margin<S.marginFloor?'alert':'','as estimated')}
+    ${comm?kpi('Commission earned',money(sum(earned,estComm)),'','on jobs paid '+L):''}
+    ${comm?kpi('Commission owed',money(sum(owed,estComm)), owed.length?'warn':'','earned, not paid yet'):''}
+    ${kpi('Hours vs estimate', hv==null?'—':sgn(hv)+pct(Math.abs(hv)), hv==null?'':Math.abs(hv)<=0.15?'':'warn', ch.length?`${ch.length} closed job${ch.length===1?'':'s'} · within ±15% is accurate`:'no hours logged yet')}
+  </div>
+  <div class="sales-grid">
+    <div class="card"><h3>Pipeline</h3>${stage}<div class="note">To quote and Out are right now. Won is ${L}. Amounts include approved change orders.</div></div>
+    ${g.won?`<div class="card"><h3>Goal</h3>${goalBar('Won this quarter', wonQ, g.won, 'quarter', money)}<div class="note">The line is where you should be today to hit the goal.</div></div>`:''}
+  </div>
+  <div class="cards" style="margin-top:16px">
+    <div class="card"><h3>To quote (${toQuote.length})</h3>${rowsTable(['PFBS #','Client','Property','Status','Days waiting'], toQuote.sort((a,b)=>waitDays(b)-waitDays(a)),
+      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), `<span class="pill ${pillClass(p.status)}">${esc(p.status)}</span>`, (d=>`<span class="${d>3?'flag bad':''}">${d}</span>`)(waitDays(p))],
+      'Nothing waiting for a quote.')}<div class="note">Days since the lead came in. Red after 3 days.</div></div>
+    <div class="card"><h3>Out with clients (${out.length})</h3>${rowsTable(['PFBS #','Client','Property','Sent','Follow-up','Amount'], out.sort((a,b)=>(followUp(a)||0)-(followUp(b)||0)),
+      p=>{ const f=followUp(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), fmtD(p.dateSent), f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:'', money(wonAmt(p))]; },
+      'Nothing out with clients right now.')}</div>
+    <div class="card"><h3>Won (last 90 days)</h3>${rowsTable(['PFBS #','Client','Property','Job status','Margin','Amount'], recent,
+      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), `<span class="pill ${pillClass(p.status)}">${esc(p.status)}</span>`, pct(gpPct(p)), money(wonAmt(p))],
+      'No wins in the last 90 days yet.')}</div>
+    <div class="card"><h3>Estimate vs actual</h3>${rowsTable(['PFBS #','Client','Est. hours','Actual hours','Est. margin','Actual margin'], closed.slice(0,10).map(x=>x.p),
+      p=>{ const c=jobCompare(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), c.estHrs==null?'—':fmtH(c.estHrs), `${fmtH(c.actHrs)}${c.hrsVar!=null?` <span class="${Math.abs(c.hrsVar)<=0.15?'up':'down'}">(${sgn(c.hrsVar)}${pct(Math.abs(c.hrsVar))})</span>`:''}`, c.estGP!=null&&c.rev?pct(c.estGP/c.rev):'—', `<b>${jm(p)}</b>`]; },
+      'Shows up once the office logs actual hours on your finished jobs.')}<div class="note">Your last 10 jobs with hours logged. Green: within ±15% of your estimate.</div></div>
+    ${comm?`<div class="card"><h3>Commission statement</h3>${rowsTable(['PFBS #','Client','Date paid','Amount','GP %','Rate','Commission','Paid on'], stmt,
+      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), fmtD(p.datePaid), money(estBase(p)), pct(gpPct(p)), pct(estRate(p)), money(estComm(p)), p.estCommPaidOn?fmtD(p.estCommPaidOn):'<span class="flag warn">Owed</span>'],
+      'No commission yet. It starts once a client pays for one of your jobs.')}
+      ${stmt.length?`<div class="gpline">Total on this statement: <b>${money(sum(stmt,estComm))}</b> · owed <b>${money(sum(stmt.filter(p=>!p.estCommPaidOn),estComm))}</b></div>`:''}
+      <div class="note">Commission = job amount (less pass-through, plus approved change orders) × your rate, which depends on the job's margin. Shows jobs paid ${L} plus anything still owed.</div></div>`:''}
+  </div>`;
+}
+$('#salesKind').addEventListener('click', e=>{ const b=e.target.closest('[data-kind]'); if(!b) return; salesKind=b.dataset.kind; renderSales(); });
 $('#salesPeriod').addEventListener('click', e=>{ const b=e.target.closest('[data-per]'); if(!b) return; salesPer=b.dataset.per; renderSales(); });
-$('#salesRep').addEventListener('change', e=>{ salesRep=e.target.value; renderSales(); });
+$('#salesRep').addEventListener('change', e=>{ if(salesKind==='est') estRep=e.target.value; else salesRep=e.target.value; renderSales(); });
 $('#salesLead').addEventListener('click', ()=>openDrawer(null,{lead:true}));
 $('#salesBody').addEventListener('click', e=>{ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
 $('#salesBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id);} });
@@ -2217,7 +2358,7 @@ $('#tabs').addEventListener('click', e=>{
   show(b.dataset.tab); renderAll();
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
-function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders') renderOrders(); if(c==='scorecard') renderScore(); if(c==='settings') renderSettings(); }
+function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='scorecard') renderScore(); if(c==='settings') renderSettings(); }
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
@@ -2248,10 +2389,11 @@ async function start(session){
   if(!m){ show('blocked'); $('#blockedMsg').textContent=`${email} isn't on the PF Building Services team list. Ask Arturo to add you.`; return; }
   me=m; $('#whoName').textContent=`${m.name} · ${m.role}`; $('#who').hidden=false; $('#tabs').hidden=false;
   await Promise.all([loadTeam(), loadSettings()]);
-  $('#salesTab').hidden = !(m.role==='BD Rep' || ['Owner','Admin','Senior Estimator'].includes(m.role));
+  $('#salesTab').hidden = false;
   $('#ordersTab').hidden = m.role==='BD Rep';
-  $('#salesTab').textContent = m.role==='BD Rep' ? 'My Sales' : 'BD Sales';
-  if(m.role==='BD Rep'){ for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab==='sales'); show('sales'); } else show('pipeline');
+  $('#salesTab').textContent = ['BD Rep','Estimator'].includes(m.role) ? 'My Sales' : 'Sales';
+  const home = ['BD Rep','Estimator'].includes(m.role) ? 'sales' : m.role==='Admin' ? 'orders' : 'pipeline';
+  for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===home); show(home);
   await loadProposals(); loadProspects();
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(loadProposals,400); })
