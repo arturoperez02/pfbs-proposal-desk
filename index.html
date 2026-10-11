@@ -64,6 +64,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .search{flex:1 1 220px;max-width:340px}
 .btn{border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer}
 .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px}
 .btn.small{padding:5px 10px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
@@ -216,7 +217,7 @@ a.linkout{font-size:12px;font-weight:600;color:var(--accent)}
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
-input.qa{width:78px;padding:6px 8px} table.qatable td{vertical-align:middle}
+input.qa{width:78px;padding:6px 8px} input.qa.qd{width:132px} table.qatable td{vertical-align:middle}
 .revb{display:inline-block;font-size:10.5px;font-weight:700;color:var(--info);background:var(--info-bg);border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:middle}.revb.rnw{color:var(--warn);background:var(--warn-bg)}
 .revline{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:6px}
 .p-lead{background:var(--gold-soft);color:var(--ink)}
@@ -576,7 +577,7 @@ function renderPipeline(){
   const list=PV.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   $('#rows').innerHTML = list.length ? list.map(p=>{
     const d=daysOpen(p), f=followUp(p);
-    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}${p.cancelledOn?' <span class="revb ptlate">Cancelled</span>':''}${outcome(p)==='Won'&&partsOpen(p)?` <span class="revb ${partsLate(p)?'ptlate':''}" title="${partsOpen(p)} part(s) still to order">Parts</span>`:''}${rentAlerts(p).length?` <span class="revb ${rentAlerts(p).some(a=>a[0]==='bad')?'ptlate':''}" title="${esc(rentAlerts(p).map(a=>a[1]).join('; '))}">Lift</span>`:''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(contractValue(p))}${isRecurring(p)?`<div class="note" style="margin:0">${money(monthlyValue(p))}/mo</div>`:''}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
+    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}${p.cancelledOn?' <span class="revb ptlate">Cancelled</span>':''}${contractHealth(p)?.kind==='low'?' <span class="revb ptlate" title="Recurring contract below the margin floor">Low margin</span>':''}${outcome(p)==='Won'&&partsOpen(p)?` <span class="revb ${partsLate(p)?'ptlate':''}" title="${partsOpen(p)} part(s) still to order">Parts</span>`:''}${rentAlerts(p).length?` <span class="revb ${rentAlerts(p).some(a=>a[0]==='bad')?'ptlate':''}" title="${esc(rentAlerts(p).map(a=>a[1]).join('; '))}">Lift</span>`:''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(contractValue(p))}${isRecurring(p)?`<div class="note" style="margin:0">${money(monthlyValue(p))}/mo</div>`:''}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">${PV.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
   $('#newBtn').hidden = !canCreate(); $('#leadBtn').hidden = !canLead();
 }
@@ -633,6 +634,7 @@ function contractHTML(p, ed){
     <div class="grid2" style="margin-top:8px"><label class="f">Term (months)<input type="number" min="1" step="1" data-k="termMonths" id="f-termMonths" value="${esc(p.termMonths??'')}" placeholder="12" ${dis}></label>
       ${won?`<label class="f">Cancelled on <span class="note" style="margin:0;font-weight:400">only if the client ends it early</span><input type="date" data-k="cancelledOn" id="f-cancelledOn" value="${esc(p.cancelledOn||'')}" ${dis}></label>`:'<div></div>'}</div>
     ${won&&p.cancelledOn?`<label class="f">Why they cancelled<input data-k="cancelReason" id="f-cancelReason" value="${esc(p.cancelReason||'')}" placeholder="e.g. new property manager, price, quality" ${dis}></label>`:''}
+    ${(h=>h&&h.kind!=='ok'?`<div class="gpline" style="color:var(--${h.cls==='bad'?'bad':'warn'})">${esc(h.text)}</div>`:h?`<div class="gpline">Typical visit margin <b>${pct(h.m)}</b> (logged ${fmtD(h.last)}).</div>`:'')(contractHealth(p))}
     <div class="note">Won amounts and scorecards count the contract value. Commission is earned month by month for the first 12 months, starting the month the first invoice is paid${p.cancelledOn?', and stopped when the contract was cancelled':''}.</div>`;
 }
 function calc2(p){ const br=bdRate(p), er=estRate(p); return `${approvedCOs(p).length?`<div class="gpline" style="margin:0 0 6px">Includes approved change orders: +${money(coRevenue(p))} revenue, +${money(coGP(p))} GP</div>`:''}<div class="calc">
@@ -640,7 +642,14 @@ function calc2(p){ const br=bdRate(p), er=estRate(p); return `${approvedCOs(p).l
       <div><span>BD commission</span><b class="num">${money(bdComm(p))}</b></div>
       <div><span>Estimator rate</span><b class="num">${isEstimator(p.sentBy)&&er!=null?pct(er):'—'}</b></div>
       <div><span>Estimator commission</span><b class="num">${money(estComm(p))}</b></div>
-    </div>${isRecurring(p)&&p.datePaid?`<div class="note">Commission earned so far: ${commMonths(p)} of 12 months.</div>`:''}`; }
+    </div>${commWhy(p)}`; }
+function commWhy(p){ const w=[];
+  if(!p.datePaid) w.push('Commission starts when Date paid is filled in.');
+  if(num(p.gp)==null) w.push('No gross profit yet: build an estimate (or enter Est. gross profit) so the rate can be set.');
+  if(p.sentBy && !isEstimator(p.sentBy)) w.push(TEAM.find(t=>t.name===p.sentBy)?.role==='Owner' ? 'No estimator commission: owners don\'t earn it.' : `No estimator commission: ${esc(p.sentBy)} is not on the team as an Estimator.`);
+  if(!p.bdRep) w.push('No BD commission: no BD rep on this job.'); else if(!p.clientType) w.push('BD commission needs a Client type.');
+  if(isRecurring(p) && p.datePaid && (estComm(p)!=null || bdComm(p)!=null)) w.push(`Earned so far: ${commMonths(p)} of 12 months.`);
+  return w.length ? `<div class="note">${w.join(' ')}</div>` : ''; }
 function itemsHTML(p, ed, accEd=ed){
   const dis=ed?'':'disabled', adis=accEd?'':'disabled', items=p.items||[], groups=groupsOf(p), L=countedItems(p);
   const frqOpts=v=>'<option value=""></option>'+S.frequencies.map(f=>`<option ${f[0]===v?'selected':''}>${esc(f[0])}</option>`).join('');
@@ -729,16 +738,18 @@ function drawDrawer(){
       ${sel('BD rep','bdRep',bds)}
     </div></fieldset>
     ${outcome(p)==='Won' ? `<fieldset><legend>Payment &amp; commission</legend><div class="grid2">
-      ${field('HCP job #','hcpJob')}
+      ${field(isRecurring(p)?'First HCP job #':'HCP job #','hcpJob')}
       ${field('Date paid','datePaid','date')}
     </div>
     <div id="calc2">${calc2(p)}</div>
+    ${isRecurring(p)?`<div class="note">Each visit gets its own HCP job #. Put <b>${esc(p.num)}</b> in the HCP job description (or the recurring job template) and every visit links here.</div>`:''}
     <div class="note">Date paid fills in when you mark it Paid. Commission payouts are recorded from the Scorecards page.${p.commPaidOn?` BD commission paid ${fmtD(p.commPaidOn)}.`:''}${p.estCommPaidOn?` Estimator commission paid ${fmtD(p.estCommPaidOn)}.`:''} Owners don't earn estimator commission.</div>
     </fieldset>` : ''}
     ${outcome(p)==='Won' && (FREQ_MONTHS[p.frequency]||isRecurring(p)) && !p.cancelledOn ? `<fieldset><legend>Renewal</legend>
       <div class="grid2"><label class="f">${renewalKind(p)} date<input type="date" id="f-renewalDate" data-k="renewalDate" value="${esc(renewalOf(p)||'')}" ${dis}></label>
       <div class="gpline" style="align-self:end">${p.renewalDate?'Set by you':isRecurring(p)?'End of the '+termOf(p)+'-month contract':'Suggested from '+esc((p.frequency||'').toLowerCase())+' frequency'}${renewalDue(p)?' · <b style="color:var(--warn)">due now</b>':''}</div></div>
       ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn small" id="rnRequote">Re-quote as new proposal</button><button type="button" class="btn ghost small" id="rnDone">Handled, next ${renewalOf(p)?fmtD(addMonths(renewalOf(p),isRecurring(p)?termOf(p):FREQ_MONTHS[p.frequency])):''}</button></div>`:''}
+      ${(h=>h&&h.kind==='low'?`<div class="gpline" style="color:var(--bad)"><b>Before renewing:</b> ${esc(h.text)}</div>`:'')(contractHealth(p))}
       <div class="note">Shows under "Renewals due" ${renewalWindow(p)} days before this date${isRecurring(p)?', so there is time to talk with the property manager before their budget is set':''}.</div></fieldset>` : ''}
     ${isRecurring(p) ? `<fieldset><legend>Contract</legend><div id="ctBox">${contractHTML(p, ed)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Parts to order</legend><div id="ptBox">${partsHTML(p, ed)}</div></fieldset>
@@ -768,6 +779,21 @@ function drawDrawer(){
     ${isNew?'':`<button class="btn ghost" id="estPdfD">Estimate PDF</button><button class="btn ghost" id="pdfD">Download PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
     <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save changes'}</button></div>`;
 }
+function askJobNo(p){
+  return new Promise(res=>{
+    const d=document.createElement('dialog'); d.className='ask'; const rec=isRecurring(p);
+    d.innerHTML=`<h3>${esc(p.num||'Proposal')} approved</h3>
+      <label class="f">${rec?'First visit HCP job #':'HCP job #'}<input id="askJob" inputmode="numeric" autocomplete="off" placeholder="from HousecallPro"></label>
+      <div class="note">Create the job in HousecallPro and type its number. Tip: put <b>${esc(p.num||'the PFBS #')}</b> in the HCP job description${rec?' (or the recurring job template)':''}, and ${rec?'every visit':'the job'} links here by itself when it's scheduled.</div>
+      <div class="toolbar"><button type="button" class="btn ghost" data-a="skip">Skip for now</button><button type="button" class="btn" data-a="ok">Save job #</button></div>`;
+    document.body.appendChild(d);
+    const done=v=>{ d.close(); d.remove(); res(v); };
+    d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='skip') done(null); if(a==='ok') done(d.querySelector('#askJob').value.trim()||null); });
+    d.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); done(d.querySelector('#askJob').value.trim()||null); } });
+    d.addEventListener('cancel', e=>{ e.preventDefault(); done(null); });
+    d.showModal(); d.querySelector('#askJob').focus();
+  });
+}
 function setStatus(st){
   if(draft.status===st) return;
   draft.status=st;
@@ -776,6 +802,7 @@ function setStatus(st){
   if(st==='Paid' && !draft.datePaid) draft.datePaid=iso(today());
   if(WON.includes(st) && !(draft.parts||[]).length){ const b=buildParts(draft); if(b.length){ draft.parts=b; const r=b.filter(isRent).length; toast(`From the estimate: ${b.length-r} part${b.length-r===1?'':'s'} to order${r?`, ${r} rental${r===1?'':'s'} to reserve`:''}. Save to keep.`); } }
   drawDrawer();
+  if(st==='Approved' && !draft.hcpJob){ const dr=draft; askJobNo(dr).then(v=>{ if(v && draft===dr){ draft.hcpJob=v; const f=$('#f-hcpJob'); if(f) f.value=v; $('#dmsg').textContent='HCP job # added. Save to keep it.'; } }); }
 }
 async function save(after, o={}){
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
@@ -1005,10 +1032,13 @@ function renderJobs(){
   const job=p=>`<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`;
   const needs=p=>{ const n=[]; const po=partsOpen(p), ra=rentAlerts(p);
     if(p.status==='Approved') n.push('<span class="flag warn">Not scheduled</span>');
+    if(!p.hcpJob) n.push('<span class="flag warn">No HCP job #</span>');
     if(po) n.push(`<span class="flag ${partsLate(p)?'bad':'warn'}">${po} part${po===1?'':'s'} to order</span>`);
     for(const a of ra) n.push(`<span class="flag ${a[0]}">${esc(a[1])}</span>`);
     return n.join('<br>') || '<span class="note" style="margin:0">Ready</span>'; };
+  const dcell=(p,k)=>`<input class="qa qd" data-qa="${k}" type="date" aria-label="${k==='start'?'Start date':'Finish date'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
   const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='techs'?'Techs':k==='hpt'?'Hours each':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
+  const chk=P.map(p=>({p,h:contractHealth(p)})).filter(x=>x.h && x.h.kind!=='ok').sort((a,b)=>(a.h.kind==='low'?0:1)-(b.h.kind==='low'?0:1));
   $('#jobsBody').innerHTML = `<div class="cards">
   <div class="card"><h3>Approved &amp; scheduled (${up.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>Job</th><th>Status</th><th class="hide-sm">Approved</th><th class="hide-sm">Estimator</th><th class="r">Amount</th><th>Needs</th></tr></thead><tbody>
@@ -1016,19 +1046,24 @@ function renderJobs(){
       : '<tr><td colspan="6" class="empty">No approved or scheduled jobs right now.</td></tr>'}</tbody></table></div>
     <div class="note">Change the status to Scheduled once the job is on the calendar, and to Invoiced when it's done.</div></div>
   <div class="card"><h3>Log actual hours (${hrs.length})</h3>
-    <div class="note" style="margin:0 0 8px">Finished jobs with no hours yet. Type the techs and hours each from the crew's text (3 days × 8 hrs = 24 each); the total fills in. Add any lift or material bills, then Save. Leave a cost blank if it matched the estimate.</div>
-    <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th class="r hide-sm">Estimated</th><th>Techs</th><th>Hours each</th><th>Total hrs</th><th>Lift / sub $</th><th>Materials $</th><th>Other $</th><th></th></tr></thead><tbody>
+    <div class="note" style="margin:0 0 8px">Finished jobs with no hours yet. Type the techs and hours each from the crew's text (3 days × 8 hrs = 24 each); the total fills in. Add the start and finish dates and any lift or material bills, then Save. Leave a cost blank if it matched the estimate.</div>
+    <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th class="r hide-sm">Estimated</th><th>Techs</th><th>Hours each</th><th>Total hrs</th><th>Start</th><th>Finish</th><th>Lift / sub $</th><th>Materials $</th><th>Other $</th><th></th></tr></thead><tbody>
     ${hrs.length?hrs.map(p=>{ const e=estPerVisit(p), n=visits(p)>1?' /visit':'';
-      return `<tr data-qrow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="r num hide-sm">${e&&e.hrs?`${e.techs} × ${fmtH(e.hpt)} = ${fmtH(e.hrs)} hrs${n?' per visit':''}`:'<span class="note" style="margin:0">no estimate</span>'}</td><td>${cell(p,'techs',e&&e.techs?e.techs:'')}</td><td>${cell(p,'hpt',e&&e.hpt?fmtH(e.hpt):'')}</td><td>${cell(p,'hrs',e&&e.hrs?fmtH(e.hrs):'')}</td><td>${cell(p,'rent',e?Math.round(e.rent):'0')}</td><td>${cell(p,'mat',e?Math.round(e.mat):'0')}</td><td>${cell(p,'misc',e?Math.round(e.misc):'0')}</td><td>${canEditRow(p)?`<button class="btn small" data-qsave="${esc(p.num)}">Save</button>`:''}</td></tr>`; }).join('')
-      : '<tr><td colspan="9" class="empty">All finished jobs have their hours. Nice.</td></tr>'}</tbody></table></div>
+      return `<tr data-qrow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="r num hide-sm">${e&&e.hrs?`${e.techs} × ${fmtH(e.hpt)} = ${fmtH(e.hrs)} hrs${n?' per visit':''}`:'<span class="note" style="margin:0">no estimate</span>'}</td><td>${cell(p,'techs',e&&e.techs?e.techs:'')}</td><td>${cell(p,'hpt',e&&e.hpt?fmtH(e.hpt):'')}</td><td>${cell(p,'hrs',e&&e.hrs?fmtH(e.hrs):'')}</td><td>${dcell(p,'start')}</td><td>${dcell(p,'date')}</td><td>${cell(p,'rent',e?Math.round(e.rent):'0')}</td><td>${cell(p,'mat',e?Math.round(e.mat):'0')}</td><td>${cell(p,'misc',e?Math.round(e.misc):'0')}</td><td>${canEditRow(p)?`<button class="btn small" data-qsave="${esc(p.num)}">Save</button>`:''}</td></tr>`; }).join('')
+      : '<tr><td colspan="11" class="empty">All finished jobs have their hours. Nice.</td></tr>'}</tbody></table></div>
     <div class="note">Monthly or other recurring contracts: log one typical visit.</div></div>
+  <div class="card"><h3>Contract check (${chk.length})</h3>
+    <div class="note" style="margin:0 0 8px">Recurring contracts whose typical visit is below the ${pct(S.marginFloor)} margin floor, hasn't been logged yet, or is over 6 months old. Open the job to log or update the typical visit.</div>
+    <div class="tablewrap"><table><thead><tr><th>Job</th><th class="r">Per month</th><th class="hide-sm">Estimator</th><th class="r">Margin</th><th>Issue</th></tr></thead><tbody>
+    ${chk.length?chk.map(({p,h})=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="r num">${money(monthlyValue(p))}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${h.m!=null?`<b class="${h.kind==='low'?'down':''}">${pct(h.m)}</b>`:'—'}</td><td class="wrap"><span class="flag ${h.cls}">${esc(h.text)}</span></td></tr>`).join('')
+      : '<tr><td colspan="5" class="empty">All recurring contracts look healthy.</td></tr>'}</tbody></table></div></div>
   </div>`;
 }
 $('#jobsBody').addEventListener('click', async e=>{
   const o=e.target.closest('[data-open]'); if(o){ e.preventDefault(); openDrawer(o.dataset.open); return; }
   const b=e.target.closest('[data-qsave]');
   if(b){ const p=P.find(x=>x.num===b.dataset.qsave); if(!p) return; const tr=b.closest('tr'), v={date:iso(today())};
-    for(const i of tr.querySelectorAll('[data-qa]')) v[i.dataset.qa]=i.value.trim();
+    for(const i of tr.querySelectorAll('[data-qa]')) if(i.value.trim()) v[i.dataset.qa]=i.value.trim();
     if(!(num(v.hrs)>0)){ toast('Type the techs and hours each first.'); tr.querySelector('[data-qa="techs"]').focus(); return; }
     b.disabled=true; const next={...p, actuals:[v]}; const row={actuals:next.actuals}; if(!COLS||COLS.has('actuals_summary')) row.actuals_summary=actSummary(next);
     const {error}=await sb.from('proposals').update(row).eq('num',p.num);
@@ -1250,6 +1285,7 @@ $('#rows').addEventListener('change', async e=>{
     $('#dmsg').textContent = st==='Scheduled' ? 'Add the HCP job #, then save.' : 'Pick a lost reason, then save.'; return;
   }
   const patch={status:st}, t=iso(today());
+  if(st==='Approved' && !p.hcpJob){ const v=await askJobNo(p); if(v) patch.hcp_job=v; }
   if(WON.includes(st) && !(p.parts||[]).length && (!COLS || COLS.has('parts'))){ const b=buildParts(p); if(b.length) patch.parts=b; }
   if((st==='Approved'||LOST.includes(st)) && !p.dateResolved) patch.date_resolved=t;
   if(st==='Sent' && !p.dateSent) patch.date_sent=t;
@@ -1339,14 +1375,27 @@ function jobCompare(p){
   return {n, estHrs, actHrs, estCost, actCost, rev, estGP: estCost!=null?rev-estCost:null, actGP: rev-actCost,
           hrsVar: estHrs ? (actHrs-estHrs)/estHrs : null};
 }
+// ---------- contract health: is a recurring contract's typical visit still profitable?
+function contractHealth(p){
+  if(!activeContract(p)) return null;
+  const V=(p.actuals||[]).filter(v=>visitHrs(v)>0), started=p.datePaid||contractStart(p), target=num(S.est?.targetMargin)||0.45;
+  if(!V.length) return started && days(parse(started), today())>30 ? {kind:'none', cls:'warn', text:'No typical visit logged yet'} : null;
+  const jc=jobCompare(p), price=num(p.amount)||0; if(!jc || !price) return null;
+  const coC=approvedCOs(p).reduce((s,c)=>s+(num(c.cost)||0),0), cost=(jc.actCost-coC)/jc.n, m=(price-cost)/price;
+  const last=V.map(v=>v.date).filter(Boolean).sort().at(-1), stale=!!last && days(parse(last), today())>183;
+  if(m < S.marginFloor) return {kind:'low', cls:'bad', m, need:cost/(1-target), price, last, stale,
+    text:`Actual margin ${pct(m)}, below the ${pct(S.marginFloor)} floor. To get back to ${pct(target)}: about ${money(cost/(1-target))}/visit (now ${money(price)}).`};
+  if(stale) return {kind:'stale', cls:'warn', m, last, text:`Typical visit last logged ${fmtD(last)}. Update it with a recent visit.`};
+  return {kind:'ok', m, last};
+}
 function actualsHTML(p, ed){
   const rec=isRecurring(p), est=estPerVisit(p), dis=ed?'':'disabled';
   const V=(p.actuals||[]).length ? p.actuals : [{}];   // one whole-job entry; recurring contracts add one per visit
-  const val=(v,k)=> k==='hrs' ? ((v.hrs!=null&&v.hrs!=='') ? v.hrs : (visitHrs(v)||'')) : (k==='date' ? (v.date||'') : (v[k]??''));
-  const inp=(i,v,k,l,extra='')=>`<label class="f">${l}<input ${k==='date'?'type="date"':k==='notes'?'':'type="number" step="any" inputmode="decimal"'} data-av="${i}.${k}" value="${esc(val(v,k))}" ${extra} ${dis}></label>`;
+  const val=(v,k)=> k==='hrs' ? ((v.hrs!=null&&v.hrs!=='') ? v.hrs : (visitHrs(v)||'')) : (k==='date'||k==='start' ? (v[k]||'') : (v[k]??''));
+  const inp=(i,v,k,l,extra='')=>`<label class="f">${l}<input ${k==='date'||k==='start'?'type="date"':k==='notes'?'':'type="number" step="any" inputmode="decimal"'} data-av="${i}.${k}" value="${esc(val(v,k))}" ${extra} ${dis}></label>`;
   const cards=V.map((v,i)=>`<div class="item visit"><div class="itop"><span class="ibadge">${V.length>1?(rec?'Visit ':'Part ')+(i+1):rec?'Typical visit':'Whole job'}</span><span style="flex:1"></span>${ed&&V.length>1?`<button type="button" class="btn ghost small" data-avdel="${i}">Remove</button>`:''}</div>
     <div class="vgrid">${inp(i,v,'techs','Techs',`placeholder="${est&&est.techs?est.techs+' est.':''}"`)}${inp(i,v,'hpt','Hours each',`placeholder="${est&&est.hpt?fmtH(est.hpt)+' est.':'all days'}"`)}${inp(i,v,'hrs','Total tech hours',`placeholder="${est&&est.hrs?fmtH(est.hrs)+' est.':'techs × hours'}"`)}
-      ${inp(i,v,'date',rec?'Visit date':'Date finished')}
+      ${inp(i,v,'start','Start date')}${inp(i,v,'date',rec?'Finish date':'Finish date')}
       ${inp(i,v,'rent','Lift / sub $',`placeholder="${est?Math.round(est.rent)+' est.':'0'}"`)}${inp(i,v,'mat','Materials $',`placeholder="${est?Math.round(est.mat)+' est.':'0'}"`)}${inp(i,v,'misc','Other $',`placeholder="${est?Math.round(est.misc)+' est.':'0'}"`)}
       <div class="full">${inp(i,v,'notes','Notes','placeholder="e.g. finished a day early, no screens on east side"')}</div></div></div>`).join('');
   return `<div class="note" style="margin:0 0 8px">${rec?`${esc(p.frequency)} contract: log one typical visit. `:''}Techs × hours each${rec?'':' for the whole job (3 days × 8 hrs = 24 each)'}. The total fills in; type over it if the crew worked different hours.${est&&est.hrs?` Estimated: <b>${fmtH(est.hrs)} tech hours</b> (${est.techs} tech${est.techs===1?'':'s'}).`:''} Leave a cost blank if it matched the estimate.</div>
@@ -2290,8 +2339,8 @@ function renderEstSales(){
     <div class="card"><h3>Won (last 90 days)</h3>${rowsTable(['PFBS #','Client','Property','Job status','Margin','Amount'], recent,
       p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), `<span class="pill ${pillClass(p.status)}">${esc(p.status)}</span>`, pct(gpPct(p)), money(wonAmt(p))],
       'No wins in the last 90 days yet.')}</div>
-    <div class="card"><h3>Recurring contracts (${act.length})</h3>${rowsTable(['PFBS #','Client','Property','Per month','Contract ends','Commission','Amount'], act.sort((a,b)=>String(renewalOf(a)||'').localeCompare(String(renewalOf(b)||''))),
-      p=>{ const r=renewalOf(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), money(monthlyValue(p)), r?`<span class="${renewalDue(p)?'flag warn':''}">${fmtD(r)}${renewalDue(p)?' · renew':''}</span>`:'—', p.datePaid?`${commMonths(p)} of 12 mo`:'starts at first payment', money(wonAmt(p))]; },
+    <div class="card"><h3>Recurring contracts (${act.length})</h3>${rowsTable(['PFBS #','Client','Property','Per month','Contract ends','Typical visit','Commission','Amount'], act.sort((a,b)=>String(renewalOf(a)||'').localeCompare(String(renewalOf(b)||''))),
+      p=>{ const r=renewalOf(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), money(monthlyValue(p)), r?`<span class="${renewalDue(p)?'flag warn':''}">${fmtD(r)}${renewalDue(p)?' · renew':''}</span>`:'—', (h=>!h?'—':h.kind==='none'?'<span class="flag warn">not logged</span>':`<span class="${h.kind==='low'?'flag bad':''}">${pct(h.m)} margin${h.kind==='stale'?' · old':''}</span>`)(contractHealth(p)), p.datePaid?`${commMonths(p)} of 12 mo`:'starts at first payment', money(wonAmt(p))]; },
       'No recurring contracts yet. Monthly, quarterly and other repeat services show here once approved.')}<div class="note">Contracts show "renew" 60 days before they end. Amount is the full contract value.</div></div>
     <div class="card"><h3>Estimate vs actual</h3>${rowsTable(['PFBS #','Client','Est. hours','Actual hours','Est. margin','Actual margin'], closed.slice(0,10).map(x=>x.p),
       p=>{ const c=jobCompare(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), c.estHrs==null?'—':fmtH(c.estHrs), `${fmtH(c.actHrs)}${c.hrsVar!=null?` <span class="${Math.abs(c.hrsVar)<=0.15?'up':'down'}">(${sgn(c.hrsVar)}${pct(Math.abs(c.hrsVar))})</span>`:''}`, c.estGP!=null&&c.rev?pct(c.estGP/c.rev):'—', `<b>${jm(p)}</b>`]; },
