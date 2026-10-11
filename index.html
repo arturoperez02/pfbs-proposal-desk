@@ -977,9 +977,9 @@ function renderJobs(){
     <div class="note" style="margin:0 0 8px">Finished jobs with no hours yet. Type the techs and hours each from the crew's text (3 days × 8 hrs = 24 each); the total fills in. Add any lift or material bills, then Save. Leave a cost blank if it matched the estimate.</div>
     <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th class="r hide-sm">Estimated</th><th>Techs</th><th>Hours each</th><th>Total hrs</th><th>Lift / sub $</th><th>Materials $</th><th>Other $</th><th></th></tr></thead><tbody>
     ${hrs.length?hrs.map(p=>{ const e=estPerVisit(p), n=visits(p)>1?' /visit':'';
-      return `<tr data-qrow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="r num hide-sm">${e&&e.hrs?`${e.techs} × ${fmtH(e.hpt)} = ${fmtH(e.hrs)} hrs${n}`:'<span class="note" style="margin:0">no estimate</span>'}</td><td>${cell(p,'techs',e&&e.techs?e.techs:'')}</td><td>${cell(p,'hpt',e&&e.hpt?fmtH(e.hpt):'')}</td><td>${cell(p,'hrs',e&&e.hrs?fmtH(e.hrs):'')}</td><td>${cell(p,'rent',e?Math.round(e.rent):'0')}</td><td>${cell(p,'mat',e?Math.round(e.mat):'0')}</td><td>${cell(p,'misc',e?Math.round(e.misc):'0')}</td><td>${canEditRow(p)?`<button class="btn small" data-qsave="${esc(p.num)}">Save</button>`:''}</td></tr>`; }).join('')
+      return `<tr data-qrow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="r num hide-sm">${e&&e.hrs?`${e.techs} × ${fmtH(e.hpt)} = ${fmtH(e.hrs)} hrs${n?' per visit':''}`:'<span class="note" style="margin:0">no estimate</span>'}</td><td>${cell(p,'techs',e&&e.techs?e.techs:'')}</td><td>${cell(p,'hpt',e&&e.hpt?fmtH(e.hpt):'')}</td><td>${cell(p,'hrs',e&&e.hrs?fmtH(e.hrs):'')}</td><td>${cell(p,'rent',e?Math.round(e.rent):'0')}</td><td>${cell(p,'mat',e?Math.round(e.mat):'0')}</td><td>${cell(p,'misc',e?Math.round(e.misc):'0')}</td><td>${canEditRow(p)?`<button class="btn small" data-qsave="${esc(p.num)}">Save</button>`:''}</td></tr>`; }).join('')
       : '<tr><td colspan="9" class="empty">All finished jobs have their hours. Nice.</td></tr>'}</tbody></table></div>
-    <div class="note">Recurring contracts: log one visit here, then add more visits from the job.</div></div>
+    <div class="note">Monthly or other recurring contracts: log one typical visit.</div></div>
   </div>`;
 }
 $('#jobsBody').addEventListener('click', async e=>{
@@ -1303,21 +1303,20 @@ function actualsHTML(p, ed){
   const V=(p.actuals||[]).length ? p.actuals : [{}];   // one whole-job entry; recurring contracts add one per visit
   const val=(v,k)=> k==='hrs' ? ((v.hrs!=null&&v.hrs!=='') ? v.hrs : (visitHrs(v)||'')) : (k==='date' ? (v.date||'') : (v[k]??''));
   const inp=(i,v,k,l,extra='')=>`<label class="f">${l}<input ${k==='date'?'type="date"':k==='notes'?'':'type="number" step="any" inputmode="decimal"'} data-av="${i}.${k}" value="${esc(val(v,k))}" ${extra} ${dis}></label>`;
-  const cards=V.map((v,i)=>`<div class="item visit"><div class="itop"><span class="ibadge">${rec?'Visit '+(i+1):V.length>1?'Part '+(i+1):'Whole job'}</span><span style="flex:1"></span>${ed&&V.length>1?`<button type="button" class="btn ghost small" data-avdel="${i}">Remove</button>`:''}</div>
+  const cards=V.map((v,i)=>`<div class="item visit"><div class="itop"><span class="ibadge">${V.length>1?(rec?'Visit ':'Part ')+(i+1):rec?'Typical visit':'Whole job'}</span><span style="flex:1"></span>${ed&&V.length>1?`<button type="button" class="btn ghost small" data-avdel="${i}">Remove</button>`:''}</div>
     <div class="vgrid">${inp(i,v,'techs','Techs',`placeholder="${est&&est.techs?est.techs+' est.':''}"`)}${inp(i,v,'hpt','Hours each',`placeholder="${est&&est.hpt?fmtH(est.hpt)+' est.':'all days'}"`)}${inp(i,v,'hrs','Total tech hours',`placeholder="${est&&est.hrs?fmtH(est.hrs)+' est.':'techs × hours'}"`)}
       ${inp(i,v,'date',rec?'Visit date':'Date finished')}
       ${inp(i,v,'rent','Lift / sub $',`placeholder="${est?Math.round(est.rent)+' est.':'0'}"`)}${inp(i,v,'mat','Materials $',`placeholder="${est?Math.round(est.mat)+' est.':'0'}"`)}${inp(i,v,'misc','Other $',`placeholder="${est?Math.round(est.misc)+' est.':'0'}"`)}
       <div class="full">${inp(i,v,'notes','Notes','placeholder="e.g. finished a day early, no screens on east side"')}</div></div></div>`).join('');
-  return `<div class="note" style="margin:0 0 8px">Techs × hours each for the ${rec?'visit':'whole job'} (2 techs who each worked 3 days × 8 hrs = 2 × 24). The total fills in; type over it if the crew worked different hours.${est&&est.hrs?` Estimated: <b>${fmtH(est.hrs)} tech hours</b> (${est.techs} tech${est.techs===1?'':'s'}).`:''} Leave a cost blank if it matched the estimate.</div>
+  return `<div class="note" style="margin:0 0 8px">${rec?`${esc(p.frequency)} contract: log one typical visit. `:''}Techs × hours each${rec?'':' for the whole job (3 days × 8 hrs = 24 each)'}. The total fills in; type over it if the crew worked different hours.${est&&est.hrs?` Estimated: <b>${fmtH(est.hrs)} tech hours</b> (${est.techs} tech${est.techs===1?'':'s'}).`:''} Leave a cost blank if it matched the estimate.</div>
     <div class="items">${cards}</div>
-    ${ed&&rec?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="avAdd">+ Log another visit</button><span class="note" style="margin:0">${esc(p.frequency)} contract: one entry per visit.</span></div>`:''}
     <div id="cmpBox">${compareHTML(p)}</div>`;
 }
 function compareHTML(p){
   const c=jobCompare(p); if(!c) return '';
   const d=(a,b,better)=>{ if(a==null||b==null) return '<td class="r">—</td>'; const x=b-a, good = better==='lower' ? x<=0 : x>=0; return `<td class="r num ${Math.abs(x)<0.005?'':good?'up':'down'}">${x>0?'+':x<0?'−':''}${money(Math.abs(x))}</td>`; };
   const m=(gp)=> c.rev ? pct(gp/c.rev) : '—';
-  return `<div class="tablewrap" style="margin-top:10px"><table class="cmp"><thead><tr><th>${c.n} visit${c.n===1?'':'s'}</th><th class="r">Estimated</th><th class="r">Actual</th><th class="r">Difference</th></tr></thead><tbody>
+  return `<div class="tablewrap" style="margin-top:10px"><table class="cmp"><thead><tr><th>${c.n>1?c.n+' visits':isRecurring(p)?'Per visit':'Whole job'}</th><th class="r">Estimated</th><th class="r">Actual</th><th class="r">Difference</th></tr></thead><tbody>
     <tr><td>Tech hours</td><td class="r num">${c.estHrs==null?'—':fmtH(c.estHrs)}</td><td class="r num">${fmtH(c.actHrs)}</td>${(()=>{ if(c.estHrs==null) return '<td class="r">—</td>'; const x=c.actHrs-c.estHrs; return `<td class="r num ${Math.abs(x)<0.005?'':x<=0?'up':'down'}">${x>0?'+':x<0?'−':''}${fmtH(Math.abs(x))}${c.hrsVar!=null?` (${c.hrsVar>0?'+':c.hrsVar<0?'−':''}${pct(Math.abs(c.hrsVar))})`:''}</td>`; })()}</tr>
     <tr><td>Job cost</td><td class="r num">${c.estCost==null?'—':money(c.estCost)}</td><td class="r num">${money(c.actCost)}</td>${d(c.estCost,c.actCost,'lower')}</tr>
     <tr><td>Gross profit</td><td class="r num">${c.estGP==null?'—':money(c.estGP)}</td><td class="r num"><b>${money(c.actGP)}</b></td>${d(c.estGP,c.actGP,'higher')}</tr>
