@@ -216,7 +216,7 @@ a.linkout{font-size:12px;font-weight:600;color:var(--accent)}
 td.up,span.up{color:var(--good);font-weight:600}td.down,span.down{color:var(--bad);font-weight:600}
 .vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.vgrid .full{grid-column:1/-1}
 table.cmp td,table.cmp th{white-space:nowrap}
-input.qa{width:86px;padding:6px 8px} table.qatable td{vertical-align:middle}
+input.qa{width:78px;padding:6px 8px} table.qatable td{vertical-align:middle}
 .revb{display:inline-block;font-size:10.5px;font-weight:700;color:var(--info);background:var(--info-bg);border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:middle}.revb.rnw{color:var(--warn);background:var(--warn-bg)}
 .revline{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:6px}
 .p-lead{background:var(--gold-soft);color:var(--ink)}
@@ -966,7 +966,7 @@ function renderJobs(){
     if(po) n.push(`<span class="flag ${partsLate(p)?'bad':'warn'}">${po} part${po===1?'':'s'} to order</span>`);
     for(const a of ra) n.push(`<span class="flag ${a[0]}">${esc(a[1])}</span>`);
     return n.join('<br>') || '<span class="note" style="margin:0">Ready</span>'; };
-  const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
+  const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='techs'?'Techs':k==='hpt'?'Hours each':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
   $('#jobsBody').innerHTML = `<div class="cards">
   <div class="card"><h3>Approved &amp; scheduled (${up.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>Job</th><th>Status</th><th class="hide-sm">Approved</th><th class="hide-sm">Estimator</th><th class="r">Amount</th><th>Needs</th></tr></thead><tbody>
@@ -974,11 +974,11 @@ function renderJobs(){
       : '<tr><td colspan="6" class="empty">No approved or scheduled jobs right now.</td></tr>'}</tbody></table></div>
     <div class="note">Change the status to Scheduled once the job is on the calendar, and to Invoiced when it's done.</div></div>
   <div class="card"><h3>Log actual hours (${hrs.length})</h3>
-    <div class="note" style="margin:0 0 8px">Finished jobs with no hours yet. Type the total tech hours from the crew's text (2 techs × 3 days × 8 hrs = 48) and any lift or material bills, then Save. Leave a cost blank if it matched the estimate.</div>
-    <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th class="r hide-sm">Estimated</th><th>Tech hours</th><th>Lift / sub $</th><th>Materials $</th><th>Other $</th><th></th></tr></thead><tbody>
+    <div class="note" style="margin:0 0 8px">Finished jobs with no hours yet. Type the techs and hours each from the crew's text (3 days × 8 hrs = 24 each); the total fills in. Add any lift or material bills, then Save. Leave a cost blank if it matched the estimate.</div>
+    <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th class="r hide-sm">Estimated</th><th>Techs</th><th>Hours each</th><th>Total hrs</th><th>Lift / sub $</th><th>Materials $</th><th>Other $</th><th></th></tr></thead><tbody>
     ${hrs.length?hrs.map(p=>{ const e=estPerVisit(p), n=visits(p)>1?' /visit':'';
-      return `<tr data-qrow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="r num hide-sm">${e?fmtH(e.hrs)+' hrs'+n:'—'}</td><td>${cell(p,'hrs',e?fmtH(e.hrs):'hrs')}</td><td>${cell(p,'rent',e?Math.round(e.rent):'0')}</td><td>${cell(p,'mat',e?Math.round(e.mat):'0')}</td><td>${cell(p,'misc',e?Math.round(e.misc):'0')}</td><td>${canEditRow(p)?`<button class="btn small" data-qsave="${esc(p.num)}">Save</button>`:''}</td></tr>`; }).join('')
-      : '<tr><td colspan="7" class="empty">All finished jobs have their hours. Nice.</td></tr>'}</tbody></table></div>
+      return `<tr data-qrow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="r num hide-sm">${e&&e.hrs?`${e.techs} × ${fmtH(e.hpt)} = ${fmtH(e.hrs)} hrs${n}`:'<span class="note" style="margin:0">no estimate</span>'}</td><td>${cell(p,'techs',e&&e.techs?e.techs:'')}</td><td>${cell(p,'hpt',e&&e.hpt?fmtH(e.hpt):'')}</td><td>${cell(p,'hrs',e&&e.hrs?fmtH(e.hrs):'')}</td><td>${cell(p,'rent',e?Math.round(e.rent):'0')}</td><td>${cell(p,'mat',e?Math.round(e.mat):'0')}</td><td>${cell(p,'misc',e?Math.round(e.misc):'0')}</td><td>${canEditRow(p)?`<button class="btn small" data-qsave="${esc(p.num)}">Save</button>`:''}</td></tr>`; }).join('')
+      : '<tr><td colspan="9" class="empty">All finished jobs have their hours. Nice.</td></tr>'}</tbody></table></div>
     <div class="note">Recurring contracts: log one visit here, then add more visits from the job.</div></div>
   </div>`;
 }
@@ -987,16 +987,18 @@ $('#jobsBody').addEventListener('click', async e=>{
   const b=e.target.closest('[data-qsave]');
   if(b){ const p=P.find(x=>x.num===b.dataset.qsave); if(!p) return; const tr=b.closest('tr'), v={date:iso(today())};
     for(const i of tr.querySelectorAll('[data-qa]')) v[i.dataset.qa]=i.value.trim();
-    if(!(num(v.hrs)>0)){ toast('Type the total tech hours first.'); tr.querySelector('[data-qa="hrs"]').focus(); return; }
+    if(!(num(v.hrs)>0)){ toast('Type the techs and hours each first.'); tr.querySelector('[data-qa="techs"]').focus(); return; }
     b.disabled=true; const next={...p, actuals:[v]}; const row={actuals:next.actuals}; if(!COLS||COLS.has('actuals_summary')) row.actuals_summary=actSummary(next);
     const {error}=await sb.from('proposals').update(row).eq('num',p.num);
     if(error){ b.disabled=false; toast(error.message); return; }
     p.actuals=next.actuals; p.actualsSummary=row.actuals_summary??p.actualsSummary;
-    const jc=jobCompare(p); await addActivity(p.num,'note',`Actual hours logged: ${fmtH(num(v.hrs))} tech hours${jc&&jc.rev?` · actual margin ${pct(jc.actGP/jc.rev)}`:''}`);
+    const jc=jobCompare(p); await addActivity(p.num,'note',`Actual hours logged: ${num(v.techs)>0&&num(v.hpt)>0?`${v.techs} techs × ${v.hpt} hrs = `:''}${fmtH(num(v.hrs))} tech hours${jc&&jc.rev?` · actual margin ${pct(jc.actGP/jc.rev)}`:''}`);
     toast(`${p.num}: ${fmtH(num(v.hrs))} hours saved${jc&&jc.rev?` · actual margin ${pct(jc.actGP/jc.rev)}`:''}`); renderJobs(); return; }
   if(e.target.closest('input,button,a')) return;
   const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id);
 });
+$('#jobsBody').addEventListener('input', e=>{ const k=e.target.dataset.qa; if(k!=='techs'&&k!=='hpt') return; const tr=e.target.closest('tr');
+  const t=num(tr.querySelector('[data-qa="techs"]').value), h=num(tr.querySelector('[data-qa="hpt"]').value); tr.querySelector('[data-qa="hrs"]').value = (t>0&&h>0) ? Math.round(t*h*100)/100 : ''; });
 $('#jobsBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const q=e.target.closest('tr[data-qrow]'); if(q){ q.querySelector('[data-qsave]')?.click(); return; } const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); } });
 
 // ---------- photos (stored in Supabase Storage, printed on the client PDF) ----------
@@ -1302,10 +1304,11 @@ function actualsHTML(p, ed){
   const val=(v,k)=> k==='hrs' ? ((v.hrs!=null&&v.hrs!=='') ? v.hrs : (visitHrs(v)||'')) : (k==='date' ? (v.date||'') : (v[k]??''));
   const inp=(i,v,k,l,extra='')=>`<label class="f">${l}<input ${k==='date'?'type="date"':k==='notes'?'':'type="number" step="any" inputmode="decimal"'} data-av="${i}.${k}" value="${esc(val(v,k))}" ${extra} ${dis}></label>`;
   const cards=V.map((v,i)=>`<div class="item visit"><div class="itop"><span class="ibadge">${rec?'Visit '+(i+1):V.length>1?'Part '+(i+1):'Whole job'}</span><span style="flex:1"></span>${ed&&V.length>1?`<button type="button" class="btn ghost small" data-avdel="${i}">Remove</button>`:''}</div>
-    <div class="vgrid">${inp(i,v,'hrs','Total tech hours',`placeholder="${est?fmtH(est.hrs)+' est.':'all techs, all days'}"`)}${inp(i,v,'date',rec?'Visit date':'Date finished')}
+    <div class="vgrid">${inp(i,v,'techs','Techs',`placeholder="${est&&est.techs?est.techs+' est.':''}"`)}${inp(i,v,'hpt','Hours each',`placeholder="${est&&est.hpt?fmtH(est.hpt)+' est.':'all days'}"`)}${inp(i,v,'hrs','Total tech hours',`placeholder="${est&&est.hrs?fmtH(est.hrs)+' est.':'techs × hours'}"`)}
+      ${inp(i,v,'date',rec?'Visit date':'Date finished')}
       ${inp(i,v,'rent','Lift / sub $',`placeholder="${est?Math.round(est.rent)+' est.':'0'}"`)}${inp(i,v,'mat','Materials $',`placeholder="${est?Math.round(est.mat)+' est.':'0'}"`)}${inp(i,v,'misc','Other $',`placeholder="${est?Math.round(est.misc)+' est.':'0'}"`)}
       <div class="full">${inp(i,v,'notes','Notes','placeholder="e.g. finished a day early, no screens on east side"')}</div></div></div>`).join('');
-  return `<div class="note" style="margin:0 0 8px">Add up every tech's hours for the ${rec?'visit':'whole job'}: 2 techs × 3 days × 8 hrs = <b>48</b>.${est?` Estimated: <b>${fmtH(est.hrs)} tech hours</b> (${est.techs} tech${est.techs===1?'':'s'}).`:''} Leave a cost blank if it matched the estimate.</div>
+  return `<div class="note" style="margin:0 0 8px">Techs × hours each for the ${rec?'visit':'whole job'} (2 techs who each worked 3 days × 8 hrs = 2 × 24). The total fills in; type over it if the crew worked different hours.${est&&est.hrs?` Estimated: <b>${fmtH(est.hrs)} tech hours</b> (${est.techs} tech${est.techs===1?'':'s'}).`:''} Leave a cost blank if it matched the estimate.</div>
     <div class="items">${cards}</div>
     ${ed&&rec?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="avAdd">+ Log another visit</button><span class="note" style="margin:0">${esc(p.frequency)} contract: one entry per visit.</span></div>`:''}
     <div id="cmpBox">${compareHTML(p)}</div>`;
@@ -1323,7 +1326,9 @@ function compareHTML(p){
 }
 $('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.av; if(!k) return; const [i,f]=k.split('.');
   if(!(draft.actuals||[]).length) draft.actuals=[{date:iso(today())}];
-  const v=draft.actuals[+i]; v[f]=e.target.value; if(f==='hrs'){ delete v.techs; delete v.hpt; delete v.extraHrs; }
+  const v=draft.actuals[+i]; v[f]=e.target.value; delete v.extraHrs;
+  if(f==='techs'||f==='hpt'){ const t=num(v.techs), h=num(v.hpt); v.hrs = (t>0&&h>0) ? String(Math.round(t*h*100)/100) : '';
+    const tot=e.target.closest('.vgrid')?.querySelector('[data-av$=".hrs"]'); if(tot) tot.value=v.hrs; }
   const b=$('#cmpBox'); if(b) b.innerHTML=compareHTML(draft); }, true);
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
