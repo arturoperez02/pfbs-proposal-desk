@@ -11,5 +11,6 @@
 | 007_leads_followups_reports.sql | Run once: lead details, prospects, follow-up cadence, monthly report, HousecallPro link. |
 | 008_proposal_photos.sql | Run once: site photos on proposals (private storage bucket). |
 | 009_parts_to_order.sql | Run once: Parts to order and lift/equipment rental tracking on approved jobs, buyer, monthly report section, follow-up email wording. Needs 007. |
+| 010_recurring_contracts.sql | Run once: recurring contracts (term, contract value, recurring revenue per month, cancelled contracts), commission earned month by month for the first year, monthly report updated to match. Needs 007 and 009. |
 
 Client data is never stored in this repository.

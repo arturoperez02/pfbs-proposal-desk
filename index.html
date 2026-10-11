@@ -352,11 +352,11 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt'};
 const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp',report_sent_on:'reportSentOn',report_url:'reportUrl'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through'].includes(c)) v=num(v); o[c]=v; } return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -388,7 +388,20 @@ function followUp(p){ if(outcome(p)!=='Open' || !p.dateSent) return null; const 
 function fuStep(p){ const f=followUp(p); if(!f) return null; const d=days(parse(p.dateSent),f); return d<=3?1:d<=10?2:d<=21?3:4; }
 function gpPct(p){ return (num(p.gp)!=null && num(p.amount)) ? num(p.gp)/num(p.amount) : null; }
 function visits(p){ const f=S.frequencies.find(x=>x[0]===p.frequency); return f?f[1]:1; }
-function annual(p){ const L=countedItems(p); if(L.length) return L.reduce((s,i)=>s+(num(i.qty)||1)*(num(i.amount)||0),0); return num(p.amount)!=null && p.frequency ? num(p.amount)*visits(p) : null; }
+function visitsOf(f){ const x=S.frequencies.find(y=>y[0]===f); return x ? (Number(x[1])||1) : 1; }
+const lineVisits = i => Math.max(num(i.qty)||1, visitsOf(i.frequency||''));
+function annual(p){ const L=countedItems(p); if(L.length) return L.reduce((s,i)=>s+lineVisits(i)*(num(i.amount)||0),0); return num(p.amount)!=null && p.frequency ? num(p.amount)*visits(p) : null; }
+// ---------- recurring contracts: value, monthly revenue, commission by the month (first year)
+function isRecurring(p){ const L=countedItems(p); return L.length ? L.some(i=>visitsOf(i.frequency)>1) : visits(p)>1; }
+const termOf = p => num(p.termMonths)||12;
+function contractValue(p){ const a=num(p.amount)||0; return isRecurring(p) ? (annual(p)||0)*termOf(p)/12 : a; }
+const monthlyValue = p => isRecurring(p) ? (annual(p)||0)/12 : 0;
+const valFactor = p => { const a=num(p.amount); return a ? contractValue(p)/a : 1; };
+const contractStart = p => p.dateResolved || p.dateSent || null;
+const contractEnd = p => contractStart(p) ? addMonths(contractStart(p), termOf(p)) : null;
+const activeContract = p => isRecurring(p) && outcome(p)==='Won' && !p.cancelledOn;
+function commMonths(p, upto=today()){ if(!p.datePaid) return 0; const s=parse(p.datePaid); let e=upto; if(p.cancelledOn){ const c=parse(p.cancelledOn); if(c<e) e=c; } if(e<s) return 0;
+  return Math.min(12, (e.getFullYear()-s.getFullYear())*12 + e.getMonth()-s.getMonth() + 1); }
 // ---------- line items ----------
 function groupsOf(p){ return [...new Set((p.items||[]).filter(i=>i.type!=='Add-on' && i.group).map(i=>i.group))]; }
 function chosenOptions(p){ const groups=groupsOf(p), pick=String(p.pricingOption||'').split('||').filter(g=>groups.includes(g)); return pick.length?pick:groups.slice(0,1); }
@@ -489,23 +502,37 @@ function bdRate(p){ if(!p.bdRep || !p.clientType) return null; const t=S.clientT
 const FREQ_MONTHS={'Annual':12,'Semi-annual':6,'Quarterly':3,'Bi-monthly':2,'Monthly':12,'Weekly':12};
 function addMonths(s,m){ const d=parse(s); const t=new Date(d.getFullYear(), d.getMonth()+m, d.getDate()); return iso(t); }
 function suggestRenewal(p){
-  if(outcome(p)!=='Won') return null; const m=FREQ_MONTHS[p.frequency]; if(!m) return null;
+  if(outcome(p)!=='Won') return null; if(isRecurring(p)) return contractEnd(p); const m=FREQ_MONTHS[p.frequency]; if(!m) return null;
   const visits=(p.actuals||[]).map(v=>v.date).filter(Boolean).sort();
   const base = (['Monthly','Weekly'].includes(p.frequency) ? null : visits.at(-1)) || p.dateResolved || p.dateSent; if(!base) return null;
   return addMonths(base, m);
 }
 function renewalOf(p){ return p.renewalDate || suggestRenewal(p); }
-function renewalDue(p){ const r=renewalOf(p); if(!r || outcome(p)!=='Won') return false; return days(today(), parse(r)) <= 30; }
+const renewalWindow = p => isRecurring(p) ? 60 : 30;
+function renewalDue(p){ const r=renewalOf(p); if(!r || outcome(p)!=='Won' || p.cancelledOn) return false; return days(today(), parse(r)) <= renewalWindow(p); }
 function renewalKind(p){ return ['Monthly','Weekly'].includes(p.frequency) ? 'Contract renewal' : 'Next service / re-quote'; }
 function approvedCOs(p){ return (p.changeOrders||[]).filter(c=>c.status==='Approved'); }
 function coRevenue(p){ return approvedCOs(p).reduce((s,c)=>s+(num(c.amount)||0),0); }
 function coGP(p){ return approvedCOs(p).reduce((s,c)=>s+(num(c.amount)||0)-(num(c.cost)||0),0); }
 function gpAll(p){ return num(p.gp)!=null ? num(p.gp)+coGP(p) : null; }
-function bdComm(p){ const r=bdRate(p); return (p.datePaid && r!=null && gpAll(p)!=null) ? gpAll(p)*r : null; }
+function bdCommTo(p, upto=today()){ const r=bdRate(p); if(!p.datePaid || r==null || gpAll(p)==null) return null; if(parse(p.datePaid)>upto) return 0;
+  if(!isRecurring(p)) return gpAll(p)*r;
+  const a=num(p.amount)||0, yrGP = a ? num(p.gp)*(annual(p)||0)/a : 0; return (yrGP/12*commMonths(p,upto) + coGP(p))*r; }
+const bdComm = p => bdCommTo(p);
 function estRate(p){ const g=gpPct(p); if(g==null) return null; let r=S.estTiers[0][1]; for(const [min,rate] of S.estTiers) if(g>=min) r=rate; return r; }
 function estBase(p){ return num(p.amount)!=null ? num(p.amount)-(num(p.passThrough)||0)+coRevenue(p) : null; }
 function isEstimator(name){ const m=TEAM.find(t=>t.name===name); return m && ['Estimator','Senior Estimator'].includes(m.role); }
-function estComm(p){ if(!p.datePaid || !isEstimator(p.sentBy)) return null; const r=estRate(p), b=estBase(p); return (r!=null&&b!=null)? b*r : null; }
+function estCommTo(p, upto=today()){ if(!p.datePaid || !isEstimator(p.sentBy)) return null; const r=estRate(p), b=estBase(p); if(r==null||b==null) return null; if(parse(p.datePaid)>upto) return 0;
+  if(!isRecurring(p)) return b*r;
+  const a=num(p.amount)||0, yr=(annual(p)||0)*(a ? 1-(num(p.passThrough)||0)/a : 1); return (yr/12*commMonths(p,upto) + coRevenue(p))*r; }
+const estComm = p => estCommTo(p);
+const hasVal = v => v!=null && v!=='';
+const estPaid = p => hasVal(p.estCommPaidAmt) ? num(p.estCommPaidAmt)||0 : (p.estCommPaidOn ? (estComm(p)||0) : 0);
+const bdPaid  = p => hasVal(p.commPaidAmt) ? num(p.commPaidAmt)||0 : (p.commPaidOn ? (bdComm(p)||0) : 0);
+const estOwed = p => Math.max(0, (estComm(p)||0) - estPaid(p));
+const bdOwed  = p => Math.max(0, (bdComm(p)||0) - bdPaid(p));
+function earnedIn(fn, p, per){ const a=perStart(per), b=perEnd(per); return (fn(p, new Date(+b-864e5))||0) - (fn(p, new Date(+a-864e5))||0); }
+const commMonthsTxt = p => isRecurring(p) && p.datePaid ? ` <span class="note" style="margin:0">${commMonths(p)} of 12 mo</span>` : '';
 function pillClass(st){ if(st==='Lead') return 'p-lead'; if(WON.includes(st)) return 'p-won'; if(LOST.includes(st)) return 'p-lost'; if(OPEN.includes(st)) return 'p-open'; if(PRE.includes(st)) return 'p-review'; return 'p-neutral'; }
 
 // ---------- pipeline ----------
@@ -518,6 +545,7 @@ const FILTERS = [
   ['Won', p=>outcome(p)==='Won'],
   ['Lost', p=>outcome(p)==='Lost'],
   ['Renewals due', p=>renewalDue(p)],
+  ['Contracts', p=>activeContract(p)],
   ['Needs actuals', p=>['Invoiced','Paid'].includes(p.status) && !hasActuals(p)],
   ['Parts to order', p=>outcome(p)==='Won' && partsOpen(p)>0],
   ['Rentals', p=>rentAlerts(p).length>0],
@@ -532,11 +560,12 @@ function renderPipeline(){
   const PV = byEst ? P.filter(p=>p.sentBy===byEst) : P;
   const open=PV.filter(p=>outcome(p)==='Open'), won=PV.filter(p=>outcome(p)==='Won'), lost=PV.filter(p=>outcome(p)==='Lost');
   const due=PV.filter(FILTERS[2][1]).length, stale=PV.filter(FILTERS[3][1]).length, review=PV.filter(FILTERS[1][1]).length;
-  const sum=a=>a.reduce((s,p)=>s+(num(p.amount)||0),0);
-  const rate=(won.length+lost.length)?won.length/(won.length+lost.length):null;
+  const sum=(a,f=contractValue)=>a.reduce((s,p)=>s+(num(f(p))||0),0);
+  const rate=(won.length+lost.length)?won.length/(won.length+lost.length):null, act=PV.filter(activeContract);
   $('#kpis').innerHTML = [
     ['Open pipeline', money(sum(open)), open.length+' proposals',''],
-    ['Won', money(sum(won)), won.length+' proposals',''],
+    ['Won', money(sum(won,wonAmt)), won.length+' proposals',''],
+    ['Recurring / month', money(sum(act,monthlyValue)), act.length+' active contract'+(act.length===1?'':'s'),''],
     ['Win rate', rate==null?'—':pct(rate), (won.length+lost.length)+' decided',''],
     ['Needs review', review, 'waiting on senior estimator',''],
     ['Follow-ups due', due, 'call or email this week', due?'warn':''],
@@ -547,7 +576,7 @@ function renderPipeline(){
   const list=PV.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   $('#rows').innerHTML = list.length ? list.map(p=>{
     const d=daysOpen(p), f=followUp(p);
-    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}${outcome(p)==='Won'&&partsOpen(p)?` <span class="revb ${partsLate(p)?'ptlate':''}" title="${partsOpen(p)} part(s) still to order">Parts</span>`:''}${rentAlerts(p).length?` <span class="revb ${rentAlerts(p).some(a=>a[0]==='bad')?'ptlate':''}" title="${esc(rentAlerts(p).map(a=>a[1]).join('; '))}">Lift</span>`:''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(p.amount)}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
+    return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}${p.cancelledOn?' <span class="revb ptlate">Cancelled</span>':''}${outcome(p)==='Won'&&partsOpen(p)?` <span class="revb ${partsLate(p)?'ptlate':''}" title="${partsOpen(p)} part(s) still to order">Parts</span>`:''}${rentAlerts(p).length?` <span class="revb ${rentAlerts(p).some(a=>a[0]==='bad')?'ptlate':''}" title="${esc(rentAlerts(p).map(a=>a[1]).join('; '))}">Lift</span>`:''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(contractValue(p))}${isRecurring(p)?`<div class="note" style="margin:0">${money(monthlyValue(p))}/mo</div>`:''}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">${PV.length?'No proposals match this view.':'No proposals yet. Use “New proposal” to log the first one.'}</td></tr>`;
   $('#newBtn').hidden = !canCreate(); $('#leadBtn').hidden = !canLead();
 }
@@ -594,12 +623,24 @@ async function addActivity(num, kind, note){
 function closeDrawer(){ $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; PR=null; }
 function calc1(p){ const g=gpPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
 function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null){ const o=outcome(p); return (o==='Won'||o==='Lost') && p.dateResolved ? `<div class="gpline">${o} on ${fmtD(p.dateResolved)}${p.datePaid?' · paid '+fmtD(p.datePaid):''}</div>` : ''; } const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
+function contractHTML(p, ed){
+  const dis=ed?'':'disabled', won=outcome(p)==='Won', s=contractStart(p), e=contractEnd(p);
+  return `<div class="calc">
+      <div><span>Per month</span><b class="num">${money(monthlyValue(p))}</b></div>
+      <div><span>Per year</span><b class="num">${money(annual(p))}</b></div>
+      <div><span>Contract value</span><b class="num">${money(contractValue(p))}</b></div>
+      <div><span>${won?'Runs':'Term'}</span><b class="num">${won&&s?fmtD(s)+' – '+fmtD(e):termOf(p)+' months'}</b></div></div>
+    <div class="grid2" style="margin-top:8px"><label class="f">Term (months)<input type="number" min="1" step="1" data-k="termMonths" id="f-termMonths" value="${esc(p.termMonths??'')}" placeholder="12" ${dis}></label>
+      ${won?`<label class="f">Cancelled on <span class="note" style="margin:0;font-weight:400">only if the client ends it early</span><input type="date" data-k="cancelledOn" id="f-cancelledOn" value="${esc(p.cancelledOn||'')}" ${dis}></label>`:'<div></div>'}</div>
+    ${won&&p.cancelledOn?`<label class="f">Why they cancelled<input data-k="cancelReason" id="f-cancelReason" value="${esc(p.cancelReason||'')}" placeholder="e.g. new property manager, price, quality" ${dis}></label>`:''}
+    <div class="note">Won amounts and scorecards count the contract value. Commission is earned month by month for the first 12 months, starting the month the first invoice is paid${p.cancelledOn?', and stopped when the contract was cancelled':''}.</div>`;
+}
 function calc2(p){ const br=bdRate(p), er=estRate(p); return `${approvedCOs(p).length?`<div class="gpline" style="margin:0 0 6px">Includes approved change orders: +${money(coRevenue(p))} revenue, +${money(coGP(p))} GP</div>`:''}<div class="calc">
       <div><span>BD rate</span><b class="num">${br==null?'—':pct(br)}</b></div>
       <div><span>BD commission</span><b class="num">${money(bdComm(p))}</b></div>
       <div><span>Estimator rate</span><b class="num">${isEstimator(p.sentBy)&&er!=null?pct(er):'—'}</b></div>
       <div><span>Estimator commission</span><b class="num">${money(estComm(p))}</b></div>
-    </div>`; }
+    </div>${isRecurring(p)&&p.datePaid?`<div class="note">Commission earned so far: ${commMonths(p)} of 12 months.</div>`:''}`; }
 function itemsHTML(p, ed, accEd=ed){
   const dis=ed?'':'disabled', adis=accEd?'':'disabled', items=p.items||[], groups=groupsOf(p), L=countedItems(p);
   const frqOpts=v=>'<option value=""></option>'+S.frequencies.map(f=>`<option ${f[0]===v?'selected':''}>${esc(f[0])}</option>`).join('');
@@ -694,11 +735,12 @@ function drawDrawer(){
     <div id="calc2">${calc2(p)}</div>
     <div class="note">Date paid fills in when you mark it Paid. Commission payouts are recorded from the Scorecards page.${p.commPaidOn?` BD commission paid ${fmtD(p.commPaidOn)}.`:''}${p.estCommPaidOn?` Estimator commission paid ${fmtD(p.estCommPaidOn)}.`:''} Owners don't earn estimator commission.</div>
     </fieldset>` : ''}
-    ${outcome(p)==='Won' && FREQ_MONTHS[p.frequency] ? `<fieldset><legend>Renewal</legend>
+    ${outcome(p)==='Won' && (FREQ_MONTHS[p.frequency]||isRecurring(p)) && !p.cancelledOn ? `<fieldset><legend>Renewal</legend>
       <div class="grid2"><label class="f">${renewalKind(p)} date<input type="date" id="f-renewalDate" data-k="renewalDate" value="${esc(renewalOf(p)||'')}" ${dis}></label>
-      <div class="gpline" style="align-self:end">${p.renewalDate?'Set by you':'Suggested from '+esc(p.frequency.toLowerCase())+' frequency'}${renewalDue(p)?' · <b style="color:var(--warn)">due now</b>':''}</div></div>
-      ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn small" id="rnRequote">Re-quote as new proposal</button><button type="button" class="btn ghost small" id="rnDone">Handled, next ${renewalOf(p)?fmtD(addMonths(renewalOf(p),FREQ_MONTHS[p.frequency])):''}</button></div>`:''}
-      <div class="note">Shows under "Renewals due" 30 days before this date.</div></fieldset>` : ''}
+      <div class="gpline" style="align-self:end">${p.renewalDate?'Set by you':isRecurring(p)?'End of the '+termOf(p)+'-month contract':'Suggested from '+esc((p.frequency||'').toLowerCase())+' frequency'}${renewalDue(p)?' · <b style="color:var(--warn)">due now</b>':''}</div></div>
+      ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn small" id="rnRequote">Re-quote as new proposal</button><button type="button" class="btn ghost small" id="rnDone">Handled, next ${renewalOf(p)?fmtD(addMonths(renewalOf(p),isRecurring(p)?termOf(p):FREQ_MONTHS[p.frequency])):''}</button></div>`:''}
+      <div class="note">Shows under "Renewals due" ${renewalWindow(p)} days before this date${isRecurring(p)?', so there is time to talk with the property manager before their budget is set':''}.</div></fieldset>` : ''}
+    ${isRecurring(p) ? `<fieldset><legend>Contract</legend><div id="ctBox">${contractHTML(p, ed)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Parts to order</legend><div id="ptBox">${partsHTML(p, ed)}</div></fieldset>
     <fieldset><legend>Lift &amp; equipment rentals</legend><div id="rtBox">${rentalsTrackHTML(p, ed)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Change orders</legend><div id="coBox">${coHTML(p, ed)}</div></fieldset>` : ''}
@@ -739,7 +781,7 @@ async function save(after, o={}){
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
   if(draft.status==='Lead' && !draft.sentBy){ $('#dmsg').textContent='Assign an estimator before saving the lead.'; return; }
   const btn=$('#saveD'); btn.disabled=true; $('#dmsg').textContent='Saving…';
-  syncFromItems(draft); draft.actualsSummary = actSummary(draft);
+  syncFromItems(draft); draft.actualsSummary = actSummary(draft); draft.yearValue = isRecurring(draft) ? Math.round((annual(draft)||0)*100)/100 : null;
   const row=toRow(draft); if(isNew) delete row.num;
   if(!canPayComm()){ delete row.comm_paid_on; delete row.est_comm_paid_on; }
   const res = isNew ? await sb.from('proposals').insert(row).select().single()
@@ -756,7 +798,7 @@ async function save(after, o={}){
   document.querySelector(`tr[data-id="${saved.num}"]`)?.scrollIntoView({block:'center', behavior:'smooth'});
   clearTimeout(save.t); save.t=setTimeout(()=>{ highlight=null; document.querySelectorAll('tr.hl').forEach(r=>r.classList.remove('hl')); }, 6000);
 }
-function refreshCalcs(){ const a=$('#calc1'), b=$('#calc2'); if(a) a.innerHTML=calc1(draft); if(b) b.innerHTML=calc2(draft); }
+function refreshCalcs(){ const a=$('#calc1'), b=$('#calc2'), c=$('#ctBox'); if(a) a.innerHTML=calc1(draft); if(b) b.innerHTML=calc2(draft); if(c && document.activeElement?.closest('#ctBox')==null) c.innerHTML=contractHTML(draft, canEditDraft()); }
 function itemEvent(e, final){
   const f=e.target.dataset.it; if(!f) return false; const i=+e.target.closest('[data-i]').dataset.i, it=draft.items[i];
   it[f] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
@@ -958,7 +1000,7 @@ $('#ordersBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e
 
 // ---------- Jobs tab: approved work, hours to log (office / project manager) ----------
 function renderJobs(){
-  const up=P.filter(p=>['Approved','Scheduled'].includes(p.status)).sort((a,b)=>(a.status==='Approved'?0:1)-(b.status==='Approved'?0:1) || String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
+  const up=P.filter(p=>['Approved','Scheduled'].includes(p.status) && !p.cancelledOn).sort((a,b)=>(a.status==='Approved'?0:1)-(b.status==='Approved'?0:1) || String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
   const hrs=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !hasActuals(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   const job=p=>`<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`;
   const needs=p=>{ const n=[]; const po=partsOpen(p), ra=rentAlerts(p);
@@ -1166,7 +1208,7 @@ $('#drawer').addEventListener('change', e=>{ const o=e.target.dataset.opt; if(o=
   const groups=groupsOf(draft); let ch=chosenOptions(draft).filter(g=>g!==o); if(e.target.checked) ch.push(o); ch=groups.filter(g=>ch.includes(g));
   if(!ch.length){ e.target.checked=true; toast('At least one option has to count.'); return; }
   draft.pricingOption=ch.join('||'); rerenderItems(); }, true);
-$('#drawer').addEventListener('change', e=>{ if(e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property') autofill(k); if(k==='pricingOption') rerenderItems(); else refreshCalcs(); });
+$('#drawer').addEventListener('change', e=>{ if(e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property') autofill(k); if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
@@ -1258,12 +1300,12 @@ $('#drawer').addEventListener('click', async e=>{
     draft.rev=(draft.rev||1)+1; draft.status='Estimating'; draft.dateSent=null; draft.dateResolved=null; draft.lostReason=null;
     drawDrawer(); $('#dmsg').textContent=`Rev ${draft.rev} started. Change the scope or price, then send it for review and save.`;
   }
-  if(t.id==='rnDone'){ const r=renewalOf(draft); if(!r) return; draft.renewalDate=addMonths(r, FREQ_MONTHS[draft.frequency]); drawDrawer(); $('#dmsg').textContent='Next renewal set. Save to keep it.'; }
+  if(t.id==='rnDone'){ const r=renewalOf(draft); if(!r) return; draft.renewalDate=addMonths(r, isRecurring(draft)?termOf(draft):FREQ_MONTHS[draft.frequency]); drawDrawer(); $('#dmsg').textContent='Next renewal set. Save to keep it.'; }
   if(t.id==='rnRequote'){
     const src=draft, r=renewalOf(src);
     const copy={dateSent:null, sentBy:me.name, status:'Estimating', client:src.client, property:src.property, contactName:src.contactName, contactPhone:src.contactPhone, contactEmail:src.contactEmail,
       billAddress:src.billAddress, siteAddress:src.siteAddress, clientType:'House account', leadSource:'Repeat client', items:structuredClone(src.items||[]).map(i=>({...i, accepted:false})),
-      clarifications:src.clarifications, pricingOption:src.pricingOption, renewalOf:src.num, notes:`Renewal of ${src.num}.`};
+      clarifications:src.clarifications, pricingOption:src.pricingOption, renewalOf:src.num, termMonths:src.termMonths, notes:`Renewal of ${src.num}.`};
     syncFromItems(copy); const row=toRow(copy); delete row.num;
     const res=await sb.from('proposals').insert(row).select().single();
     if(res.error){ toast(res.error.message); return; }
@@ -1282,7 +1324,6 @@ function estPerVisit(p){
 }
 const visitHrs = v => (v && v.hrs!=null && v.hrs!=='') ? (num(v.hrs)||0) : (num(v?.techs)||0)*(num(v?.hpt)||0) + (num(v?.extraHrs)||0);
 const hasActuals = p => (p.actuals||[]).some(v=>visitHrs(v)>0);
-const isRecurring = p => visits(p)>1;
 function actSummary(p){ const jc=jobCompare(p); return jc ? {rev:Math.round(jc.rev), estGP:jc.estGP==null?null:Math.round(jc.estGP), actGP:Math.round(jc.actGP), estHrs:jc.estHrs, actHrs:jc.actHrs, lastDate:(p.actuals||[]).map(v=>v.date).filter(Boolean).sort().at(-1)||iso(today())} : null; }
 function jobCompare(p){
   const V=(p.actuals||[]).filter(v=>visitHrs(v)>0); if(!V.length) return null;
@@ -1932,9 +1973,9 @@ function group(key, names){
     const mine=P.filter(p=>p[key]===n), won=mine.filter(p=>outcome(p)==='Won'), lost=mine.filter(p=>outcome(p)==='Lost'), open=mine.filter(p=>outcome(p)==='Open');
     const sum=(a,f)=>a.reduce((s,p)=>s+(num(f(p))||0),0);
     const closed=mine.map(jobCompare).filter(c=>c && c.estHrs), eh=closed.reduce((s,c)=>s+c.estHrs,0), ah=closed.reduce((s,c)=>s+c.actHrs,0), withAct=mine.map(jobCompare).filter(Boolean), rv=withAct.reduce((s,c)=>s+c.rev,0), egp=withAct.filter(c=>c.estGP!=null).reduce((s,c)=>s+c.estGP,0), agp=withAct.reduce((s,c)=>s+c.actGP,0);
-    return {closedN:withAct.length, hrsVar: eh?(ah-eh)/eh:null, estMargin: rv?egp/rv:null, actMargin: rv?agp/rv:null, n,mine,won,lost,open,wonAmt:sum(won,p=>p.amount),openAmt:sum(open,p=>p.amount),gpWon:sum(won,p=>p.gp),gpBase:sum(won.filter(p=>num(p.gp)!=null),p=>p.amount),
+    return {closedN:withAct.length, hrsVar: eh?(ah-eh)/eh:null, estMargin: rv?egp/rv:null, actMargin: rv?agp/rv:null, n,mine,won,lost,open,wonAmt:sum(won,wonAmt),openAmt:sum(open,contractValue),gpWon:sum(won,p=>num(p.gp)!=null?num(p.gp)*valFactor(p):null),gpBase:sum(won.filter(p=>num(p.gp)!=null),contractValue),
       rate:(won.length+lost.length)?won.length/(won.length+lost.length):null, due:open.filter(p=>{const f=followUp(p);return f&&f<=today();}).length, stale:open.filter(p=>daysOpen(p)>S.expiryDays).length,
-      bdEarned:sum(mine,bdComm), bdPaid:sum(mine.filter(p=>p.commPaidOn),bdComm), estEarned:sum(mine,estComm), estPaid:sum(mine.filter(p=>p.estCommPaidOn),estComm)};
+      bdEarned:sum(mine,bdComm), bdPaid:sum(mine,bdPaid), estEarned:sum(mine,estComm), estPaid:sum(mine,estPaid)};
   });
 }
 function payBtn(kind,name,owed){ return owed>0.005 ? `<button class="btn small" data-pay="${kind}" data-name="${esc(name)}" data-owed="${owed}">Mark ${money(owed)} paid</button>` : ''; }
@@ -1943,10 +1984,12 @@ $('#score').addEventListener('click', async e=>{
   if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent=`Confirm: paid today`; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=`Mark ${money(+b.dataset.owed)} paid`; } },5000); return; }
   const n=b.dataset.name, kind=b.dataset.pay;
   const col = kind==='bd' ? 'comm_paid_on' : 'est_comm_paid_on';
-  const nums=P.filter(p=> kind==='bd' ? (!p.commPaidOn && p.bdRep===n && bdComm(p)>0) : (!p.estCommPaidOn && p.sentBy===n && estComm(p)>0)).map(p=>p.num);
+  const list=P.filter(p=> kind==='bd' ? (p.bdRep===n && bdOwed(p)>0.005) : (p.sentBy===n && estOwed(p)>0.005)), nums=list.map(p=>p.num);
   if(!nums.length) return; b.disabled=true;
-  const {error}=await sb.from('proposals').update({[col]:iso(today())}).in('num',nums);
-  if(error){ toast(error.message); b.disabled=false; return; }
+  const amtCol = kind==='bd' ? 'comm_paid_amt' : 'est_comm_paid_amt', hasAmt = !COLS || COLS.has(amtCol);
+  for(const p of list){ const row={[col]:iso(today())}; if(hasAmt) row[amtCol]=Math.round((kind==='bd'?bdComm(p):estComm(p))*100)/100;
+    const {error}=await sb.from('proposals').update(row).eq('num',p.num);
+    if(error){ toast(/column|schema/i.test(error.message)?'Run database update 010 to turn on monthly commission.':error.message); b.disabled=false; return; } }
   toast(`Recorded commission paid to ${n} on ${nums.length} proposal${nums.length===1?'':'s'}`); await loadProposals();
 });
 let SB_COUNTS=null;
@@ -2088,7 +2131,7 @@ function perEnd(per){ const s=perStart(per); return per==='month' ? new Date(s.g
 const inPer = (v,per) => { const d=parse(v); return !!d && d>=perStart(per) && d<perEnd(per); };
 const PER_LABEL={month:'this month',quarter:'this quarter',year:'this year'};
 const leadDate = p => p.leadAt || p.createdAt;
-const wonAmt = p => (num(p.amount)||0) + coRevenue(p);
+const wonAmt = p => contractValue(p) + coRevenue(p);
 function bdNames(){ return [...new Set(TEAM.filter(t=>t.role==='BD Rep'&&t.active).map(t=>t.name).concat(P.map(p=>p.bdRep).filter(Boolean)))].sort(); }
 function goalFor(n){ const g=(S.goals||[]).find(x=>x[0]===n); return g ? {leads:num(g[1]), won:num(g[2])} : {leads:null, won:null}; }
 function goalBar(label, have, goal, per, fmtV){
@@ -2131,8 +2174,8 @@ function renderSales(){
   const won=mine.filter(p=>outcome(p)==='Won' && inPer(p.dateResolved||p.dateSent,per));
   const lost=mine.filter(p=>outcome(p)==='Lost' && inPer(p.dateResolved||p.dateSent,per));
   const sum=(a,f)=>a.reduce((s,p)=>s+(num(f(p))||0),0);
-  const earned=mine.filter(p=>bdComm(p)!=null && inPer(p.datePaid,per)), owed=mine.filter(p=>bdComm(p)>0 && !p.commPaidOn);
-  const paidPer=mine.filter(p=>bdComm(p)>0 && inPer(p.commPaidOn,per));
+  const earnedAmt=mine.reduce((s,p)=>s+earnedIn(bdCommTo,p,per),0), owed=mine.filter(p=>bdOwed(p)>0.005);
+  const paidPer=mine.filter(p=>bdPaid(p)>0 && inPer(p.commPaidOn,per));
   const due=out.filter(p=>{ const f=followUp(p); return f && f<=today(); });
   const rate=(won.length+lost.length)? won.length/(won.length+lost.length) : null;
   $('#salesSub').textContent = `${salesRep} · ${L} (${fmtD(iso(perStart(per)))} – ${fmtD(iso(new Date(perEnd(per)-864e5)))})`;
@@ -2145,7 +2188,7 @@ function renderSales(){
   const stage=st.map(([n,a])=>{ const amt=sum(a,wonAmt), w=maxAmt>1? amt/maxAmt : a.length/maxN;
     return `<div class="stage"><div><b>${n}</b></div><div class="track"><div class="fill ${n.startsWith('Won')?'done':''}" style="width:${(Math.max(a.length?3:0,w*100)).toFixed(1)}%"></div></div><div class="r">${a.length} · ${money(amt)}</div></div>`; }).join('');
   const waitDays=p=>days(parse(leadDate(p)), today());
-  const stmt=mine.filter(p=>bdComm(p)!=null && (inPer(p.datePaid,per) || (!p.commPaidOn && bdComm(p)>0))).sort((a,b)=>String(b.datePaid).localeCompare(String(a.datePaid)));
+  const stmt=mine.filter(p=>bdComm(p)!=null && (earnedIn(bdCommTo,p,per)>0.005 || bdOwed(p)>0.005)).sort((a,b)=>String(b.datePaid).localeCompare(String(a.datePaid)));
   const recent=mine.filter(p=>outcome(p)==='Won' && (p.dateResolved||p.dateSent) && days(parse(p.dateResolved||p.dateSent),today())<=90).sort((a,b)=>String(b.dateResolved).localeCompare(String(a.dateResolved)));
   $('#salesBody').innerHTML = `
   <div class="kpis">
@@ -2154,9 +2197,9 @@ function renderSales(){
     ${kpi('Proposals out',money(sum(out,wonAmt)), due.length?'warn':'', `${out.length} open${due.length?` · ${due.length} follow-up${due.length===1?'':'s'} due`:''}`)}
     ${kpi('Won',money(sum(won,wonAmt)),'',`${won.length} job${won.length===1?'':'s'}`)}
     ${kpi('Win rate',pct(rate),'',`${won.length} won · ${lost.length} lost`)}
-    ${kpi('Commission earned',money(sum(earned,bdComm)),'','on jobs paid '+L)}
-    ${kpi('Commission paid',money(sum(paidPer,bdComm)),'',L)}
-    ${kpi('Commission owed',money(sum(owed,bdComm)), owed.length?'warn':'','earned, not paid yet')}
+    ${kpi('Commission earned',money(earnedAmt),'',L)}
+    ${kpi('Commission paid',money(sum(paidPer,bdPaid)),'','total paid on jobs settled '+L)}
+    ${kpi('Commission owed',money(sum(owed,bdOwed)), owed.length?'warn':'','earned, not paid yet')}
   </div>
   <div class="sales-grid">
     <div class="card"><h3>Goals</h3>
@@ -2178,10 +2221,10 @@ function renderSales(){
       p=>{ const r=renewalOf(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), fmtD(p.dateResolved), r?`<span class="${renewalDue(p)?'flag warn':''}">${fmtD(r)}</span>`:'—', money(wonAmt(p))]; },
       'No wins in the last 90 days yet.')}<div class="note">Renewal dates are when to go back to the client for the next service or contract.</div></div>
     <div class="card"><h3>Commission statement</h3>${rowsTable(['PFBS #','Client','Client type','Date paid','GP','Rate','Commission','Paid on'], stmt,
-      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.clientType), fmtD(p.datePaid), money(gpAll(p)), pct(bdRate(p)), money(bdComm(p)), p.commPaidOn?fmtD(p.commPaidOn):'<span class="flag warn">Owed</span>'],
+      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.clientType), fmtD(p.datePaid), money(gpAll(p)), pct(bdRate(p)), money(bdComm(p))+commMonthsTxt(p), bdOwed(p)>0.005?`<span class="flag warn">Owed ${money(bdOwed(p))}</span>`:fmtD(p.commPaidOn)],
       'No commission yet. It starts once a client pays for one of your jobs.')}
-      ${stmt.length?`<div class="gpline">Total on this statement: <b>${money(sum(stmt,bdComm))}</b> · owed <b>${money(sum(stmt.filter(p=>!p.commPaidOn),bdComm))}</b></div>`:''}
-      <div class="note">Commission = gross profit (with approved change orders) × your client-type rate, half rate below the ${pct(S.marginFloor)} margin floor. Shows jobs paid ${L} plus anything still owed.</div></div>
+      ${stmt.length?`<div class="gpline">Total on this statement: <b>${money(sum(stmt,bdComm))}</b> · owed <b>${money(sum(stmt,bdOwed))}</b></div>`:''}
+      <div class="note">Commission = gross profit (with approved change orders) × your client-type rate, half rate below the ${pct(S.marginFloor)} margin floor. Recurring contracts earn month by month for the first 12 months. Shows commission earned ${L} plus anything still owed.</div></div>
   </div>`;
 }
 
@@ -2203,7 +2246,7 @@ function renderEstSales(){
   const lost=mine.filter(p=>outcome(p)==='Lost' && inPer(p.dateResolved||p.dateSent,per));
   const rate=(won.length+lost.length)? won.length/(won.length+lost.length) : null;
   const wg=won.filter(p=>num(p.gp)!=null), margin=sum(wg,p=>p.amount) ? sum(wg,gpAll)/sum(wg,wonAmt) : null;
-  const earned=mine.filter(p=>estComm(p)!=null && inPer(p.datePaid,per)), owed=mine.filter(p=>estComm(p)>0 && !p.estCommPaidOn);
+  const earnedAmt=mine.reduce((s,p)=>s+earnedIn(estCommTo,p,per),0), owed=mine.filter(p=>estOwed(p)>0.005), act=mine.filter(activeContract);
   const closed=mine.map(p=>({p,c:jobCompare(p)})).filter(x=>x.c).sort((a,b)=>String(b.p.actualsSummary?.lastDate||b.p.num).localeCompare(String(a.p.actualsSummary?.lastDate||a.p.num)));
   const ch=closed.filter(x=>x.c.estHrs), eh=ch.reduce((s,x)=>s+x.c.estHrs,0), ah=ch.reduce((s,x)=>s+x.c.actHrs,0), hv=eh?(ah-eh)/eh:null;
   const waitDays=p=>days(parse(leadDate(p)), today());
@@ -2218,7 +2261,7 @@ function renderEstSales(){
     return `<div class="stage"><div><b>${n}</b></div><div class="track"><div class="fill ${n==='Won'?'done':''}" style="width:${(Math.max(a.length?3:0,w*100)).toFixed(1)}%"></div></div><div class="r">${a.length} · ${money(amt)}</div></div>`; }).join('');
   const g=goalFor(estRep), wonQ=sum(mine.filter(p=>outcome(p)==='Won' && inPer(p.dateResolved||p.dateSent,'quarter')),wonAmt);
   const recent=mine.filter(p=>outcome(p)==='Won' && (p.dateResolved||p.dateSent) && days(parse(p.dateResolved||p.dateSent),today())<=90).sort((a,b)=>String(b.dateResolved).localeCompare(String(a.dateResolved)));
-  const stmt=mine.filter(p=>estComm(p)!=null && (inPer(p.datePaid,per) || (!p.estCommPaidOn && estComm(p)>0))).sort((a,b)=>String(b.datePaid).localeCompare(String(a.datePaid)));
+  const stmt=mine.filter(p=>estComm(p)!=null && (earnedIn(estCommTo,p,per)>0.005 || estOwed(p)>0.005)).sort((a,b)=>String(b.datePaid).localeCompare(String(a.datePaid)));
   const jm=p=>{ const c=jobCompare(p); return c&&c.rev ? pct(c.actGP/c.rev) : '—'; };
   $('#salesBody').innerHTML = `
   <div class="kpis">
@@ -2228,8 +2271,9 @@ function renderEstSales(){
     ${kpi('Won',money(sum(won,wonAmt)),'',`${won.length} job${won.length===1?'':'s'} ${L}`)}
     ${kpi('Win rate',pct(rate),'',`${won.length} won · ${lost.length} lost`)}
     ${kpi('Margin on won',pct(margin), margin!=null&&margin<S.marginFloor?'alert':'','as estimated')}
-    ${comm?kpi('Commission earned',money(sum(earned,estComm)),'','on jobs paid '+L):''}
-    ${comm?kpi('Commission owed',money(sum(owed,estComm)), owed.length?'warn':'','earned, not paid yet'):''}
+    ${kpi('Recurring / month',money(sum(act,monthlyValue)),'',`${act.length} active contract${act.length===1?'':'s'}`)}
+    ${comm?kpi('Commission earned',money(earnedAmt),'',L):''}
+    ${comm?kpi('Commission owed',money(sum(owed,estOwed)), owed.length?'warn':'','earned, not paid yet'):''}
     ${kpi('Hours vs estimate', hv==null?'—':sgn(hv)+pct(Math.abs(hv)), hv==null?'':Math.abs(hv)<=0.15?'':'warn', ch.length?`${ch.length} closed job${ch.length===1?'':'s'} · within ±15% is accurate`:'no hours logged yet')}
   </div>
   <div class="sales-grid">
@@ -2246,14 +2290,17 @@ function renderEstSales(){
     <div class="card"><h3>Won (last 90 days)</h3>${rowsTable(['PFBS #','Client','Property','Job status','Margin','Amount'], recent,
       p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), `<span class="pill ${pillClass(p.status)}">${esc(p.status)}</span>`, pct(gpPct(p)), money(wonAmt(p))],
       'No wins in the last 90 days yet.')}</div>
+    <div class="card"><h3>Recurring contracts (${act.length})</h3>${rowsTable(['PFBS #','Client','Property','Per month','Contract ends','Commission','Amount'], act.sort((a,b)=>String(renewalOf(a)||'').localeCompare(String(renewalOf(b)||''))),
+      p=>{ const r=renewalOf(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), money(monthlyValue(p)), r?`<span class="${renewalDue(p)?'flag warn':''}">${fmtD(r)}${renewalDue(p)?' · renew':''}</span>`:'—', p.datePaid?`${commMonths(p)} of 12 mo`:'starts at first payment', money(wonAmt(p))]; },
+      'No recurring contracts yet. Monthly, quarterly and other repeat services show here once approved.')}<div class="note">Contracts show "renew" 60 days before they end. Amount is the full contract value.</div></div>
     <div class="card"><h3>Estimate vs actual</h3>${rowsTable(['PFBS #','Client','Est. hours','Actual hours','Est. margin','Actual margin'], closed.slice(0,10).map(x=>x.p),
       p=>{ const c=jobCompare(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), c.estHrs==null?'—':fmtH(c.estHrs), `${fmtH(c.actHrs)}${c.hrsVar!=null?` <span class="${Math.abs(c.hrsVar)<=0.15?'up':'down'}">(${sgn(c.hrsVar)}${pct(Math.abs(c.hrsVar))})</span>`:''}`, c.estGP!=null&&c.rev?pct(c.estGP/c.rev):'—', `<b>${jm(p)}</b>`]; },
       'Shows up once the office logs actual hours on your finished jobs.')}<div class="note">Your last 10 jobs with hours logged. Green: within ±15% of your estimate.</div></div>
     ${comm?`<div class="card"><h3>Commission statement</h3>${rowsTable(['PFBS #','Client','Date paid','Amount','GP %','Rate','Commission','Paid on'], stmt,
-      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), fmtD(p.datePaid), money(estBase(p)), pct(gpPct(p)), pct(estRate(p)), money(estComm(p)), p.estCommPaidOn?fmtD(p.estCommPaidOn):'<span class="flag warn">Owed</span>'],
+      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), fmtD(p.datePaid), isRecurring(p)?money(monthlyValue(p))+'/mo':money(estBase(p)), pct(gpPct(p)), pct(estRate(p)), money(estComm(p))+commMonthsTxt(p), estOwed(p)>0.005?`<span class="flag warn">Owed ${money(estOwed(p))}</span>`:fmtD(p.estCommPaidOn)],
       'No commission yet. It starts once a client pays for one of your jobs.')}
-      ${stmt.length?`<div class="gpline">Total on this statement: <b>${money(sum(stmt,estComm))}</b> · owed <b>${money(sum(stmt.filter(p=>!p.estCommPaidOn),estComm))}</b></div>`:''}
-      <div class="note">Commission = job amount (less pass-through, plus approved change orders) × your rate, which depends on the job's margin. Shows jobs paid ${L} plus anything still owed.</div></div>`:''}
+      ${stmt.length?`<div class="gpline">Total on this statement: <b>${money(sum(stmt,estComm))}</b> · owed <b>${money(sum(stmt,estOwed))}</b></div>`:''}
+      <div class="note">Commission = job amount (less pass-through, plus approved change orders) × your rate, which depends on the job's margin. Recurring contracts earn month by month for the first 12 months, starting when the first invoice is paid. Shows commission earned ${L} plus anything still owed.</div></div>`:''}
   </div>`;
 }
 $('#salesKind').addEventListener('click', e=>{ const b=e.target.closest('[data-kind]'); if(!b) return; salesKind=b.dataset.kind; renderSales(); });
