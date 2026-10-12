@@ -2185,13 +2185,13 @@ function renderComm(){
     </div>
     <div class="cards">
     <div class="card"><h3>Statement</h3>
-      <div class="tablewrap"><table><thead><tr><th>PFBS #</th><th>Client</th><th class="hide-sm">Type</th><th class="hide-sm">Date paid</th><th class="r hide-sm">Basis</th><th class="r">Rate</th><th class="r">Earned</th><th class="r">Paid</th><th class="r">Owed</th></tr></thead><tbody>
+      <div class="tablewrap"><table><thead><tr><th>PFBS #</th><th>Client</th><th class="hide-sm">Type</th><th class="hide-sm">Client paid</th><th class="r hide-sm">Basis</th><th class="r">Rate</th><th class="r">Earned</th><th class="r">Paid to them</th><th class="hide-sm">Paid on</th><th class="r">Owed</th></tr></thead><tbody>
       ${L.length?L.map(x=>`<tr data-id="${esc(x.p.num)}" tabindex="0"><td class="pnum">${esc(x.p.num)}</td><td>${esc(x.p.client)}</td><td class="hide-sm">${kindL(x.kind)}</td><td class="hide-sm num">${fmtD(x.p.datePaid)}</td>
         <td class="r num hide-sm">${x.kind==='est'?(isRecurring(x.p)?money(x.base)+'/mo':money(x.base)):money(x.base)+' GP'}</td>
         <td class="r num">${pct(x.rate)}${hasVal(x.kind==='est'?x.p.estCommRate:x.p.bdCommRate)?' <span class="note" style="margin:0" title="Locked the day the job was paid">locked</span>':''}</td>
-        <td class="r num">${money(x.earned)}${isRecurring(x.p)?`<div class="note" style="margin:0">${commMonths(x.p)} of 12 mo</div>`:''}</td><td class="r num">${money(x.paid)}</td><td class="r num">${x.owed>0.005?`<b class="flag warn">${money(x.owed)}</b>`:'—'}</td></tr>`).join('')
-        : '<tr><td colspan="9" class="empty">No commission yet.</td></tr>'}</tbody></table></div>
-      <div class="note">Earned counts jobs with a Date paid. The rate is locked the day the job is paid, so changing rates in Settings never changes past commission. Recurring contracts earn month by month for the first 12 months.</div></div>
+        <td class="r num">${money(x.earned)}${isRecurring(x.p)?`<div class="note" style="margin:0">${commMonths(x.p)} of 12 mo</div>`:''}</td><td class="r num">${money(x.paid)}</td><td class="hide-sm num">${(d=>d?fmtD(d):'—')(x.kind==='est'?x.p.estCommPaidOn:x.p.commPaidOn)}</td><td class="r num">${x.owed>0.005?`<b class="flag warn">${money(x.owed)}</b>`:'—'}</td></tr>`).join('')
+        : '<tr><td colspan="10" class="empty">No commission yet.</td></tr>'}</tbody></table></div>
+      <div class="note"><b>Client paid</b> is the job's Date paid. <b>Paid on</b> is the last time commission on that job was paid to them (full detail in Payout history). Earned counts jobs with a Date paid. The rate is locked the day the job is paid, so changing rates in Settings never changes past commission. Recurring contracts earn month by month for the first 12 months.</div></div>
     <div class="card"><h3>Payout history (${mine.length})</h3>
       <div class="tablewrap"><table><thead><tr><th>Paid on</th><th class="r">Amount</th><th>Method</th><th class="hide-sm">Reference</th><th class="hide-sm">Jobs</th><th class="hide-sm">Recorded by</th><th></th></tr></thead><tbody>
       ${mine.length?mine.map(x=>`<tr style="cursor:default" class="${x.voided?'voided':''}"><td class="num">${fmtD(x.paid_on)}</td><td class="r num">${x.voided?`<s>${money(x.amount)}</s>`:`<b>${money(x.amount)}</b>`}</td><td>${esc(x.method||'')}</td><td class="hide-sm">${esc(x.reference||'')}</td>
@@ -2244,8 +2244,8 @@ $('#commBody').addEventListener('click', async e=>{
 });
 $('#commCsv').addEventListener('click', ()=>{
   const q=v=>{ const t=String(v??''); return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
-  const L=commLines(commPerson||''), rows=[['Statement for',commPerson],[],['PFBS #','Client','Type','Date paid','Rate','Earned','Paid','Owed']]
-    .concat(L.map(x=>[x.p.num,x.p.client,x.kind==='est'?'Estimator':'BD',x.p.datePaid||'',x.rate!=null?(x.rate*100).toFixed(2)+'%':'',x.earned.toFixed(2),x.paid.toFixed(2),x.owed.toFixed(2)]))
+  const L=commLines(commPerson||''), rows=[['Statement for',commPerson],[],['PFBS #','Client','Type','Client paid','Rate','Earned','Paid to them','Paid on','Owed']]
+    .concat(L.map(x=>[x.p.num,x.p.client,x.kind==='est'?'Estimator':'BD',x.p.datePaid||'',x.rate!=null?(x.rate*100).toFixed(2)+'%':'',x.earned.toFixed(2),x.paid.toFixed(2),(x.kind==='est'?x.p.estCommPaidOn:x.p.commPaidOn)||'',x.owed.toFixed(2)]))
     .concat([[],['Payouts'],['Paid on','Amount','Method','Reference','Jobs','Recorded by','Voided','Void reason']])
     .concat(CP.filter(x=>x.person===commPerson).map(x=>[x.paid_on,x.amount,x.method||'',x.reference||'',(x.lines||[]).map(l=>l.num+' '+l.amount).join('; '),x.recorded_by||'',x.voided?'yes':'',x.void_reason||'']));
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'})); a.download=`Commission - ${commPerson} - ${iso(today())}.csv`; a.click();
