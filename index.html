@@ -366,7 +366,7 @@ const ROLES = ['Owner','Admin','Senior Estimator','Estimator','BD Rep'];
 const DEFAULTS = {
   reportAppUrl: 'https://pfbs-reports.arturo-perez408.workers.dev', goals: [], services: [], frequencies: [['One-time',1],['Annual',1]], leadSources: [], lostReasons: [],
   clientTypes: [['New client',0.10],['Existing client - new property',0.05],['House account',0]],
-  marginFloor: 0.35, belowFloorShare: 0.5, estTiers: [[0,0.02],[0.35,0.03],[0.45,0.04]], estBdShare: 0.75, expiryDays: 90,
+  marginFloor: 0.35, belowFloorShare: 0.5, estTiers: [[0,0.02],[0.35,0.03],[0.45,0.04]], estBdShare: 0.75, priceIncrease: 0.05, expiryDays: 90,
   clarifications: [['All','This pricing does not cover removal of hard water deposits, adhesive residue, paint overspray, or silicone buildup.'],['All','Client/building management is responsible for supplying any inspection certificates required prior to the start of work.']],
   addOns: ['Window screen cleaning','Pressure washing - sidewalks & entry','Pressure washing - parking structure','Hard water stain removal','Interior window washing','Solar panel cleaning','Gutter cleaning','Graffiti removal'],
   est: { labor: [['Administration',45,0],['Expert/Chair',75,32],['Apprentice',65,25]], taxRate: 0.1075, matMarkup: 1, rentMarkup: 0.25, equipMarkup: 0.25,
@@ -377,11 +377,11 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt',budget_year:'budgetYear',budget_check:'budgetCheck'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt',budget_year:'budgetYear',budget_check:'budgetCheck',lost_to:'lostTo',lost_price:'lostPrice'};
 const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp',report_sent_on:'reportSentOn',report_url:'reportUrl',est_comm_rate:'estCommRate',bd_comm_rate:'bdCommRate'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt','budget_year'].includes(c)) v=num(v); o[c]=v; } return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt','budget_year','lost_price'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -647,6 +647,20 @@ async function addActivity(num, kind, note){
 function closeDrawer(){ $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; PR=null; }
 function calc1(p){ const g=gpPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
 function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null){ const o=outcome(p); return (o==='Won'||o==='Lost') && p.dateResolved ? `<div class="gpline">${o} on ${fmtD(p.dateResolved)}${p.datePaid?' · paid '+fmtD(p.datePaid):''}</div>` : ''; } const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
+// renewal price check: last price, real margin, and what to charge next
+function priceCheckHTML(p){
+  const price=num(p.amount); if(!price) return '';
+  const target=num(S.est?.targetMargin)||0.45, h=contractHealth(p), jc=jobCompare(p);
+  let m=null, src='estimated', cost=null;
+  if(h && h.m!=null){ m=h.m; src='typical visit'; cost=price*(1-m); }
+  else if(jc && jc.rev){ m=jc.actGP/jc.rev; src='actual'; cost=price*(1-m); }
+  else if(gpPct(p)!=null){ m=gpPct(p); cost=price*(1-m); }
+  const inc=Math.round(price*(1+incPct())), need=cost!=null?Math.ceil(cost/(1-target)):null;
+  const advice = m==null ? `A ${Math.round(incPct()*1000)/10}% increase would make it ${money(inc)}.`
+    : m<target ? `<b style="color:var(--bad)">Raise it:</b> to get back to ${pct(target)} the price needs to be about <b>${money(Math.max(need,inc))}</b>${isRecurring(p)?'/visit':''}.`
+    : `<b>Margin is healthy.</b> The yearly ${Math.round(incPct()*1000)/10}% increase (${money(inc)}${isRecurring(p)?'/visit':''}) keeps up with wages.`;
+  return `<div class="gpline" style="margin-top:8px">Last price <b>${money(price)}</b>${isRecurring(p)?'/visit':''}${m!=null?` · ${src} margin <b class="${m<S.marginFloor?'down':''}">${pct(m)}</b>`:''}. ${advice}</div>`;
+}
 function contractHTML(p, ed){
   const dis=ed?'':'disabled', won=outcome(p)==='Won', s=contractStart(p), e=contractEnd(p);
   return `<div class="calc">
@@ -694,7 +708,7 @@ function itemsHTML(p, ed, accEd=ed){
   return `${items.length?'':'<div class="note" style="margin:0 0 8px">Add one line per service. Add-ons are optional extras the client can accept.</div>'}
     <div class="items">${rows}</div>
     <datalist id="descList">${[...S.addOns,...S.services].map(d=>`<option value="${esc(d)}">`).join('')}</datalist>
-    ${ed?'<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" data-add="Service">+ Add service</button><button type="button" class="btn ghost small" data-add="Add-on">+ Add add-on</button></div>':''}
+    ${ed?'<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" data-add="Service">+ Add service</button><button type="button" class="btn ghost small" data-add="Add-on">+ Add add-on</button><button type="button" class="btn ghost small" id="raiseBtn" title="Raise every line price by a percentage">Raise prices %</button></div>':''}
     ${pick}
     ${items.length?`<div class="itot" id="itot">${itotText(p)}</div>`:''}`;
 }
@@ -728,9 +742,11 @@ function drawDrawer(){
       ${!canReview()&&PRE.includes(orig?.status??'Estimating')?'<div class="note">Move it to Needs Review when it is ready. The senior estimator sends it.</div>':''}
       ${p.status==='Budget' ? `<div class="grid2" style="margin-top:6px">${field('Budget year','budgetYear','number')}${field('Check back on','budgetCheck','date')}</div>
         <div class="note">Budget numbers stay out of the pipeline, win rate and follow-up emails. On the check-back date it shows under Follow-up due. When the client is ready, click <b>Sent</b> to turn it into a proposal (follow-ups start that day), or <b>Approved</b> if they approve the budget price.</div>` : `<div id="openline">${openLine(p)}</div>`}
+      ${won && !isNew && ed ? `<div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn ghost small" id="bdNext">Next year's budget proposal +${Math.round(incPct()*1000)/10}%</button></div>` : ''}
       ${!isNew && p.status!=='Lead' ? `<div class="revline"><span>Revision <b>${p.rev||1}</b>${(p.revisions||[]).length?` · ${(p.revisions||[]).map(r=>`Rev ${r.rev}: ${money(r.amount)} on ${fmtD(r.date)}`).join(' · ')}`:''}</span>${ed && !PRE.includes(p.status) && outcome(p)!=='Won' ? `<button type="button" class="btn ghost small" id="revBtn">${draft._revArmed?'Confirm: start Rev '+((p.rev||1)+1):'Create revision'}</button>`:''}</div>`:''}
       ${p.renewalOf?`<div class="gpline">Renewal of <a href="#" data-open="${esc(p.renewalOf)}">${esc(p.renewalOf)}</a></div>`:''}
-      ${LOST.includes(p.status)?`<div class="grid2" style="margin-top:6px">${sel('Lost reason','lostReason',S.lostReasons)}</div>`:''}
+      ${LOST.includes(p.status)?`<div class="grid2" style="margin-top:6px">${sel('Lost reason','lostReason',S.lostReasons)}${field('Lost to (competitor)','lostTo','text','','list="compList" autocomplete="off" placeholder="if you know"')}${field('Their price ($)','lostPrice','number','','placeholder="if you know"')}</div>
+        <datalist id="compList">${[...new Set(P.map(x=>x.lostTo).filter(Boolean))].sort().map(c=>`<option value="${esc(c)}">`).join('')}</datalist>`:''}
       ${p.reviewedBy?`<div class="gpline">Reviewed by ${esc(p.reviewedBy)}${p.reviewedAt?' on '+fmtD(p.reviewedAt):''}</div>`:''}
     </fieldset>
 
@@ -789,8 +805,8 @@ function drawDrawer(){
     ${outcome(p)==='Won' && (FREQ_MONTHS[p.frequency]||isRecurring(p)) && !p.cancelledOn ? `<fieldset><legend>Renewal</legend>
       <div class="grid2"><label class="f">${renewalKind(p)} date<input type="date" id="f-renewalDate" data-k="renewalDate" value="${esc(renewalOf(p)||'')}" ${dis}></label>
       <div class="gpline" style="align-self:end">${p.renewalDate?'Set by you':isRecurring(p)?'End of the '+termOf(p)+'-month contract':'Suggested from '+esc((p.frequency||'').toLowerCase())+' frequency'}${renewalDue(p)?' · <b style="color:var(--warn)">due now</b>':''}</div></div>
-      ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn small" id="rnRequote">Re-quote as new proposal</button><button type="button" class="btn ghost small" id="rnDone">Handled, next ${renewalOf(p)?fmtD(addMonths(renewalOf(p),isRecurring(p)?termOf(p):FREQ_MONTHS[p.frequency])):''}</button></div>`:''}
-      ${(h=>h&&h.kind==='low'?`<div class="gpline" style="color:var(--bad)"><b>Before renewing:</b> ${esc(h.text)}</div>`:'')(contractHealth(p))}
+      ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn small" id="rnRequoteInc">Re-quote +${Math.round(incPct()*1000)/10}%</button><button type="button" class="btn ghost small" id="rnRequote">Re-quote, same price</button><button type="button" class="btn ghost small" id="rnDone">Handled, next ${renewalOf(p)?fmtD(addMonths(renewalOf(p),isRecurring(p)?termOf(p):FREQ_MONTHS[p.frequency])):''}</button></div>`:''}
+      ${priceCheckHTML(p)}
       <div class="note">Shows under "Renewals due" ${renewalWindow(p)} days before this date${isRecurring(p)?', so there is time to talk with the property manager before their budget is set':''}.</div></fieldset>` : ''}
     ${isRecurring(p) ? `<fieldset><legend>Contract</legend><div id="ctBox">${contractHTML(p, ed)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Parts to order</legend><div id="ptBox">${partsHTML(p, ed)}</div></fieldset>
@@ -813,6 +829,21 @@ function drawDrawer(){
     <button class="btn ghost" id="cancelD">Cancel</button>
     ${isNew?'':`<button class="btn ghost" id="estPdfD">Estimate PDF</button><button class="btn ghost" id="pdfD">Download PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
     <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save changes'}</button></div>`;
+}
+const incPct = () => S.priceIncrease ?? 0.05;
+function raiseItems(items, f){ return (items||[]).map(i=>({...i, amount: num(i.amount)!=null ? Math.round(num(i.amount)*(1+f)*100)/100 : i.amount})); }
+// copy a job into a new proposal (renewal or next year's budget), optionally with the yearly increase
+async function requote(src, {pct=0, budget=false}={}){
+  const y=today().getFullYear()+1;
+  const copy={dateSent:null, sentBy:me.name, status:'Estimating', client:src.client, property:src.property, contactName:src.contactName, contactPhone:src.contactPhone, contactEmail:src.contactEmail,
+    billAddress:src.billAddress, siteAddress:src.siteAddress, clientType:'House account', leadSource:'Repeat client', items:raiseItems(structuredClone(src.items||[]), pct).map(i=>({...i, accepted:false})),
+    clarifications:src.clarifications, pricingOption:src.pricingOption, renewalOf:src.num, termMonths:src.termMonths, budgetYear: budget ? y : null,
+    notes:`${budget?`Budget proposal for ${y}, from`:'Renewal of'} ${src.num}${pct?` with a ${Math.round(pct*1000)/10}% price increase`:''}.`};
+  if(!(src.items||[]).length && num(src.amount)!=null){ copy.amount=Math.round(num(src.amount)*(1+pct)*100)/100; copy.gp=num(src.gp)!=null?num(src.gp)+copy.amount-num(src.amount):null; copy.service=src.service; copy.frequency=src.frequency; }
+  syncFromItems(copy); const row=toRow(copy); delete row.num;
+  const res=await sb.from('proposals').insert(row).select().single();
+  if(res.error){ toast(res.error.message); return null; }
+  toast(`Created ${res.data.num} from ${src.num}${pct?` (+${Math.round(pct*1000)/10}%)`:''}`); return res.data.num;
 }
 function askJobNo(p){
   return new Promise(res=>{
@@ -1396,17 +1427,14 @@ $('#drawer').addEventListener('click', async e=>{
     drawDrawer(); $('#dmsg').textContent=`Rev ${draft.rev} started. Change the scope or price, then send it for review and save.`;
   }
   if(t.id==='rnDone'){ const r=renewalOf(draft); if(!r) return; draft.renewalDate=addMonths(r, isRecurring(draft)?termOf(draft):FREQ_MONTHS[draft.frequency]); drawDrawer(); $('#dmsg').textContent='Next renewal set. Save to keep it.'; }
-  if(t.id==='rnRequote'){
-    const src=draft, r=renewalOf(src);
-    const copy={dateSent:null, sentBy:me.name, status:'Estimating', client:src.client, property:src.property, contactName:src.contactName, contactPhone:src.contactPhone, contactEmail:src.contactEmail,
-      billAddress:src.billAddress, siteAddress:src.siteAddress, clientType:'House account', leadSource:'Repeat client', items:structuredClone(src.items||[]).map(i=>({...i, accepted:false})),
-      clarifications:src.clarifications, pricingOption:src.pricingOption, renewalOf:src.num, termMonths:src.termMonths, notes:`Renewal of ${src.num}.`};
-    syncFromItems(copy); const row=toRow(copy); delete row.num;
-    const res=await sb.from('proposals').insert(row).select().single();
-    if(res.error){ toast(res.error.message); return; }
-    if(r) await sb.from('proposals').update({renewal_date:addMonths(r, FREQ_MONTHS[src.frequency])}).eq('num', src.num);
-    toast(`Created ${res.data.num} from ${src.num}`); closeDrawer(); await loadProposals(); openDrawer(res.data.num);
+  if(t.id==='rnRequote' || t.id==='rnRequoteInc' || t.id==='bdNext'){
+    const src=draft, r=renewalOf(src), budget=t.id==='bdNext', pct=t.id==='rnRequote'?0:incPct();
+    const num2=await requote(src,{pct, budget}); if(!num2) return;
+    if(!budget && r) await sb.from('proposals').update({renewal_date:addMonths(r, isRecurring(src)?termOf(src):FREQ_MONTHS[src.frequency])}).eq('num', src.num);
+    closeDrawer(); await loadProposals(); openDrawer(num2);
   }
+  if(t.id==='raiseBtn'){ const v=await formDialog('Raise prices', `<label class="f">Increase every line price by (%)<input name="pct" type="number" step="any" value="${Math.round(incPct()*1000)/10}" required></label><div class="note">Line prices go up; costs stay the same, so the margin goes up too. Save to keep it.</div>`, 'Raise prices');
+    if(!v) return; const f=(num(v.pct)||0)/100; if(!f) return; draft.items=raiseItems(draft.items, f); draft.notes=((draft.notes||'')+`\nPrices raised ${v.pct}% on ${fmtD(iso(today()))}.`).trim(); rerenderItems(); $('#dmsg').textContent=`Prices raised ${v.pct}%. Save to keep it.`; }
 });
 
 // ---------- job actuals (estimated vs actual) ----------
@@ -2208,6 +2236,15 @@ $('#rep').addEventListener('change', e=>{ if(e.target.id==='repMonth' && e.targe
 $('#repBtn').addEventListener('click', ()=>openReport());
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#rep').hidden){ e.stopImmediatePropagation(); $('#rep').hidden=true; } }, true);
 // budget proposals: how many turned into work, by budget year
+function lostToCard(){
+  const L=P.filter(p=>outcome(p)==='Lost' && p.lostTo); if(!L.length) return '';
+  const g={}; for(const p of L){ const k=p.lostTo.trim(); (g[k]=g[k]||[]).push(p); }
+  const rows=Object.entries(g).sort((a,b)=>b[1].length-a[1].length).map(([c,a])=>{ const wp=a.filter(p=>num(p.lostPrice)!=null && num(p.amount));
+    const gap=wp.length ? wp.reduce((s,p)=>s+(num(p.lostPrice)-num(p.amount))/num(p.amount),0)/wp.length : null;
+    const svcs=[...new Set(a.map(p=>p.service).filter(Boolean))].join(', ');
+    return [esc(c), a.length, money(a.reduce((s,p)=>s+contractValue(p),0)), esc(svcs||'—'), gap==null?'—':`<span class="${gap<0?'down':''}">${gap>0?'+':gap<0?'−':''}${pct(Math.abs(gap))}</span>`]; });
+  return `<div class="card"><h3>Lost to</h3>${table(['Competitor','Times','Our price $','Services','Their price vs ours'], rows, '')}<div class="note">From proposals marked Declined with a competitor filled in. "−8%" means they came in 8% under us on average.</div></div>`;
+}
 function budgetCard(){
   const B=P.filter(p=>p.budgetYear && !PRE.includes(p.status)); if(!B.length) return '';
   const yrs=[...new Set(B.map(p=>+p.budgetYear))].sort((a,b)=>b-a);
@@ -2233,6 +2270,7 @@ function renderScore(){
     bd.map(r=>[esc(r.n),r.mine.length,r.mine.filter(p=>p.status==='Lead').length,r.won.length,money(r.wonAmt),money(r.gpWon),(x=>x==null?'—':fmtH(Math.round(x*10)/10))(daysToQuote(r.mine))]), 'No BD reps yet. Add them on the Settings tab when you hire.')}</div>
   <div class="card"><h3>By lead source</h3>${table(['Lead source','Proposals','Won','Win rate','Won $'], src.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt)]), 'Pick a Lead source on new proposals and this fills in.')}</div>
   ${budgetCard()}
+  ${lostToCard()}
   <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $','Actual margin'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt),r.jcN?`${pct(r.actM)} <span class="note" style="margin:0">(${r.jcN} job${r.jcN===1?'':'s'})</span>`:'—']), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
 }
 
@@ -2527,6 +2565,7 @@ function renderSettings(){
       <div class="note">On labor-only jobs wages are most of the cost, so wages ≈ 100% − margin. Caution 45% / max 55% fits a 45% target. The margin floor is the red line. Burden is added on top of wages in every estimate.</div>
       <label class="f">Margin floor (GP %)<input id="s-floor" type="number" step="any" value="${S.marginFloor*100}" ${ro}></label>
       <label class="f">BD rate below floor (% of normal)<input id="s-share" type="number" step="any" value="${S.belowFloorShare*100}" ${ro}></label>
+      <label class="f">Yearly price increase % (renewals and next year's budget)<input id="s-pinc" type="number" step="any" value="${Math.round((S.priceIncrease??0.05)*1000)/10}" ${ro}></label>
       <label class="f">Estimator rate when a BD rep is on the job (% of normal)<input id="s-estbd" type="number" step="any" value="${Math.round((S.estBdShare??1)*1000)/10}" ${ro}></label>
       <label class="f">Proposal valid for (days)<input id="s-exp" type="number" value="${S.expiryDays}" ${ro}></label>
       <label class="f">Service report app link<input id="s-rpt" type="url" value="${esc(S.reportAppUrl||'')}" ${ro}></label></div>
@@ -2558,6 +2597,9 @@ function renderSettings(){
     <label class="f" style="margin-top:8px">Acknowledgment text<textarea id="s-ack" rows="2" ${ro}>${esc(S.ack)}</textarea></label>
   </div>
   ${owner?'<div style="margin-top:16px"><button class="btn" id="saveS">Save settings</button></div>':''}
+  ${canPay()?`<div class="card listedit"><h3>Backup</h3>
+    <div class="note" style="margin:0 0 8px">One file with every proposal, its history, prospects, the team, settings, commission payouts and the change log. Zapier saves one to SharePoint every Sunday (see the setup guide, Zap 5); this button makes one now.</div>
+    <div class="toolbar" style="margin:0"><button type="button" class="btn" id="bkGo">Download backup</button></div></div>`:''}
   ${owner?`<div class="card listedit"><h3>Clean up old proposals</h3>
     <div class="note" style="margin:0 0 8px">Marks open proposals (Sent) that were sent before a date as <b>Expired</b>. Use it once to clear out old imported proposals so follow-ups show only real ones. Each one gets a note in its history, and its expired date is set to when it actually ran out (sent date + ${S.expiryDays} days), so this month's win rate isn't affected.</div>
     <label class="f">Sent before<input type="date" id="cuDate"></label>
@@ -2581,7 +2623,7 @@ function organizeSettings(){
     ['Lists', ['Services','Frequencies','Lead sources','Lost reasons','Add-on suggestions']],
     ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
     ['Change log', ['Change log']],
-    ['Clean up', ['Clean up old proposals']]];
+    ['Data', ['Backup','Clean up old proposals']]];
   const save=root.querySelector('#saveS')?.parentElement, frag=document.createDocumentFragment();
   for(const [title, names] of groups){
     const got=names.map(n=> n==='Proposal & links' ? extra : find(n)).filter(Boolean); if(!got.length) continue;
@@ -2607,6 +2649,11 @@ $('#settingsBody').addEventListener('input', e=>{ if(e.target.id!=='cuDate') ret
   $('#cuInfo').innerHTML = e.target.value ? `<b>${L.length}</b> open proposal${L.length===1?'':'s'} sent before ${fmtD(e.target.value)} (${money(L.reduce((s,p)=>s+contractValue(p),0))}).` : 'Pick a date to see how many proposals it affects.';
   b.disabled=!L.length; b.textContent=L.length?`Mark ${L.length} as Expired`:'Mark as Expired'; delete b.dataset.armed; });
 $('#settingsBody').addEventListener('click', async e=>{
+  if(e.target.id==='bkGo'){ const b=e.target; b.disabled=true; b.textContent='Preparing…';
+    const {data,error}=await sb.rpc('download_backup'); b.disabled=false; b.textContent='Download backup';
+    if(error){ toast(/function|schema/i.test(error.message)?'Run database update 015 to turn on backups.':error.message); return; }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,1)],{type:'application/json'})); a.download=`PFBS Proposal Desk backup ${iso(today())}.json`; a.click();
+    toast(`Backup downloaded: ${(data.proposals||[]).length} proposals`); return; }
   if(e.target.id==='cuGo'){ const b=e.target, d=$('#cuDate').value, L=cuList(d); if(!L.length) return;
     if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent=`Confirm: expire ${L.length}`; return; }
     b.disabled=true; let done=0;
@@ -2637,7 +2684,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
-      reportAppUrl:$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, expiryDays:Number($('#s-exp').value)||90 };
+      reportAppUrl:$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, priceIncrease:(num($('#s-pinc').value)??5)/100, expiryDays:Number($('#s-exp').value)||90 };
     const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
     if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
   }

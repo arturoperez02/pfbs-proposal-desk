@@ -41,7 +41,18 @@ Each one is logged as a follow-up on the proposal, so it moves to the next step.
 2. **Action:** Webhooks by Zapier → POST to `.../rpc/zap_monthly_report`. Data: `token` = your key. (It reports on last month.)
 3. **Action:** Microsoft Outlook → **Send Email**. To = aperez@pfbuildingservices.com, Subject = `subject`, Body = `html`, Body format = HTML.
 
-The same report is in the app: Scorecards → **Monthly report** (any month, with Print / PDF).
+The same report is in the app: Sales → **Monthly report** (any month, with Print / PDF).
+
+## Zap 5: Weekly backup to SharePoint
+
+Needs database update 015.
+
+1. **Trigger:** Schedule by Zapier → Every Week → Sunday, 11:00 PM.
+2. **Action:** Webhooks by Zapier → POST to `.../rpc/zap_backup`. Data: `token` = your key.
+3. **Action:** Microsoft OneDrive (or SharePoint) → **Create New Text File** (or the closest "create file from text" action). Folder = a Backups folder, e.g. *Clients › Admin › CRM backups*. File name = `filename`. File content = `content`.
+
+Each Sunday you get one file, e.g. *PFBS Proposal Desk backup 2026-10-18.json*, with every proposal, its history, prospects, the team list, settings, commission payouts and the change log. Keep at least the last 8. If something is ever deleted by mistake, send the file and it can be restored.
+Owners and admins can also make one any time: Settings → **Download backup**.
 
 ## HousecallPro → Proposal Desk (add steps to your existing Zaps)
 
