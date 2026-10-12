@@ -17,5 +17,6 @@
 | 013_follow_up_status.sql | Run once: proposals marked Follow-up become Sent (follow-ups are tracked automatically). |
 | 014_budget_estimates.sql | Run once: Budget status for next-year budget proposals (kept out of pipeline, win rate and follow-ups), budget year and check-in date. |
 | 015_lost_to_and_backup.sql | Run once: competitor and their price on lost proposals; weekly backup through Zapier and a Download backup button. Needs 014. |
+| 016_hcp_paid.sql | Run once: HousecallPro "paid" events mark the job Paid and fill in Date paid. Needs 014. |
 
 Client data is never stored in this repository.

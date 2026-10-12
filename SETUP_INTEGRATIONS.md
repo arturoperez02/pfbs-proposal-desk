@@ -68,6 +68,17 @@ Use the HCP **Job ID** (the long number) for `hcp_job` everywhere, the same ID y
 
 HousecallPro's Zapier connection has no "invoice paid" trigger, so **Paid** is still marked in the Proposal Desk.
 
+## HousecallPro: paid invoices (optional, needs HCP MAX + a paid Zapier plan)
+
+Needs database update 016. Without this, Oscar marks jobs Paid from the Jobs tab → **Waiting on payment** list.
+
+1. **Trigger:** Webhooks by Zapier → **Catch Hook**. Copy the webhook URL Zapier gives you.
+2. In HousecallPro: **My Apps → Webhooks** (MAX plan) → add that URL and tick the **job.paid** event (or **invoice.paid**).
+3. **Action:** Webhooks by Zapier → POST to `.../rpc/zap_hcp`. Data: `token` = your key, `event` = `paid`, `ref` = the job **description** field from the hook, `hcp_job` = the job **number** field.
+
+The job moves to **Paid**, Date paid is set to today (commission starts), and a note is added to its history.
+It matches on the PFBS number in the job description first, so keep putting "PFBS-0806" in every HCP job description.
+
 ## Service report app → Proposal Desk
 
 Open your Zap that runs when Oscar approves a report (the one that makes the Outlook draft) and add a step:
