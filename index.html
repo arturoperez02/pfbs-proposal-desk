@@ -2207,6 +2207,15 @@ $('#rep').addEventListener('click', e=>{ const t=e.target.closest('button'); if(
 $('#rep').addEventListener('change', e=>{ if(e.target.id==='repMonth' && e.target.value) openReport(e.target.value+'-01'); });
 $('#repBtn').addEventListener('click', ()=>openReport());
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#rep').hidden){ e.stopImmediatePropagation(); $('#rep').hidden=true; } }, true);
+// budget proposals: how many turned into work, by budget year
+function budgetCard(){
+  const B=P.filter(p=>p.budgetYear && !PRE.includes(p.status)); if(!B.length) return '';
+  const yrs=[...new Set(B.map(p=>+p.budgetYear))].sort((a,b)=>b-a);
+  const rows=yrs.map(y=>{ const L=B.filter(p=>+p.budgetYear===y), won=L.filter(p=>outcome(p)==='Won'), lost=L.filter(p=>outcome(p)==='Lost'||p.status==='Withdrawn'), open=L.filter(p=>p.status==='Budget'||outcome(p)==='Open');
+    return [String(y), L.length, money(L.reduce((s,p)=>s+contractValue(p),0)), won.length, money(won.reduce((s,p)=>s+wonAmt(p),0)), lost.length, open.length, L.length?pct(won.length/L.length):'—']; });
+  return `<div class="card"><h3>Budget proposals</h3>${table(['Budget year','Sent','Budgeted $','Became jobs','Won $','Declined / expired','Still open','Turned into work'], rows, '')}
+    <div class="note">Every budget proposal sent, by the year it was for. "Still open" includes budgets turned into a proposal that is waiting on the client.</div></div>`;
+}
 function renderScore(){
   if(SB_COUNTS===null){ loadSendBacks().then(()=>{ if(!$('#score').hidden && !$('#view-sales').hidden) renderScore(); }); }
   const est=group('sentBy', TEAM.filter(t=>t.role!=='BD Rep').map(t=>t.name)).filter(r=>r.mine.length||TEAM.find(t=>t.name===r.n)?.active);
@@ -2223,6 +2232,7 @@ function renderScore(){
   <div class="card"><h3>Business development</h3>${table(['BD rep','Leads','Waiting on estimator','Won','Won $','GP won $','Days to quote'],
     bd.map(r=>[esc(r.n),r.mine.length,r.mine.filter(p=>p.status==='Lead').length,r.won.length,money(r.wonAmt),money(r.gpWon),(x=>x==null?'—':fmtH(Math.round(x*10)/10))(daysToQuote(r.mine))]), 'No BD reps yet. Add them on the Settings tab when you hire.')}</div>
   <div class="card"><h3>By lead source</h3>${table(['Lead source','Proposals','Won','Win rate','Won $'], src.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt)]), 'Pick a Lead source on new proposals and this fills in.')}</div>
+  ${budgetCard()}
   <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $','Actual margin'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt),r.jcN?`${pct(r.actM)} <span class="note" style="margin:0">(${r.jcN} job${r.jcN===1?'':'s'})</span>`:'—']), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
 }
 
@@ -2657,6 +2667,10 @@ async function loadProposals(){
   if(error){ $('#asof').textContent='Could not load proposals: '+error.message; return; }
   if(data && data[0]) COLS=new Set(Object.keys(data[0]));
   P=(data||[]).map(fromRow);
+  if(['Owner','Admin'].includes(role()) && !loadProposals.tried){ const old=P.filter(p=>p.status==='Budget' && p.budgetYear && +p.budgetYear < today().getFullYear());
+    if(old.length){ loadProposals.tried=true; (async()=>{ for(const p of old){ const {error}=await sb.from('proposals').update({status:'Expired', date_resolved:`${p.budgetYear}-12-31`}).eq('num',p.num);
+      if(!error) await addActivity(p.num,'note',`Budget year ${p.budgetYear} ended without a go-ahead: marked Expired automatically.`); }
+      toast(`${old.length} budget proposal${old.length===1?'':'s'} from past years marked Expired`); loadProposals(); })(); } }
   $('#asof').textContent=`${P.length} proposals · updated ${new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`;
   renderAll();
 }
