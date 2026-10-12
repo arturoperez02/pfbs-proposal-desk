@@ -104,6 +104,7 @@ The old Cloudflare app keeps working until step 4, so nothing breaks while you t
    - Data → keep every field it sends today, and add `token` = your integration key.
 
    The reply still has `review_url` (now a CRM link), so any later step that uses it keeps working.
+   If the Zap has a step that emails Oscar "a report is ready", delete it: new reports show in the CRM (Jobs → **Service reports to send**, and the count on the **Reports** button).
    The report links itself to the PFBS job by the PFBS number in the HCP job description, or by the HCP job ID.
 5. After a week with no problems: clear "Old service report app link" in Settings. The **zap_report_sent** step above is no longer needed
    (approving in the CRM marks the job), so you can delete that step. Keep the Cloudflare app for a while as a read-only archive of old reports.

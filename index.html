@@ -1090,6 +1090,14 @@ $('#drawer').addEventListener('click', async e=>{ const t=e.target.closest('butt
 
 // ---------- Orders tab (office view of rentals and parts) ----------
 let ordFilter='Needs action';
+let SR=[]; // service reports waiting for review (office only)
+async function loadPendingReports(){
+  if(!isManager()) return;
+  const {data,error}=await sb.from('service_reports').select('id,num,client,address,service_dates,created_at').eq('status','pending').order('created_at',{ascending:false}).limit(100);
+  SR=error?[]:(data||[]);
+  const l=$('#rptLink'); if(l) l.textContent=SR.length?`Reports · ${SR.length}`:'Reports';
+  if(current()==='orders') renderJobs();
+}
 function renderOrders(){
   const jobs=P.filter(p=>(p.parts||[]).length && (outcome(p)==='Won'));
   const R=[], Pt=[];
@@ -1131,6 +1139,7 @@ function renderJobs(){
   const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='techs'?'Techs':k==='hpt'?'Hours each':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
   const inv=P.filter(p=>p.status==='Invoiced').sort((a,b)=>String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
   const nsr=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !p.reportSentOn && !isRecurring(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
+  const nsr2=nsr.filter(p=>!SR.some(r=>r.num===p.num));
   const chk=P.map(p=>({p,h:contractHealth(p)})).filter(x=>x.h && x.h.kind!=='ok').sort((a,b)=>(a.h.kind==='low'?0:1)-(b.h.kind==='low'?0:1));
   $('#jobsBody').innerHTML = `<div class="cards">
   <div class="card"><h3>Approved &amp; scheduled (${up.length})</h3>
@@ -1157,11 +1166,12 @@ function renderJobs(){
       <td><input class="qa qd" type="date" data-pd value="${iso(today())}" aria-label="Date paid for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}></td><td>${canEditRow(p)?`<button class="btn small" data-paid="${esc(p.num)}">Paid</button>`:''}</td></tr>`).join('')
       : '<tr><td colspan="6" class="empty">Nothing waiting on payment.</td></tr>'}</tbody></table></div>
     <div class="note">Recurring contracts: mark Paid when the first monthly invoice is paid; later months are tracked in HousecallPro.</div></div>
-  <div class="card"><h3>Service report not sent (${nsr.length})</h3>
-    <div class="tablewrap"><table><thead><tr><th>Job</th><th class="hide-sm">Status</th><th class="hide-sm">HCP job #</th><th class="hide-sm">Estimator</th><th></th></tr></thead><tbody>
-    ${nsr.length?nsr.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="hide-sm"><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm">${esc(p.hcpJob||'—')}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td>${isManager()?`<a class="btn small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">Write report</a>`:''}</td></tr>`).join('')
-      : '<tr><td colspan="5" class="empty">Every finished job has its service report.</td></tr>'}</tbody></table></div>
-    <div class="note">Clears itself when the report is approved and sent.</div></div>
+  <div class="card"><h3>Service reports to send (${SR.length+nsr2.length})</h3>
+    <div class="tablewrap"><table><thead><tr><th>Job</th><th>Report</th><th class="hide-sm">Service dates</th><th></th></tr></thead><tbody>
+    ${SR.map(r=>{ const p=r.num&&P.find(x=>x.num===r.num); return `<tr><td class="wrap">${p?job(p):`<span class="note" style="margin:0">${esc(r.client||'No client yet')}${r.address?' · '+esc(r.address):''}</span>`}</td><td><span class="flag warn">Ready to review</span></td><td class="hide-sm num">${esc(r.service_dates||'')}</td><td><a class="btn small" href="reports.html#/r/${encodeURIComponent(r.id)}" target="_blank" rel="noopener">Review</a></td></tr>`; }).join('')}
+    ${nsr2.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td><span class="flag">No report yet</span></td><td class="hide-sm">${esc(p.hcpJob?'HCP '+p.hcpJob:'')}</td><td>${isManager()?`<a class="btn small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">Write report</a>`:''}</td></tr>`).join('')}
+    ${SR.length+nsr2.length?'':'<tr><td colspan="4" class="empty">Every finished job has its service report.</td></tr>'}</tbody></table></div>
+    <div class="note">Reports start here on their own when the crew taps FINISH in HousecallPro. Each one clears when it's approved and sent.</div></div>
   </div>`;
 }
 $('#jobsBody').addEventListener('click', async e=>{
@@ -2817,9 +2827,10 @@ async function start(session){
   $('#salesTab').textContent = ['BD Rep','Estimator'].includes(m.role) ? 'My Sales' : 'Sales';
   const home = ['BD Rep','Estimator'].includes(m.role) ? 'sales' : m.role==='Admin' ? 'orders' : 'pipeline';
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===home); show(home);
-  await loadProposals(); loadProspects(); loadPayouts();
+  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports();
+  window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
-    .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(loadProposals,400); })
+    .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })
     .on('postgres_changes',{event:'*',schema:'public',table:'settings'},async()=>{ await loadSettings(); renderAll(); })
     .subscribe();
 }
