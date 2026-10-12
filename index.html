@@ -1227,24 +1227,26 @@ async function photoData(path){ const {data,error}=await sb.storage.from(PH_BUCK
 const niceCase = t => (t && t===t.toUpperCase() && /[A-Z]/.test(t)) ? t.toLowerCase().replace(/(^|[.!?]\s+)([a-z])/g,(m,a,b)=>a+b.toUpperCase()) : t;
 function proposalEmail(p){
   const first=(p.contactName||'').trim().split(/\s+/)[0]||'there', place=p.property||p.client||'your property';
-  const L=countedItems(p), scope=niceCase(L.filter(i=>i.type!=='Add-on'&&i.description).slice(0,3).map(i=>i.description).join(', '))||'the requested services';
+  const L=countedItems(p);
+  let scope=niceCase(L.filter(i=>i.type!=='Add-on'&&i.description).slice(0,3).map(i=>i.description).join(', '))||'the work we discussed';
+  if(/^[A-Z][a-z]/.test(scope)) scope=scope[0].toLowerCase()+scope.slice(1);   // reads naturally mid-sentence
   const addons=(p.items||[]).filter(i=>i.type==='Add-on'&&!i.accepted).length;
-  const bud=isBudgetDoc(p), by=p.budgetYear||today().getFullYear()+1;
-  const subject=`${bud?'Budget proposal':'Proposal'} from PF Building Services – ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`;
+  const bud=isBudgetDoc(p), by=p.budgetYear||today().getFullYear()+1, rev=(p.rev||1)>1;
+  const subject=`${bud?'Budget proposal':'Proposal'} from PF Building Services – ${p.num}${rev?' Rev '+p.rev:''}`;
   if(bud) return {to:p.contactEmail||'', subject, body:`Hi ${first},
 
-Thank you for considering PF Building Services for your ${by} budget. Attached is budget proposal ${p.num} for ${scope} at ${place}.
+Here are our ${by} budget numbers for the ${scope} at ${place} (${p.num}).
 
-These numbers are for budgeting purposes. When you're ready to move forward, we'll confirm final pricing and scheduling. Please let me know if you have any questions.
+Whenever you're ready to move forward, just let me know and we'll lock in pricing and get you on the schedule.
 
-Thank you,`};
+Thanks,`};
   const body=`Hi ${first},
 
-Thank you for the opportunity to provide a proposal for ${scope} at ${place}. Attached is proposal ${p.num}${(p.rev||1)>1?' (revision '+p.rev+')':''} for your review.${addons?' Optional add-ons are listed separately in the proposal.':''}
+${rev?`Here's the updated proposal (${p.num}, revision ${p.rev})`:`Attached is our proposal (${p.num})`} for the ${scope} at ${place}.${addons?` I also included a few optional add-ons in case they're helpful.`:''}
 
-To approve, sign the last page and send it back, or simply reply to this email. Please let me know if you have any questions or would like to adjust the scope.
+If everything looks good, just reply to this email or sign the last page and send it back. Happy to walk the site again or adjust anything if needed.
 
-Thank you,`;
+Thanks,`;
   return {to:p.contactEmail||'', subject, body};
 }
 async function emailOpen(){
