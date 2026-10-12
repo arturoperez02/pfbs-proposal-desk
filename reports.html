@@ -349,7 +349,7 @@ async function fillFromJob(r, num) {
   const { data: p } = await sb.from('proposals').select('*').eq('num', num).maybeSingle();
   if (!p) return r;
   r.num = num;
-  if (!r.email_to && p.contact_email) r.email_to = p.contact_email;
+  if (p.contact_email && (!r.email_to || r.source === 'hcp')) r.email_to = p.contact_email;   // the job's contact beats HCP's billing email
   if (!r.client && p.client) r.client = SRV.up(p.client);
   const addr = (p.site_address || '').replace(/\s*\n\s*/g, ', ');
   if (!r.address && (addr || p.property)) { r.address = SRV.up(addr || p.property); r.street = r.address.split(',')[0]; r.city = r.city || (r.address.split(',')[1] || '').trim(); }
