@@ -12,6 +12,13 @@
 -- Needs updates 007 and 009 first.
 -- =====================================================================
 
+do $$ begin
+  if to_regprocedure('public.co_rev(jsonb)') is null
+     or not exists (select 1 from information_schema.columns where table_schema='public' and table_name='proposals' and column_name='parts') then
+    raise exception 'Run updates 007 and 009 first, then run this one again.';
+  end if;
+end $$;
+
 alter table public.proposals
   add column if not exists term_months int,
   add column if not exists year_value numeric,

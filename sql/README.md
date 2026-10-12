@@ -13,5 +13,6 @@
 | 009_parts_to_order.sql | Run once: Parts to order and lift/equipment rental tracking on approved jobs, buyer, monthly report section, follow-up email wording. Needs 007. |
 | 010_recurring_contracts.sql | Run once: recurring contracts (term, contract value, recurring revenue per month, cancelled contracts), commission earned month by month for the first year, monthly report updated to match. Needs 007 and 009. |
 | 011_commission_ledger_audit.sql | Run once: commission payout ledger (never edited, only voided), commission rates locked when a job is paid, change log for Settings and the team, archive of deleted proposals. Needs 010. |
+| 012_estimator_commission_plan.sql | Run once: estimator rate 2% / 3% / 4% by job margin, 75% of that when a BD rep is on the job. Past paid jobs keep their locked rate. Needs 011. |
 
 Client data is never stored in this repository.

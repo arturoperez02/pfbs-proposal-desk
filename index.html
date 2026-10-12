@@ -351,7 +351,7 @@ const ROLES = ['Owner','Admin','Senior Estimator','Estimator','BD Rep'];
 const DEFAULTS = {
   reportAppUrl: 'https://pfbs-reports.arturo-perez408.workers.dev', goals: [], services: [], frequencies: [['One-time',1],['Annual',1]], leadSources: [], lostReasons: [],
   clientTypes: [['New client',0.10],['Existing client - new property',0.05],['House account',0]],
-  marginFloor: 0.35, belowFloorShare: 0.5, estTiers: [[0,0.02],[0.35,0.035],[0.45,0.05]], expiryDays: 90,
+  marginFloor: 0.35, belowFloorShare: 0.5, estTiers: [[0,0.02],[0.35,0.03],[0.45,0.04]], estBdShare: 0.75, expiryDays: 90,
   clarifications: [['All','This pricing does not cover removal of hard water deposits, adhesive residue, paint overspray, or silicone buildup.'],['All','Client/building management is responsible for supplying any inspection certificates required prior to the start of work.']],
   addOns: ['Window screen cleaning','Pressure washing - sidewalks & entry','Pressure washing - parking structure','Hard water stain removal','Interior window washing','Solar panel cleaning','Gutter cleaning','Graffiti removal'],
   est: { labor: [['Administration',45,0],['Expert/Chair',75,32],['Apprentice',65,25]], taxRate: 0.1075, matMarkup: 1, rentMarkup: 0.25, equipMarkup: 0.25,
@@ -530,7 +530,7 @@ function bdCommTo(p, upto=today()){ const r=bdRate(p); if(!p.datePaid || r==null
   if(!isRecurring(p)) return gpAll(p)*r;
   const a=num(p.amount)||0, yrGP = a ? num(p.gp)*(annual(p)||0)/a : 0; return (yrGP/12*commMonths(p,upto) + coGP(p))*r; }
 const bdComm = p => bdCommTo(p);
-function estRate(p){ if(p.datePaid && hasVal(p.estCommRate)) return num(p.estCommRate); const g=gpPct(p); if(g==null) return null; let r=S.estTiers[0][1]; for(const [min,rate] of S.estTiers) if(g>=min) r=rate; return r; }
+function estRate(p){ if(p.datePaid && hasVal(p.estCommRate)) return num(p.estCommRate); const g=gpPct(p); if(g==null) return null; let r=S.estTiers[0][1]; for(const [min,rate] of S.estTiers) if(g>=min) r=rate; if(p.bdRep) r*=(S.estBdShare??1); return r; }
 function estBase(p){ return num(p.amount)!=null ? num(p.amount)-(num(p.passThrough)||0)+coRevenue(p) : null; }
 function isEstimator(name){ const m=TEAM.find(t=>t.name===name); return m && ['Estimator','Senior Estimator'].includes(m.role); }
 function estCommTo(p, upto=today()){ if(!p.datePaid || !isEstimator(p.sentBy)) return null; const r=estRate(p), b=estBase(p); if(r==null||b==null) return null; if(parse(p.datePaid)>upto) return 0;
@@ -555,11 +555,6 @@ const FILTERS = [
   ['Won', p=>outcome(p)==='Won'],
   ['Lost', p=>outcome(p)==='Lost'],
   ['Renewals due', p=>renewalDue(p)],
-  ['Contracts', p=>activeContract(p)],
-  ['Needs actuals', p=>['Invoiced','Paid'].includes(p.status) && !hasActuals(p)],
-  ['Parts to order', p=>outcome(p)==='Won' && partsOpen(p)>0],
-  ['Rentals', p=>rentAlerts(p).length>0],
-  ['No service report', p=>['Invoiced','Paid'].includes(p.status) && !p.reportSentOn],
   ['All', ()=>true]
 ];
 let byEst='';
@@ -1047,6 +1042,7 @@ function renderJobs(){
     return n.join('<br>') || '<span class="note" style="margin:0">Ready</span>'; };
   const dcell=(p,k)=>`<input class="qa qd" data-qa="${k}" type="date" aria-label="${k==='start'?'Start date':'Finish date'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
   const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='techs'?'Techs':k==='hpt'?'Hours each':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
+  const nsr=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !p.reportSentOn && !isRecurring(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   const chk=P.map(p=>({p,h:contractHealth(p)})).filter(x=>x.h && x.h.kind!=='ok').sort((a,b)=>(a.h.kind==='low'?0:1)-(b.h.kind==='low'?0:1));
   $('#jobsBody').innerHTML = `<div class="cards">
   <div class="card"><h3>Approved &amp; scheduled (${up.length})</h3>
@@ -1066,6 +1062,11 @@ function renderJobs(){
     <div class="tablewrap"><table><thead><tr><th>Job</th><th class="r">Per month</th><th class="hide-sm">Estimator</th><th class="r">Margin</th><th>Issue</th></tr></thead><tbody>
     ${chk.length?chk.map(({p,h})=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="r num">${money(monthlyValue(p))}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${h.m!=null?`<b class="${h.kind==='low'?'down':''}">${pct(h.m)}</b>`:'—'}</td><td class="wrap"><span class="flag ${h.cls}">${esc(h.text)}</span></td></tr>`).join('')
       : '<tr><td colspan="5" class="empty">All recurring contracts look healthy.</td></tr>'}</tbody></table></div></div>
+  <div class="card"><h3>Service report not sent (${nsr.length})</h3>
+    <div class="tablewrap"><table><thead><tr><th>Job</th><th class="hide-sm">Status</th><th class="hide-sm">HCP job #</th><th class="hide-sm">Estimator</th></tr></thead><tbody>
+    ${nsr.length?nsr.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="hide-sm"><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm">${esc(p.hcpJob||'—')}</td><td class="hide-sm">${esc(p.sentBy||'')}</td></tr>`).join('')
+      : '<tr><td colspan="4" class="empty">Every finished job has its service report.</td></tr>'}</tbody></table></div>
+    <div class="note">Clears itself when the service report app logs the report on the job.</div></div>
   </div>`;
 }
 $('#jobsBody').addEventListener('click', async e=>{
@@ -2163,11 +2164,10 @@ function renderScore(){
     const jc=won.map(jobCompare).filter(Boolean), rv=jc.reduce((s,c)=>s+c.rev,0), ag=jc.reduce((s,c)=>s+c.actGP,0);
     return {n,mine,won,rate:(won.length+lost.length)?won.length/(won.length+lost.length):null,wonAmt:won.reduce((s,p)=>s+lineAmt(p,n),0),openAmt:open.reduce((s,p)=>s+lineAmt(p,n),0),actM: rv?ag/rv:null, jcN:jc.length}; }).filter(r=>r.mine.length);
   $('#score').innerHTML = `
-  <div class="card"><h3>Estimators</h3><div class="note" style="margin:0 0 8px">Hours vs estimate: green within ±15% (accurate bids), red outside. Based on jobs with logged actuals.</div>${table(['Estimator','Sent','Won','Lost','Open','Win rate','Won $','GP won $','Avg GP %','Open $','Follow-ups due','Past 90 days','Commission earned','Commission owed','Closed jobs','Hours vs estimate','Est. margin','Actual margin','Sent back','Days to quote'].concat(canPayComm()?['']:[]),
-    est.map(r=>[esc(r.n),r.mine.length,r.won.length,r.lost.length,r.open.length,pct(r.rate),money(r.wonAmt),money(r.gpWon),r.gpBase?pct(r.gpWon/r.gpBase):'—',money(r.openAmt),r.due,r.stale,isEstimator(r.n)?money(r.estEarned):'owner',isEstimator(r.n)?money(r.estEarned-r.estPaid):'—', r.closedN, r.hrsVar==null?'—':`<span class="${Math.abs(r.hrsVar)<=0.15?'up':'down'}">${r.hrsVar>0?'+':r.hrsVar<0?'−':''}${pct(Math.abs(r.hrsVar))}</span>`, pct(r.estMargin), pct(r.actMargin), SB_COUNTS? r.mine.reduce((s,p)=>s+(SB_COUNTS[p.num]||0),0) : '…', (x=>x==null?'—':fmtH(Math.round(x*10)/10))(daysToQuote(r.mine))].concat(canPayComm()?[payBtn('est',r.n,isEstimator(r.n)?r.estEarned-r.estPaid:0)]:[])), 'No proposals yet.')}</div>
-  <div class="card"><h3>Business development</h3>${table(['BD rep','Leads','Waiting on estimator','Won','Won $','GP won $','Days to quote','Commission earned','Paid','Owed'],
-    bd.map(r=>[esc(r.n),r.mine.length,r.mine.filter(p=>p.status==='Lead').length,r.won.length,money(r.wonAmt),money(r.gpWon),(x=>x==null?'—':fmtH(Math.round(x*10)/10))(daysToQuote(r.mine)),money(r.bdEarned),money(r.bdPaid),money(r.bdEarned-r.bdPaid)].concat(canPayComm()?[payBtn('bd',r.n,r.bdEarned-r.bdPaid)]:[])), 'No BD reps yet. Add them on the Settings tab when you hire.')}
-    <div class="note">Commission counts only proposals with a Date paid. Owed = earned with no “Commission paid on” date.</div></div>
+  <div class="card"><h3>Estimators</h3><div class="note" style="margin:0 0 8px">Side by side, all time. Hours vs estimate: green within ±15%. Commission is on the Commission tab.</div>${table(['Estimator','Sent','Won','Win rate','Won $','Avg GP %','Hours vs estimate','Days to quote','Follow-ups due'],
+    est.map(r=>[esc(r.n),r.mine.filter(p=>!PRELOCK.includes(p.status)).length,r.won.length,pct(r.rate),money(r.wonAmt),r.gpBase?pct(r.gpWon/r.gpBase):'—', r.hrsVar==null?'—':`<span class="${Math.abs(r.hrsVar)<=0.15?'up':'down'}">${r.hrsVar>0?'+':r.hrsVar<0?'−':''}${pct(Math.abs(r.hrsVar))}</span>`, (x=>x==null?'—':fmtH(Math.round(x*10)/10))(daysToQuote(r.mine)), r.due?`<span class="flag warn">${r.due}</span>`:'0']), 'No proposals yet.')}</div>
+  <div class="card"><h3>Business development</h3>${table(['BD rep','Leads','Waiting on estimator','Won','Won $','GP won $','Days to quote'],
+    bd.map(r=>[esc(r.n),r.mine.length,r.mine.filter(p=>p.status==='Lead').length,r.won.length,money(r.wonAmt),money(r.gpWon),(x=>x==null?'—':fmtH(Math.round(x*10)/10))(daysToQuote(r.mine))]), 'No BD reps yet. Add them on the Settings tab when you hire.')}</div>
   <div class="card"><h3>By lead source</h3>${table(['Lead source','Proposals','Won','Win rate','Won $'], src.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt)]), 'Pick a Lead source on new proposals and this fills in.')}</div>
   <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $','Actual margin'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt),r.jcN?`${pct(r.actM)} <span class="note" style="margin:0">(${r.jcN} job${r.jcN===1?'':'s'})</span>`:'—']), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
 }
@@ -2319,8 +2319,7 @@ function renderSales(){
   const won=mine.filter(p=>outcome(p)==='Won' && inPer(p.dateResolved||p.dateSent,per));
   const lost=mine.filter(p=>outcome(p)==='Lost' && inPer(p.dateResolved||p.dateSent,per));
   const sum=(a,f)=>a.reduce((s,p)=>s+(num(f(p))||0),0);
-  const earnedAmt=mine.reduce((s,p)=>s+earnedIn(bdCommTo,p,per),0), owed=mine.filter(p=>bdOwed(p)>0.005);
-  const paidPer=mine.filter(p=>bdPaid(p)>0 && inPer(p.commPaidOn,per));
+  const owed=mine.filter(p=>bdOwed(p)>0.005);
   const due=out.filter(p=>{ const f=followUp(p); return f && f<=today(); });
   const rate=(won.length+lost.length)? won.length/(won.length+lost.length) : null;
   $('#salesSub').textContent = `${salesRep} · ${L} (${fmtD(iso(perStart(per)))} – ${fmtD(iso(new Date(perEnd(per)-864e5)))})`;
@@ -2333,7 +2332,6 @@ function renderSales(){
   const stage=st.map(([n,a])=>{ const amt=sum(a,wonAmt), w=maxAmt>1? amt/maxAmt : a.length/maxN;
     return `<div class="stage"><div><b>${n}</b></div><div class="track"><div class="fill ${n.startsWith('Won')?'done':''}" style="width:${(Math.max(a.length?3:0,w*100)).toFixed(1)}%"></div></div><div class="r">${a.length} · ${money(amt)}</div></div>`; }).join('');
   const waitDays=p=>days(parse(leadDate(p)), today());
-  const stmt=mine.filter(p=>bdComm(p)!=null && (earnedIn(bdCommTo,p,per)>0.005 || bdOwed(p)>0.005)).sort((a,b)=>String(b.datePaid).localeCompare(String(a.datePaid)));
   const recent=mine.filter(p=>outcome(p)==='Won' && (p.dateResolved||p.dateSent) && days(parse(p.dateResolved||p.dateSent),today())<=90).sort((a,b)=>String(b.dateResolved).localeCompare(String(a.dateResolved)));
   $('#salesBody').innerHTML = `
   <div class="kpis">
@@ -2342,9 +2340,7 @@ function renderSales(){
     ${kpi('Proposals out',money(sum(out,wonAmt)), due.length?'warn':'', `${out.length} open${due.length?` · ${due.length} follow-up${due.length===1?'':'s'} due`:''}`)}
     ${kpi('Won',money(sum(won,wonAmt)),'',`${won.length} job${won.length===1?'':'s'}`)}
     ${kpi('Win rate',pct(rate),'',`${won.length} won · ${lost.length} lost`)}
-    ${kpi('Commission earned',money(earnedAmt),'',L)}
-    ${kpi('Commission paid',money(sum(paidPer,bdPaid)),'','total paid on jobs settled '+L)}
-    ${kpi('Commission owed',money(sum(owed,bdOwed)), owed.length?'warn':'','earned, not paid yet')}
+    <div class="kpi ${owed.length?'warn':''}" data-gocomm="${esc(salesRep)}" style="cursor:pointer" title="Open the Commission tab"><div class="l">Commission owed</div><div class="v">${money(sum(owed,bdOwed))}</div><div class="note" style="margin:2px 0 0">details on the Commission tab →</div></div>
   </div>
   <div class="sales-grid">
     <div class="card"><h3>Goals</h3>
@@ -2365,11 +2361,6 @@ function renderSales(){
     <div class="card"><h3>Recently won (last 90 days)</h3>${rowsTable(['PFBS #','Client','Property','Won','Next renewal','Amount'], recent,
       p=>{ const r=renewalOf(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), fmtD(p.dateResolved), r?`<span class="${renewalDue(p)?'flag warn':''}">${fmtD(r)}</span>`:'—', money(wonAmt(p))]; },
       'No wins in the last 90 days yet.')}<div class="note">Renewal dates are when to go back to the client for the next service or contract.</div></div>
-    <div class="card"><h3>Commission statement</h3>${rowsTable(['PFBS #','Client','Client type','Date paid','GP','Rate','Commission','Paid on'], stmt,
-      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.clientType), fmtD(p.datePaid), money(gpAll(p)), pct(bdRate(p)), money(bdComm(p))+commMonthsTxt(p), bdOwed(p)>0.005?`<span class="flag warn">Owed ${money(bdOwed(p))}</span>`:fmtD(p.commPaidOn)],
-      'No commission yet. It starts once a client pays for one of your jobs.')}
-      ${stmt.length?`<div class="gpline">Total on this statement: <b>${money(sum(stmt,bdComm))}</b> · owed <b>${money(sum(stmt,bdOwed))}</b></div>`:''}
-      <div class="note">Commission = gross profit (with approved change orders) × your client-type rate, half rate below the ${pct(S.marginFloor)} margin floor. Recurring contracts earn month by month for the first 12 months. Shows commission earned ${L} plus anything still owed.</div></div>
   </div>`;
 }
 
@@ -2391,7 +2382,7 @@ function renderEstSales(){
   const lost=mine.filter(p=>outcome(p)==='Lost' && inPer(p.dateResolved||p.dateSent,per));
   const rate=(won.length+lost.length)? won.length/(won.length+lost.length) : null;
   const wg=won.filter(p=>num(p.gp)!=null), margin=sum(wg,p=>p.amount) ? sum(wg,gpAll)/sum(wg,wonAmt) : null;
-  const earnedAmt=mine.reduce((s,p)=>s+earnedIn(estCommTo,p,per),0), owed=mine.filter(p=>estOwed(p)>0.005), act=mine.filter(activeContract);
+  const owed=mine.filter(p=>estOwed(p)>0.005), act=mine.filter(activeContract);
   const closed=mine.map(p=>({p,c:jobCompare(p)})).filter(x=>x.c).sort((a,b)=>String(b.p.actualsSummary?.lastDate||b.p.num).localeCompare(String(a.p.actualsSummary?.lastDate||a.p.num)));
   const ch=closed.filter(x=>x.c.estHrs), eh=ch.reduce((s,x)=>s+x.c.estHrs,0), ah=ch.reduce((s,x)=>s+x.c.actHrs,0), hv=eh?(ah-eh)/eh:null;
   const waitDays=p=>days(parse(leadDate(p)), today());
@@ -2406,7 +2397,6 @@ function renderEstSales(){
     return `<div class="stage"><div><b>${n}</b></div><div class="track"><div class="fill ${n==='Won'?'done':''}" style="width:${(Math.max(a.length?3:0,w*100)).toFixed(1)}%"></div></div><div class="r">${a.length} · ${money(amt)}</div></div>`; }).join('');
   const g=goalFor(estRep), wonQ=sum(mine.filter(p=>outcome(p)==='Won' && inPer(p.dateResolved||p.dateSent,'quarter')),wonAmt);
   const recent=mine.filter(p=>outcome(p)==='Won' && (p.dateResolved||p.dateSent) && days(parse(p.dateResolved||p.dateSent),today())<=90).sort((a,b)=>String(b.dateResolved).localeCompare(String(a.dateResolved)));
-  const stmt=mine.filter(p=>estComm(p)!=null && (earnedIn(estCommTo,p,per)>0.005 || estOwed(p)>0.005)).sort((a,b)=>String(b.datePaid).localeCompare(String(a.datePaid)));
   const jm=p=>{ const c=jobCompare(p); return c&&c.rev ? pct(c.actGP/c.rev) : '—'; };
   $('#salesBody').innerHTML = `
   <div class="kpis">
@@ -2417,8 +2407,7 @@ function renderEstSales(){
     ${kpi('Win rate',pct(rate),'',`${won.length} won · ${lost.length} lost`)}
     ${kpi('Margin on won',pct(margin), margin!=null&&margin<S.marginFloor?'alert':'','as estimated')}
     ${kpi('Recurring / month',money(sum(act,monthlyValue)),'',`${act.length} active contract${act.length===1?'':'s'}`)}
-    ${comm?kpi('Commission earned',money(earnedAmt),'',L):''}
-    ${comm?kpi('Commission owed',money(sum(owed,estOwed)), owed.length?'warn':'','earned, not paid yet'):''}
+    ${comm?`<div class="kpi ${owed.length?'warn':''}" data-gocomm="${esc(estRep)}" style="cursor:pointer" title="Open the Commission tab"><div class="l">Commission owed</div><div class="v">${money(sum(owed,estOwed))}</div><div class="note" style="margin:2px 0 0">details on the Commission tab →</div></div>`:''}
     ${kpi('Hours vs estimate', hv==null?'—':sgn(hv)+pct(Math.abs(hv)), hv==null?'':Math.abs(hv)<=0.15?'':'warn', ch.length?`${ch.length} closed job${ch.length===1?'':'s'} · within ±15% is accurate`:'no hours logged yet')}
   </div>
   <div class="sales-grid">
@@ -2441,18 +2430,13 @@ function renderEstSales(){
     <div class="card"><h3>Estimate vs actual</h3>${rowsTable(['PFBS #','Client','Est. hours','Actual hours','Est. margin','Actual margin'], closed.slice(0,10).map(x=>x.p),
       p=>{ const c=jobCompare(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), c.estHrs==null?'—':fmtH(c.estHrs), `${fmtH(c.actHrs)}${c.hrsVar!=null?` <span class="${Math.abs(c.hrsVar)<=0.15?'up':'down'}">(${sgn(c.hrsVar)}${pct(Math.abs(c.hrsVar))})</span>`:''}`, c.estGP!=null&&c.rev?pct(c.estGP/c.rev):'—', `<b>${jm(p)}</b>`]; },
       'Shows up once the office logs actual hours on your finished jobs.')}<div class="note">Your last 10 jobs with hours logged. Green: within ±15% of your estimate.</div></div>
-    ${comm?`<div class="card"><h3>Commission statement</h3>${rowsTable(['PFBS #','Client','Date paid','Amount','GP %','Rate','Commission','Paid on'], stmt,
-      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), fmtD(p.datePaid), isRecurring(p)?money(monthlyValue(p))+'/mo':money(estBase(p)), pct(gpPct(p)), pct(estRate(p)), money(estComm(p))+commMonthsTxt(p), estOwed(p)>0.005?`<span class="flag warn">Owed ${money(estOwed(p))}</span>`:fmtD(p.estCommPaidOn)],
-      'No commission yet. It starts once a client pays for one of your jobs.')}
-      ${stmt.length?`<div class="gpline">Total on this statement: <b>${money(sum(stmt,estComm))}</b> · owed <b>${money(sum(stmt,estOwed))}</b></div>`:''}
-      <div class="note">Commission = job amount (less pass-through, plus approved change orders) × your rate, which depends on the job's margin. Recurring contracts earn month by month for the first 12 months, starting when the first invoice is paid. Shows commission earned ${L} plus anything still owed.</div></div>`:''}
   </div>`;
 }
 $('#salesKind').addEventListener('click', e=>{ const b=e.target.closest('[data-kind]'); if(!b) return; salesKind=b.dataset.kind; renderSales(); });
 $('#salesPeriod').addEventListener('click', e=>{ const b=e.target.closest('[data-per]'); if(!b) return; salesPer=b.dataset.per; renderSales(); });
 $('#salesRep').addEventListener('change', e=>{ if(salesKind==='est') estRep=e.target.value; else salesRep=e.target.value; renderSales(); });
 $('#salesLead').addEventListener('click', ()=>openDrawer(null,{lead:true}));
-$('#salesBody').addEventListener('click', e=>{ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
+$('#salesBody').addEventListener('click', e=>{ const g=e.target.closest('[data-gocomm]'); if(g){ gotoComm(g.dataset.gocomm); return; } const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
 $('#salesBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id);} });
 
 // ---------- settings ----------
@@ -2471,10 +2455,11 @@ function renderSettings(){
   <div class="settings-grid">
     ${ta('s-ct','Client type → BD rate', S.clientTypes.map(c=>c[0]+' | '+Math.round(c[1]*1000)/10).join('\n'), 'Client type | rate in percent of gross profit.')}
     ${ta('s-goals','BD goals', (S.goals||[]).map(g=>g.join(' | ')).join('\n'), 'Name | leads per month | won $ per quarter. One BD rep per line. Shows as progress bars on their My Sales tab.')}
-    ${ta('s-tiers','Estimator rate by margin', S.estTiers.map(t=>Math.round(t[0]*1000)/10+' | '+Math.round(t[1]*1000)/10).join('\n'), 'GP % from | rate in percent of (price − pass-through).')}
+    ${ta('s-tiers','Estimator rate by margin', S.estTiers.map(t=>Math.round(t[0]*1000)/10+' | '+Math.round(t[1]*1000)/10).join('\n'), 'GP % from | rate in percent of (price − pass-through). When a BD rep brought the job, the estimator gets the share set under Guardrails.')}
     <div class="card listedit"><h3>Guardrails</h3>
       <label class="f">Margin floor (GP %)<input id="s-floor" type="number" step="any" value="${S.marginFloor*100}" ${ro}></label>
       <label class="f">BD rate below floor (% of normal)<input id="s-share" type="number" step="any" value="${S.belowFloorShare*100}" ${ro}></label>
+      <label class="f">Estimator rate when a BD rep is on the job (% of normal)<input id="s-estbd" type="number" step="any" value="${Math.round((S.estBdShare??1)*1000)/10}" ${ro}></label>
       <label class="f">Proposal valid for (days)<input id="s-exp" type="number" value="${S.expiryDays}" ${ro}></label>
       <label class="f">Service report app link<input id="s-rpt" type="url" value="${esc(S.reportAppUrl||'')}" ${ro}></label></div>
     ${ta('s-svc','Services', lines(S.services), 'One per line.')}
@@ -2544,7 +2529,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
-      reportAppUrl:$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, expiryDays:Number($('#s-exp').value)||90 };
+      reportAppUrl:$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, expiryDays:Number($('#s-exp').value)||90 };
     const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
     if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
   }

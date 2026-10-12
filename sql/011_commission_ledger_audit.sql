@@ -10,6 +10,12 @@
 -- Needs update 010 first.
 -- =====================================================================
 
+do $$ begin
+  if to_regprocedure('public.est_rate(public.proposals)') is null then
+    raise exception 'Run update 010 (010_recurring_contracts.sql) first, then run this one again.';
+  end if;
+end $$;
+
 -- ---------- locked commission rates ------------------------------------
 alter table public.proposals
   add column if not exists est_comm_rate numeric,
