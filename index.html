@@ -239,7 +239,6 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="sales" aria-selected="false" id="salesTab" hidden>My Sales</button>
     <button role="tab" data-tab="orders" aria-selected="false" id="ordersTab" hidden>Jobs</button>
     <button role="tab" data-tab="comm" aria-selected="false" id="commTab" hidden>Commission</button>
-    <button role="tab" data-tab="scorecard" aria-selected="false">Scorecards</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
   <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
@@ -292,13 +291,15 @@ td input,td select{padding:5px 8px}
     <div class="toolbar" style="justify-content:space-between">
       <div><h2 id="salesTitle">My Sales</h2><div class="sub" id="salesSub"></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <div id="salesKind" hidden style="display:flex;gap:6px"><button class="chip" data-kind="est" aria-pressed="true">Estimators</button><button class="chip" data-kind="bd" aria-pressed="false">BD reps</button></div>
+        <button class="btn ghost" id="repBtn" hidden>Monthly report</button>
+        <div id="salesKind" hidden style="display:flex;gap:6px"><button class="chip" data-kind="team" aria-pressed="false">Team</button><button class="chip" data-kind="est" aria-pressed="true">Estimators</button><button class="chip" data-kind="bd" aria-pressed="false">BD reps</button></div>
         <select id="salesRep" hidden aria-label="Person"></select>
         <div id="salesPeriod" style="display:flex;gap:6px"><button class="chip" data-per="month" aria-pressed="true">This month</button><button class="chip" data-per="quarter" aria-pressed="false">This quarter</button><button class="chip" data-per="year" aria-pressed="false">This year</button></div>
         <button class="btn" id="salesLead">+ New lead</button>
       </div>
     </div>
     <div id="salesBody"></div>
+    <div class="cards" id="score" hidden></div>
   </section>
 
   <section id="view-orders" hidden>
@@ -314,12 +315,6 @@ td input,td select{padding:5px 8px}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="commPerson" hidden aria-label="Person"></select><button class="btn ghost" id="commCsv">Export CSV</button><button class="btn" id="commPay" hidden>Record payout</button></div>
     </div>
     <div id="commBody"></div>
-  </section>
-
-  <section id="view-scorecard" hidden>
-    <div class="toolbar" style="justify-content:space-between"><h2>Scorecards</h2><button class="btn ghost" id="repBtn" hidden>Monthly report</button></div>
-    <div class="sub" style="margin-bottom:16px">Won = Approved through Paid. Commission counts only proposals with a Date paid.</div>
-    <div class="cards" id="score"></div>
   </section>
 
   <section id="view-settings" hidden>
@@ -548,7 +543,6 @@ function pillClass(st){ if(st==='Lead') return 'p-lead'; if(WON.includes(st)) re
 // ---------- pipeline ----------
 const FILTERS = [
   ['Open', p=>outcome(p)==='Open'],
-  ['Leads', p=>p.status==='Lead'],
   ['Needs review', p=>PRE.includes(p.status)],
   ['Follow-up due', p=>{const f=followUp(p); return f && f<=today();}],
   ['Past 90 days', p=>{const d=daysOpen(p); return d!=null && d>S.expiryDays;}],
@@ -564,17 +558,13 @@ function renderPipeline(){
   if(isManager()){ const n=estNames(); if(byEst && !n.includes(byEst)) byEst=''; bsel.innerHTML=`<option value="">Everyone</option>`+n.map(x=>`<option ${x===byEst?'selected':''}>${esc(x)}</option>`).join(''); }
   const PV = byEst ? P.filter(p=>p.sentBy===byEst) : P;
   const open=PV.filter(p=>outcome(p)==='Open'), won=PV.filter(p=>outcome(p)==='Won'), lost=PV.filter(p=>outcome(p)==='Lost');
-  const due=PV.filter(FILTERS[2][1]).length, stale=PV.filter(FILTERS[3][1]).length, review=PV.filter(FILTERS[1][1]).length;
   const sum=(a,f=contractValue)=>a.reduce((s,p)=>s+(num(f(p))||0),0);
   const rate=(won.length+lost.length)?won.length/(won.length+lost.length):null, act=PV.filter(activeContract);
   $('#kpis').innerHTML = [
     ['Open pipeline', money(sum(open)), open.length+' proposals',''],
     ['Won', money(sum(won,wonAmt)), won.length+' proposals',''],
     ['Recurring / month', money(sum(act,monthlyValue)), act.length+' active contract'+(act.length===1?'':'s'),''],
-    ['Win rate', rate==null?'—':pct(rate), (won.length+lost.length)+' decided',''],
-    ['Needs review', review, 'waiting on senior estimator',''],
-    ['Follow-ups due', due, 'call or email this week', due?'warn':''],
-    ['Past 90 days', stale, 'mark Expired or re-issue', stale?'alert':'']
+    ['Win rate', rate==null?'—':pct(rate), (won.length+lost.length)+' decided','']
   ].map(([l,v,s,c])=>`<div class="kpi ${c}"><div class="l">${l}</div><div class="v num">${v}</div><div class="sub">${s}</div></div>`).join('');
   $('#chips').innerHTML = FILTERS.map(([n,f])=>`<button class="chip" aria-pressed="${filter===n}" data-f="${esc(n)}">${n}<span class="c num">${PV.filter(f).length}</span></button>`).join('');
   const fn=FILTERS.find(f=>f[0]===filter)[1], q=query.trim().toLowerCase();
@@ -639,7 +629,7 @@ function contractHTML(p, ed){
       ${won?`<label class="f">Cancelled on <span class="note" style="margin:0;font-weight:400">only if the client ends it early</span><input type="date" data-k="cancelledOn" id="f-cancelledOn" value="${esc(p.cancelledOn||'')}" ${dis}></label>`:'<div></div>'}</div>
     ${won&&p.cancelledOn?`<label class="f">Why they cancelled<input data-k="cancelReason" id="f-cancelReason" value="${esc(p.cancelReason||'')}" placeholder="e.g. new property manager, price, quality" ${dis}></label>`:''}
     ${(h=>h&&h.kind!=='ok'?`<div class="gpline" style="color:var(--${h.cls==='bad'?'bad':'warn'})">${esc(h.text)}</div>`:h?`<div class="gpline">Typical visit margin <b>${pct(h.m)}</b> (logged ${fmtD(h.last)}).</div>`:'')(contractHealth(p))}
-    <div class="note">Won amounts and scorecards count the contract value. Commission is earned month by month for the first 12 months, starting the month the first invoice is paid${p.cancelledOn?', and stopped when the contract was cancelled':''}.</div>`;
+    <div class="note">Won amounts and sales numbers count the contract value. Commission is earned month by month for the first 12 months, starting the month the first invoice is paid${p.cancelledOn?', and stopped when the contract was cancelled':''}.</div>`;
 }
 function calc2(p){ const br=bdRate(p), er=estRate(p); return `${approvedCOs(p).length?`<div class="gpline" style="margin:0 0 6px">Includes approved change orders: +${money(coRevenue(p))} revenue, +${money(coGP(p))} GP</div>`:''}<div class="calc">
       <div><span>BD rate</span><b class="num">${br==null?'—':pct(br)}</b></div>
@@ -747,7 +737,7 @@ function drawDrawer(){
     </div>
     <div id="calc2">${calc2(p)}</div>
     ${isRecurring(p)?`<div class="note">Each visit gets its own HCP job #. Put <b>${esc(p.num)}</b> in the HCP job description (or the recurring job template) and every visit links here.</div>`:''}
-    <div class="note">Date paid fills in when you mark it Paid. Commission payouts are recorded from the Scorecards page.${p.commPaidOn?` BD commission paid ${fmtD(p.commPaidOn)}.`:''}${p.estCommPaidOn?` Estimator commission paid ${fmtD(p.estCommPaidOn)}.`:''} Owners don't earn estimator commission.</div>
+    <div class="note">Date paid fills in when you mark it Paid. Commission payouts are recorded on the Commission tab.${p.commPaidOn?` BD commission paid ${fmtD(p.commPaidOn)}.`:''}${p.estCommPaidOn?` Estimator commission paid ${fmtD(p.estCommPaidOn)}.`:''} Owners don't earn estimator commission.</div>
     </fieldset>` : ''}
     ${outcome(p)==='Won' && (FREQ_MONTHS[p.frequency]||isRecurring(p)) && !p.cancelledOn ? `<fieldset><legend>Renewal</legend>
       <div class="grid2"><label class="f">${renewalKind(p)} date<input type="date" id="f-renewalDate" data-k="renewalDate" value="${esc(renewalOf(p)||'')}" ${dis}></label>
@@ -2039,7 +2029,6 @@ function group(key, names){
 }
 function payBtn(kind,name,owed){ return owed>0.005 ? `<button class="btn small" data-paygo="${esc(name)}">Pay ${money(owed)}</button>` : ''; }
 function gotoComm(name){ commPerson=name; for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab==='comm'); show('comm'); renderComm(); }
-$('#score').addEventListener('click', e=>{ const b=e.target.closest('[data-paygo]'); if(b) gotoComm(b.dataset.paygo); });
 
 // ---------- Commission: statement per person + payout ledger (011) ----------
 let CP=[], cpOK=true, commPerson=null;
@@ -2153,8 +2142,7 @@ $('#rep').addEventListener('change', e=>{ if(e.target.id==='repMonth' && e.targe
 $('#repBtn').addEventListener('click', ()=>openReport());
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#rep').hidden){ e.stopImmediatePropagation(); $('#rep').hidden=true; } }, true);
 function renderScore(){
-  $('#repBtn').hidden=!isManager();
-  if(SB_COUNTS===null){ loadSendBacks().then(()=>{ if(!$('#view-scorecard').hidden) renderScore(); }); }
+  if(SB_COUNTS===null){ loadSendBacks().then(()=>{ if(!$('#score').hidden && !$('#view-sales').hidden) renderScore(); }); }
   const est=group('sentBy', TEAM.filter(t=>t.role!=='BD Rep').map(t=>t.name)).filter(r=>r.mine.length||TEAM.find(t=>t.name===r.n)?.active);
   const bd=group('bdRep', TEAM.filter(t=>t.role==='BD Rep').map(t=>t.name));
   const src=group('leadSource', S.leadSources).filter(r=>r.mine.length);
@@ -2298,11 +2286,13 @@ function funnelHTML(mine, per){
   return rows.map(([l,n,of],i)=>`${i===2?'<div style="height:6px"></div>':''}<div class="stage"><div><b>${l}</b></div><div class="track"><div class="fill ${l==='Won'?'done':''}" style="width:${(n?Math.max(3,n/max*100):0).toFixed(1)}%"></div></div><div class="r">${n}${of!=null?` <span class="note" style="margin:0">· ${of?pct(n/of):'—'}</span>`:''}</div></div>`).join('')
     + `<div class="note">Prospects and leads started ${PER_LABEL[per]}, and how far they've gotten. The % is the share that made it past the line above.</div>`;
 }
-let salesKind='est', estRep=null;
+let salesKind=null, estRep=null;
 function renderSales(){
-  if(role()==='BD Rep') salesKind='bd'; else if(role()==='Estimator') salesKind='est';
-  $('#salesKind').hidden=!isManager();
+  if(role()==='BD Rep') salesKind='bd'; else if(role()==='Estimator') salesKind='est'; else if(!salesKind) salesKind='team';
+  $('#salesKind').hidden=!isManager(); $('#repBtn').hidden=!isManager();
   for(const b of document.querySelectorAll('#salesKind [data-kind]')) b.setAttribute('aria-pressed', b.dataset.kind===salesKind);
+  const team=salesKind==='team'; $('#score').hidden=!team; $('#salesBody').hidden=team; $('#salesPeriod').hidden=team;
+  if(team){ $('#salesRep').hidden=true; $('#salesLead').hidden=true; $('#salesTitle').textContent='Sales'; $('#salesSub').textContent='Everyone side by side, all time'; return renderScore(); }
   if(salesKind==='est') return renderEstSales();
   const mgr=isManager(), names=bdNames();
   if(role()==='BD Rep') salesRep=me.name; else if(!names.includes(salesRep)) salesRep=names[0]||null;
@@ -2352,9 +2342,6 @@ function renderSales(){
       <div class="note">Lead, Estimating and Sent are right now. Won is ${L}. Amounts include approved change orders.</div></div>
   </div>
   <div class="cards" style="margin-top:16px">
-    <div class="card"><h3>My leads (${waiting.length})</h3>${rowsTable(['PFBS #','Client','Property','Estimator','Status','Days waiting'], waiting.sort((a,b)=>waitDays(b)-waitDays(a)),
-      p=>[`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), p.sentBy?esc(p.sentBy):'<span class="flag warn">Not assigned</span>', `<span class="pill ${pillClass(p.status)}">${esc(p.status)}</span>`, (d=>`<span class="${d>3?'flag bad':''}">${d}</span>`)(waitDays(p))],
-      'No leads waiting. Log one with + New lead.')}<div class="note">Days since the lead was logged. Red after 3 days without a proposal.</div></div>
     <div class="card"><h3>Proposals out (${out.length})</h3>${rowsTable(['PFBS #','Client','Property','Sent','Follow-up','Amount'], out.sort((a,b)=>(followUp(a)||0)-(followUp(b)||0)),
       p=>{ const f=followUp(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), fmtD(p.dateSent), f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:'', money(wonAmt(p))]; },
       'Nothing out with clients right now.')}</div>
@@ -2456,7 +2443,12 @@ function renderSettings(){
     ${ta('s-ct','Client type → BD rate', S.clientTypes.map(c=>c[0]+' | '+Math.round(c[1]*1000)/10).join('\n'), 'Client type | rate in percent of gross profit.')}
     ${ta('s-goals','BD goals', (S.goals||[]).map(g=>g.join(' | ')).join('\n'), 'Name | leads per month | won $ per quarter. One BD rep per line. Shows as progress bars on their My Sales tab.')}
     ${ta('s-tiers','Estimator rate by margin', S.estTiers.map(t=>Math.round(t[0]*1000)/10+' | '+Math.round(t[1]*1000)/10).join('\n'), 'GP % from | rate in percent of (price − pass-through). When a BD rep brought the job, the estimator gets the share set under Guardrails.')}
-    <div class="card listedit"><h3>Guardrails</h3>
+    <div class="card listedit"><h3>Margins &amp; guardrails</h3>
+      <label class="f">Target gross margin %<input id="s-tgt" type="number" step="any" value="${Math.round(S.est.targetMargin*1000)/10}" ${ro}></label>
+      <label class="f">Wages % of price: caution above<input id="s-lc" type="number" step="any" value="${Math.round(S.est.laborCaution*1000)/10}" ${ro}></label>
+      <label class="f">Wages % of price: max<input id="s-lm" type="number" step="any" value="${Math.round(S.est.laborMax*1000)/10}" ${ro}></label>
+      <label class="f">Labor burden % (payroll taxes, workers' comp, benefits)<input id="s-burden" type="number" step="any" value="${Math.round(S.est.burden*1000)/10}" ${ro}></label>
+      <div class="note">On labor-only jobs wages are most of the cost, so wages ≈ 100% − margin. Caution 45% / max 55% fits a 45% target. The margin floor is the red line. Burden is added on top of wages in every estimate.</div>
       <label class="f">Margin floor (GP %)<input id="s-floor" type="number" step="any" value="${S.marginFloor*100}" ${ro}></label>
       <label class="f">BD rate below floor (% of normal)<input id="s-share" type="number" step="any" value="${S.belowFloorShare*100}" ${ro}></label>
       <label class="f">Estimator rate when a BD rep is on the job (% of normal)<input id="s-estbd" type="number" step="any" value="${Math.round((S.estBdShare??1)*1000)/10}" ${ro}></label>
@@ -2483,12 +2475,7 @@ function renderSettings(){
       <label class="f">Rental misc ($)<input id="s-rmisc" type="number" step="any" value="${S.est.rentalMisc}" ${ro}></label>
       <label class="f">Hours in a work day<input id="s-hpd" type="number" step="any" value="${S.est.hoursPerDay}" ${ro}></label>
       <label class="f">Solar panels cleaned per hour (crew)<input id="s-sppph" type="number" step="any" value="${S.est.spPph??250}" ${ro}></label></div>
-    <div class="card listedit"><h3>Margin guardrails</h3>
-      <label class="f">Target gross margin %<input id="s-tgt" type="number" step="any" value="${Math.round(S.est.targetMargin*1000)/10}" ${ro}></label>
-      <label class="f">Wages % of price: caution above<input id="s-lc" type="number" step="any" value="${Math.round(S.est.laborCaution*1000)/10}" ${ro}></label>
-      <label class="f">Wages % of price: max<input id="s-lm" type="number" step="any" value="${Math.round(S.est.laborMax*1000)/10}" ${ro}></label>
-      <label class="f">Labor burden % (payroll taxes, workers' comp, benefits)<input id="s-burden" type="number" step="any" value="${Math.round(S.est.burden*1000)/10}" ${ro}></label>
-      <div class="note">On labor-only jobs wages are most of the cost, so wages ≈ 100% − margin. Caution 45% / max 55% fits a 45% target. The margin floor (red line) is under Guardrails above. Burden is added on top of wages in every estimate.</div></div>
+
     ${ta('s-clar','Standard clarifications', S.clarifications.map(c=>c.join(' | ')).join('\n'), 'Service | text. Use All for every proposal (except Gates &amp; Doors-only proposals, which get only their own). Used when a proposal\'s clarifications box is blank.')}
   </div>
   <div class="card listedit" style="margin-top:16px"><h3>Terms &amp; Conditions (page 2 of every PDF)</h3><textarea id="s-terms" style="min-height:260px" ${ro}>${esc(S.terms.map(t=>t.join(' | ')).join('\n'))}</textarea><div class="note">One term per line: Heading | text.</div>
@@ -2542,14 +2529,14 @@ $('#settingsBody').addEventListener('change', async e=>{
 });
 
 // ---------- tabs / views ----------
-function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','comm','scorecard','settings']) $('#view-'+v).hidden = v!==view; }
+function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','comm','settings']) $('#view-'+v).hidden = v!==view; }
 $('#tabs').addEventListener('click', e=>{
   const b=e.target.closest('[data-tab]'); if(!b) return;
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x===b);
   show(b.dataset.tab); renderAll();
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
-function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='scorecard') renderScore(); if(c==='comm') renderComm(); if(c==='settings') renderSettings(); }
+function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='settings') renderSettings(); }
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
