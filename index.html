@@ -290,7 +290,7 @@ td input,td select{padding:5px 8px}
     <div class="kpis" id="kpis"></div>
     <div class="toolbar">
       <div id="chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-      <input type="search" class="search" id="q" placeholder="Search client, property, PFBS #" aria-label="Search proposals">
+      <input type="search" class="search" id="q" placeholder="Search client, property, PFBS # or HCP job #" aria-label="Search proposals">
       <select id="byEst" hidden aria-label="Estimator" style="max-width:200px"></select>
     </div>
     <div class="tablewrap"><table>
@@ -589,7 +589,7 @@ function renderPipeline(){
   ].concat((b=>b.length?[['Budgets out', money(sum(b)), b.length+' budget proposal'+(b.length===1?'':'s'),'']]:[])(PV.filter(p=>p.status==='Budget'))).map(([l,v,s,c])=>`<div class="kpi ${c}"><div class="l">${l}</div><div class="v num">${v}</div><div class="sub">${s}</div></div>`).join('');
   $('#chips').innerHTML = FILTERS.map(([n,f])=>`<button class="chip" aria-pressed="${filter===n}" data-f="${esc(n)}">${n}<span class="c num">${PV.filter(f).length}</span></button>`).join('');
   const fn=FILTERS.find(f=>f[0]===filter)[1], q=query.trim().toLowerCase();
-  const list=PV.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
+  const list=PV.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep,p.hcpJob].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   $('#rows').innerHTML = list.length ? list.map(p=>{
     const d=daysOpen(p), f=followUp(p);
     return `<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}${(p.rev||1)>1?` <span class="revb">Rev ${p.rev}</span>`:''}${renewalDue(p)?' <span class="revb rnw">Renew</span>':''}${p.cancelledOn?' <span class="revb ptlate">Cancelled</span>':''}${contractHealth(p)?.kind==='low'?' <span class="revb ptlate" title="Recurring contract below the margin floor">Low margin</span>':''}${outcome(p)==='Won'&&partsOpen(p)?` <span class="revb ${partsLate(p)?'ptlate':''}" title="${partsOpen(p)} part(s) still to order">Parts</span>`:''}${rentAlerts(p).length?` <span class="revb ${rentAlerts(p).some(a=>a[0]==='bad')?'ptlate':''}" title="${esc(rentAlerts(p).map(a=>a[1]).join('; '))}">Lift</span>`:''}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="r num">${money(contractValue(p))}${isRecurring(p)?`<div class="note" style="margin:0">${money(monthlyValue(p))}/mo</div>`:''}</td><td>${quickStatus(p)}</td><td class="hide-sm r num">${d==null?'':`<span class="${d>S.expiryDays?'flag bad':''}">${d}</span>`}</td><td class="hide-sm num">${f?`<span class="${f<=today()?'flag warn':''}">${fmtD(iso(f))}${f<=today()?' · due':''}</span>`:''}</td><td class="hide-sm">${esc(p.sentBy)}</td></tr>`;
@@ -758,6 +758,7 @@ function drawDrawer(){
       ${field('Date sent','dateSent','date')}
       ${sel(p.status==='Lead'?'Assign to estimator':'Estimator (sent by)','sentBy',names,'',!(isManager() || (p.status==='Lead' && role()==='BD Rep')))}
       ${field('Client (company)','client','text','full','list="clientList" autocomplete="off" placeholder="Start typing to pick a past client"')}
+      <div id="dupWarn" class="full"></div>
       ${field('Property name / short label','property','text','full','list="propList" autocomplete="off" placeholder="Pick a past property or type a new one"')}
       <datalist id="clientList">${clientNames().map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
       <datalist id="propList">${propsFor(p.client).map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
@@ -860,8 +861,19 @@ function askJobNo(p){
     d.showModal(); d.querySelector('#askJob').focus();
   });
 }
+// what's missing before a proposal can go to review or to the client
+function missingForSend(p){ const m=[];
+  if(!(p.contactEmail||'').trim()) m.push('contact email');
+  if(!(p.property||'').trim()) m.push('property name');
+  if(!(num(p.amount)>0)) m.push('a priced line');
+  if(num(p.gp)==null && !estimateTotals(p)) m.push('an estimate (or Est. gross profit)');
+  return m; }
+const SEND_STEPS=['Needs Review','Sent','Budget'];
 function setStatus(st){
   if(draft.status===st) return;
+  if(SEND_STEPS.includes(st) && PRELOCK.includes(draft.status)){ syncFromItems(draft); const m=missingForSend(draft);
+    if(m.length){ const msg=`Before it goes ${st==='Needs Review'?'to review':'out'}, add: ${m.join(', ')}.`;
+      if(role()!=='Owner' || !confirm(msg+'\n\nYou are the owner: send it anyway?')){ $('#dmsg').textContent=msg; toast(msg); return; } } }
   draft.status=st;
   if((st==='Approved'||LOST.includes(st)) && !draft.dateResolved) draft.dateResolved=iso(today());
   if(st==='Budget'){ const y=today().getFullYear()+1; if(!draft.budgetYear) draft.budgetYear=y; if(!draft.budgetCheck) draft.budgetCheck=`${draft.budgetYear}-01-15`; if(!draft.dateSent) draft.dateSent=iso(today()); }
@@ -1111,6 +1123,7 @@ function renderJobs(){
     return n.join('<br>') || '<span class="note" style="margin:0">Ready</span>'; };
   const dcell=(p,k)=>`<input class="qa qd" data-qa="${k}" type="date" aria-label="${k==='start'?'Start date':'Finish date'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
   const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='techs'?'Techs':k==='hpt'?'Hours each':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
+  const inv=P.filter(p=>p.status==='Invoiced').sort((a,b)=>String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
   const nsr=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !p.reportSentOn && !isRecurring(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   const chk=P.map(p=>({p,h:contractHealth(p)})).filter(x=>x.h && x.h.kind!=='ok').sort((a,b)=>(a.h.kind==='low'?0:1)-(b.h.kind==='low'?0:1));
   $('#jobsBody').innerHTML = `<div class="cards">
@@ -1131,6 +1144,13 @@ function renderJobs(){
     <div class="tablewrap"><table><thead><tr><th>Job</th><th class="r">Per month</th><th class="hide-sm">Estimator</th><th class="r">Margin</th><th>Issue</th></tr></thead><tbody>
     ${chk.length?chk.map(({p,h})=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="r num">${money(monthlyValue(p))}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${h.m!=null?`<b class="${h.kind==='low'?'down':''}">${pct(h.m)}</b>`:'—'}</td><td class="wrap"><span class="flag ${h.cls}">${esc(h.text)}</span></td></tr>`).join('')
       : '<tr><td colspan="5" class="empty">All recurring contracts look healthy.</td></tr>'}</tbody></table></div></div>
+  <div class="card"><h3>Waiting on payment (${inv.length})</h3>
+    <div class="note" style="margin:0 0 8px">Invoiced jobs. Match them to paid invoices in HousecallPro by the <b>HCP job #</b>, then click Paid. Commission starts from the date paid.</div>
+    <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th>HCP job #</th><th class="r">Amount</th><th class="hide-sm">Estimator</th><th>Date paid</th><th></th></tr></thead><tbody>
+    ${inv.length?inv.map(p=>`<tr data-prow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="num"><b>${esc(p.hcpJob||'—')}</b></td><td class="r num">${money(isRecurring(p)?monthlyValue(p):p.amount)}${isRecurring(p)?'<div class="note" style="margin:0">first month</div>':''}</td><td class="hide-sm">${esc(p.sentBy||'')}</td>
+      <td><input class="qa qd" type="date" data-pd value="${iso(today())}" aria-label="Date paid for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}></td><td>${canEditRow(p)?`<button class="btn small" data-paid="${esc(p.num)}">Paid</button>`:''}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="empty">Nothing waiting on payment.</td></tr>'}</tbody></table></div>
+    <div class="note">Recurring contracts: mark Paid when the first monthly invoice is paid; later months are tracked in HousecallPro.</div></div>
   <div class="card"><h3>Service report not sent (${nsr.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>Job</th><th class="hide-sm">Status</th><th class="hide-sm">HCP job #</th><th class="hide-sm">Estimator</th></tr></thead><tbody>
     ${nsr.length?nsr.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="hide-sm"><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm">${esc(p.hcpJob||'—')}</td><td class="hide-sm">${esc(p.sentBy||'')}</td></tr>`).join('')
@@ -1140,6 +1160,12 @@ function renderJobs(){
 }
 $('#jobsBody').addEventListener('click', async e=>{
   const o=e.target.closest('[data-open]'); if(o){ e.preventDefault(); openDrawer(o.dataset.open); return; }
+  const pb=e.target.closest('[data-paid]');
+  if(pb){ const p=P.find(x=>x.num===pb.dataset.paid); if(!p) return; const d=pb.closest('tr').querySelector('[data-pd]').value||iso(today());
+    pb.disabled=true; const {error}=await sb.from('proposals').update({status:'Paid', date_paid:d}).eq('num',p.num);
+    if(error){ pb.disabled=false; toast(error.message); return; }
+    await addActivity(p.num,'note',`Marked Paid (paid ${fmtD(d)}${p.hcpJob?', HCP job '+p.hcpJob:''}).`);
+    toast(`${p.num} marked Paid`); await loadProposals(); return; }
   const b=e.target.closest('[data-qsave]');
   if(b){ const p=P.find(x=>x.num===b.dataset.qsave); if(!p) return; const tr=b.closest('tr'), v={date:iso(today())};
     for(const i of tr.querySelectorAll('[data-qa]')) if(i.value.trim()) v[i.dataset.qa]=i.value.trim();
@@ -1309,6 +1335,10 @@ function propsFor(client){ const c=norm(client), m=new Map(); for(const x of P){
 function latest(pred){ return P.filter(x=>x.num!==draft.num && pred(x)).sort((a,b)=>String(b.num).localeCompare(String(a.num))); }
 const CONTACT_KEYS=['contactName','contactPhone','contactEmail','billAddress'];
 function fillEmpty(src, keys){ let n=0; for(const k of keys){ if(src && src[k] && !String(draft[k]||'').trim()){ draft[k]=src[k]; const el=document.getElementById('f-'+k); if(el) el.value=src[k]; n++; } } return n; }
+function checkDup(){ const box=$('#dupWarn'); if(!box || !draft) return; if(!isNew){ box.innerHTML=''; return; }
+  const c=norm(draft.client), pr=norm(draft.property); if(!c || !pr){ box.innerHTML=''; return; }
+  const hits=P.filter(x=>norm(x.client)===c && norm(x.property)===pr && ['Lead','Draft','Open','Budget'].includes(outcome(x)));
+  box.innerHTML = hits.length ? `<div class="lockline">Already open for ${esc(draft.client)} · ${esc(draft.property)}: ${hits.map(x=>`<a href="#" data-open="${esc(x.num)}">${esc(x.num)}</a> (${esc(x.status)}${x.sentBy?', '+esc(x.sentBy):''})`).join(', ')}. Open it instead, or keep going if this is separate work.</div>` : ''; }
 function autofill(k){
   if(k==='client'){
     const c=norm(draft.client); if(!c) return;
@@ -1328,7 +1358,7 @@ $('#drawer').addEventListener('change', e=>{ const o=e.target.dataset.opt; if(o=
   const groups=groupsOf(draft); let ch=chosenOptions(draft).filter(g=>g!==o); if(e.target.checked) ch.push(o); ch=groups.filter(g=>ch.includes(g));
   if(!ch.length){ e.target.checked=true; toast('At least one option has to count.'); return; }
   draft.pricingOption=ch.join('||'); rerenderItems(); }, true);
-$('#drawer').addEventListener('change', e=>{ if(e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property') autofill(k); if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
+$('#drawer').addEventListener('change', e=>{ if(e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property'){ autofill(k); checkDup(); } if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
@@ -1365,6 +1395,7 @@ function quickStatus(p){
 $('#rows').addEventListener('change', async e=>{
   const sel=e.target.closest('select[data-qs]'); if(!sel) return;
   const p=P.find(x=>x.num===sel.dataset.qs), st=sel.value; if(!p) return;
+  if(SEND_STEPS.includes(st) && PRELOCK.includes(p.status) && missingForSend(p).length){ await openDrawer(p.num); setStatus(st); return; }
   if((st==='Scheduled' && !p.hcpJob) || (LOST.includes(st) && !p.lostReason)){
     await openDrawer(p.num); setStatus(st);
     const fld = st==='Scheduled' ? '#f-hcpJob' : '#f-lostReason'; document.querySelector(fld)?.focus();
