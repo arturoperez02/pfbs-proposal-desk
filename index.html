@@ -367,6 +367,11 @@ const DEFAULTS = {
   reportAppUrl: 'https://pfbs-reports.arturo-perez408.workers.dev', goals: [], services: [], frequencies: [['One-time',1],['Annual',1]], leadSources: [], lostReasons: [],
   clientTypes: [['New client',0.10],['Existing client - new property',0.05],['House account',0]],
   marginFloor: 0.35, belowFloorShare: 0.5, estTiers: [[0,0.02],[0.35,0.03],[0.45,0.04]], estBdShare: 0.75, priceIncrease: 0.05, expiryDays: 90,
+  bdTemplates: [
+    ['Introduction','PF Building Services – {company}',"Hi {first},\n\nMy name is {me} with PF Building Services. We take care of commercial buildings around the Bay Area: window cleaning, pressure washing, solar panel cleaning and gates & doors.\n\nIf you ever need a quote or a second bid for {property}, I'd be happy to stop by and take a look.\n\nLooking forward to hearing from you."],
+    ['After meeting','Great meeting you',"Hi {first},\n\nThank you for taking the time to meet with me. Whenever it works for you, I'd be happy to walk {property} and put together a proposal.\n\nLooking forward to hearing from you."],
+    ['Check-in','Checking in',"Hi {first},\n\nJust checking in. If anything comes up at {property} that we can help with, feel free to reach out anytime.\n\nLooking forward to hearing from you."],
+    ['Budget season','Budget numbers for next year',"Hi {first},\n\nAs you start putting together next year's budget, we'd be happy to provide numbers for {property}. Just let me know which services you'd like included.\n\nLooking forward to hearing from you."]],
   clarifications: [['All','This pricing does not cover removal of hard water deposits, adhesive residue, paint overspray, or silicone buildup.'],['All','Client/building management is responsible for supplying any inspection certificates required prior to the start of work.']],
   addOns: ['Window screen cleaning','Pressure washing - sidewalks & entry','Pressure washing - parking structure','Hard water stain removal','Interior window washing','Solar panel cleaning','Gutter cleaning','Graffiti removal'],
   est: { labor: [['Administration',45,0],['Expert/Chair',75,32],['Apprentice',65,25]], taxRate: 0.1075, matMarkup: 1, rentMarkup: 0.25, equipMarkup: 0.25,
@@ -2350,6 +2355,7 @@ function drawProspect(){
       ${inp('Phone','phone','tel')}${inp('Email','email','email')}
       <label class="f full">Address<textarea data-pk="address" rows="2" ${dis}>${esc(x.address??'')}</textarea></label>
     </div></fieldset>
+    ${!isN?`<div id="pemBox" class="fubox" hidden></div>`:''}
     <fieldset><legend>Where it stands</legend><div class="grid2">
       <label class="f">Stage<select data-pk="stage" ${dis}>${STAGES.map(v=>`<option ${v===x.stage?'selected':''}>${v}</option>`).join('')}</select></label>
       ${inp('Next touch','next_touch','date')}
@@ -2363,10 +2369,33 @@ function drawProspect(){
   <div class="dfoot"><span class="msg" id="dmsg"></span>
     <button class="btn ghost" id="cancelD">Cancel</button>
     ${!isN && isManager()?'<button class="btn ghost" id="prDel">Delete</button>':''}
+    ${!isN && ed?'<button class="btn ghost" id="prEmail">Email</button>':''}
     ${!isN && x.stage!=='Converted' && canLead()?'<button class="btn ghost" id="prConvert">Convert to lead</button>':''}
     <button class="btn" id="prSave" ${ed?'':'disabled'}>${isN?'Add prospect':'Save'}</button></div>`;
 }
 function openProspect(id){ draft=null; const x=id?PROS.find(p=>p.id===id):null; PR = x ? structuredClone(x) : {company:'', stage:'New', bd_rep: role()==='BD Rep'?me.name:'', touches:[], next_touch: iso(today())}; drawProspect(); $('#scrim').hidden=false; $('#drawer').hidden=false; }
+// BD emails to prospects: pick a template, it fills in their name, opens Outlook, and logs the touch
+function pemFill(tpl, x){ const first=(x.contact_name||'').trim().split(/\s+/)[0]||'there', f=v=>String(v||'').replace(/\{first\}/g,first).replace(/\{company\}/g,x.company||'').replace(/\{property\}/g,x.property||x.company||'your property').replace(/\{me\}/g,me?.name||'');
+  return {subject:f(tpl[1]), body:f(tpl[2])}; }
+function pemOpen(i){ const box=$('#pemBox'); if(!box||!PR) return; const T=S.bdTemplates?.length?S.bdTemplates:DEFAULTS.bdTemplates, e=pemFill(T[i]||T[0], PR);
+  box.hidden=false;
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Email ${esc(PR.contact_name||PR.company)}</b><button type="button" class="btn ghost small" id="pemClose">Close</button></div>
+    <label class="f">Template<select id="pemTpl">${T.map((t,j)=>`<option value="${j}" ${j===i?'selected':''}>${esc(t[0])}</option>`).join('')}</select></label>
+    <label class="f">To<input id="pemTo" type="email" value="${esc(PR.email||'')}" placeholder="name@company.com"></label>
+    <label class="f">Subject<input id="pemSubj" value="${esc(e.subject)}"></label>
+    <label class="f">Message<textarea id="pemBody" rows="9">${esc(e.body)}</textarea></label>
+    <div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn small" data-pemsend="owa">Open in Outlook</button><button type="button" class="btn ghost small" data-pemsend="mailto">Open in mail app</button><button type="button" class="btn ghost small" data-pemsend="copy">Copy text</button></div>
+    <div class="note">Opening it logs an Email touch and sets the next touch a week out. Your Outlook signature is added when you send.</div>`;
+  box.scrollIntoView({block:'start', behavior:'smooth'}); }
+async function pemSend(kind){ const to=$('#pemTo').value.trim(), subj=$('#pemSubj').value, body=$('#pemBody').value, enc=encodeURIComponent, T=S.bdTemplates?.length?S.bdTemplates:DEFAULTS.bdTemplates, name=T[+$('#pemTpl').value]?.[0]||'Email';
+  if(kind==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(subj)}&body=${enc(body)}`,'_blank','noopener');
+  else if(kind==='mailto') location.href=`mailto:${enc(to)}?subject=${enc(subj)}&body=${enc(body)}`;
+  else { try{ await navigator.clipboard.writeText(`To: ${to}\nSubject: ${subj}\n\n${body}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } return; }
+  if(to && !PR.email) PR.email=to;
+  PR.touches=[...(PR.touches||[]), {date:iso(today()), kind:'Email', note:`${name}: ${subj}`, by:me.name}]; PR.last_touch=iso(today()); if(PR.stage==='New') PR.stage='Contacted';
+  if(!PR.next_touch || parse(PR.next_touch)<=today()){ const n=new Date(today()); n.setDate(n.getDate()+7); PR.next_touch=iso(n); }
+  if(await saveProspect(false)){ drawProspect(); toast(`Email logged. Next touch ${fmtD(PR.next_touch)}`); } }
+$('#drawer').addEventListener('change', e=>{ if(e.target.id==='pemTpl') pemOpen(+e.target.value); });
 async function saveProspect(close=true){
   if(!PR.company.trim()){ $('#dmsg').textContent='Add the company name.'; return false; }
   if(isManager() && !PR.bd_rep){ $('#dmsg').textContent='Pick the BD rep.'; return false; }
@@ -2381,6 +2410,9 @@ $('#drawer').addEventListener('change', e=>{ const k=e.target.dataset.pk; if(k &
 $('#drawer').addEventListener('click', async e=>{
   const t=e.target.closest('button'); if(!t || !PR || draft) return;
   if(t.id==='prSave') saveProspect();
+  if(t.id==='prEmail'){ pemOpen(0); return; }
+  if(t.dataset.pemsend){ await pemSend(t.dataset.pemsend); return; }
+  if(t.id==='pemClose'){ $('#pemBox').hidden=true; return; }
   if(t.id==='tAdd'){ const note=$('#tNote').value.trim(), kind=$('#tKind').value; PR.touches=[...(PR.touches||[]), {date:iso(today()), kind, note, by:me.name}]; PR.last_touch=iso(today()); if(PR.stage==='New') PR.stage='Contacted';
     if(!PR.next_touch || parse(PR.next_touch)<=today()){ const n=new Date(today()); n.setDate(n.getDate()+7); PR.next_touch=iso(n); }
     if(await saveProspect(false)){ drawProspect(); toast(`Logged. Next touch ${fmtD(PR.next_touch)}`); } }
@@ -2603,6 +2635,7 @@ function renderSettings(){
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
     ${ta('s-lost','Lost reasons', lines(S.lostReasons), 'One per line.')}
     ${ta('s-addons','Add-on suggestions', lines(S.addOns), 'One per line. These show as suggestions when you type a line description.')}
+    ${ta('s-bdt','BD email templates', (S.bdTemplates||[]).map(t=>`${t[0]}\n${t[1]}\n${t[2]}`).join('\n---\n'), 'One template per block, blocks separated by a line with ---. First line: name. Second line: subject. The rest: message. Fill-ins: {first} {company} {property} {me}.')}
     ${ta('s-labor','Labor roles & rates', S.est.labor.map(r=>r.join(' | ')).join('\n'), 'Role | bill rate $/hr | wage cost $/hr. Wage cost drives gross profit.')}
     ${ta('s-sprates','Solar panel rates by access', (S.est.spRates||[]).map(r=>r.join(' | ')).join('\n'), 'Access | $ per panel. One rate per job on the solar (SP) estimate. Rename the tiers to how you describe access, e.g. Ground mount | 3.')}
     ${ta('s-gdtasks','Gates & doors tasks', (S.est.gdTasks||[]).map(r=>r.join(' | ')).join('\n'), 'Task | crew hours each | parts $ each. Used by the Gates & doors job builder. Leave a number at 0 to type it per job.')}
@@ -2649,7 +2682,7 @@ function organizeSettings(){
     ['Team', ['Team']],
     ['Commission', ['Client type → BD rate','Estimator rate by margin','BD goals']],
     ['Estimating', ['Margins & guardrails','Estimate defaults','Labor roles','Solar panel rates','Gates & doors tasks','Material presets']],
-    ['Lists', ['Services','Frequencies','Lead sources','Lost reasons','Add-on suggestions']],
+    ['Lists', ['Services','Frequencies','Lead sources','Lost reasons','Add-on suggestions','BD email templates']],
     ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
     ['Change log', ['Change log']],
     ['Data', ['Backup','Clean up old proposals']]];
@@ -2708,7 +2741,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       spRates:L('s-sprates').map(l=>{ const [a,b]=l.split('|').map(x=>x.trim()); return [a, num(String(b||'').replace('$',''))||0]; }).filter(r=>r[0]),
       matMarkup:(num($('#s-mm').value)||0)/100, taxRate:(num($('#s-tax').value)||0)/100, rentMarkup:(num($('#s-rm').value)||0)/100, equipMarkup:(num($('#s-em').value)||0)/100,
       rentalTax:(num($('#s-rtax').value)||0)/100, misc:S.est.misc, rentalDelivery:num($('#s-rdel').value)||0, rentalPickup:num($('#s-rpu').value)||0, rentalProtection:num($('#s-rpp').value)||0, rentalMisc:num($('#s-rmisc').value)||0, hoursPerDay:num($('#s-hpd').value)||8, targetMargin:(num($('#s-tgt').value)||45)/100, laborCaution:(num($('#s-lc').value)||45)/100, laborMax:Math.max(num($('#s-lm').value)||55, num($('#s-lc').value)||45)/100, burden:(num($('#s-burden').value)||0)/100 };
-    const data={ est, services:L('s-svc'), leadSources:L('s-src'), lostReasons:L('s-lost'), addOns:L('s-addons'),
+    const data={ est, services:L('s-svc'), leadSources:L('s-src'), lostReasons:L('s-lost'), addOns:L('s-addons'), bdTemplates:($('#s-bdt')?.value||'').split(/\n-{3,}\n/).map(b=>b.trim()).filter(Boolean).map(b=>{ const l=b.split('\n'); return [l[0].trim(), (l[1]||'').trim(), l.slice(2).join('\n').trim()]; }).filter(t=>t[0]&&t[2]),
       clarifications:L('s-clar').map(splitPair).map(([a,b])=>[a||'All',b]), terms:L('s-terms').map(splitPair), ack:$('#s-ack').value.trim(), gdClarSeeded:true,
       frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
