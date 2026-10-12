@@ -90,14 +90,13 @@ lists finished jobs whose report hasn't gone out.
 ## Service reports inside the CRM (update 017)
 
 The service report screens now live at **apps.pfbservices.com/reports.html**, using the CRM login (Owner, Admin and Senior Estimator).
-The old Cloudflare app keeps working until step 4, so nothing breaks while you try it.
+The old Cloudflare app keeps working until step 3, so nothing breaks while you try it.
 
 1. Run `sql/017_service_reports.sql` in Supabase.
-2. In Zapier, open the **"report approved → Outlook draft"** Zap and copy the webhook URL from its first step (Catch Hook).
-   In the CRM: Settings → **Proposal & links** → "Report approved" Zap link → paste → **Save link**. Only the office can see it.
-3. Try one: open a scheduled job → Job tab → **Write service report**. The client, contact email, address and scope come from the job.
-   Add a photo, tap **Approve & send to Outlook**, and check the draft lands in Outlook. The job shows "Sent to the client".
-4. Switch over: open the **"PFBS – Job finished → Service report"** Zap. In the step that posts to the old Cloudflare link, change:
+2. Try one: open a scheduled job → Job tab → **Write service report**. The client, contact email, address and scope come from the job.
+   Add a photo and tap **Approve & email**: the PDF downloads and an Outlook email opens with the client, subject and message filled in.
+   Attach the PDF and send (Outlook adds your signature). The job shows "Sent to the client". **Email again** on a sent report repeats this.
+3. Switch over: open the **"PFBS – Job finished → Service report"** Zap. In the step that posts to the old Cloudflare link, change:
    - URL → `https://igerptqlkbxmmajixlao.supabase.co/rest/v1/rpc/zap_report_job`
    - Payload type → json
    - Headers → `apikey` = your anon key · `Content-Type` = `application/json` · `Prefer` = `params=single-object`
@@ -106,8 +105,7 @@ The old Cloudflare app keeps working until step 4, so nothing breaks while you t
    The reply still has `review_url` (now a CRM link), so any later step that uses it keeps working.
    If the Zap has a step that emails Oscar "a report is ready", delete it: new reports show in the CRM (Jobs → **Service reports to send**, and the count on the **Reports** button).
    The report links itself to the PFBS job by the PFBS number in the HCP job description, or by the HCP job ID.
-5. After a week with no problems: clear "Old service report app link" in Settings. The **zap_report_sent** step above is no longer needed
-   (approving in the CRM marks the job), so you can delete that step. Keep the Cloudflare app for a while as a read-only archive of old reports.
+4. After a week with no problems: clear "Old service report app link" in Settings. Turn off the "report approved → Outlook draft" Zap; the CRM opens the email itself now. Keep the Cloudflare app for a while as a read-only archive of old reports.
 
 ## SharePoint auto-save
 

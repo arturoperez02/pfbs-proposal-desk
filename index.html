@@ -2640,8 +2640,7 @@ function renderSettings(){
       <label class="f">Yearly price increase % (renewals and next year's budget)<input id="s-pinc" type="number" step="any" value="${Math.round((S.priceIncrease??0.05)*1000)/10}" ${ro}></label>
       <label class="f">Estimator rate when a BD rep is on the job (% of normal)<input id="s-estbd" type="number" step="any" value="${Math.round((S.estBdShare??1)*1000)/10}" ${ro}></label>
       <label class="f">Proposal valid for (days)<input id="s-exp" type="number" value="${S.expiryDays}" ${ro}></label>
-      <label class="f">Old service report app link (clear it once you switch)<input id="s-rpt" type="url" value="${esc(S.reportAppUrl||'')}" ${ro}></label>
-      ${['Owner','Admin'].includes(role())?`<label class="f">"Report approved" Zap link (Outlook draft)<span style="display:flex;gap:6px"><input id="s-rhook" type="url" placeholder="https://hooks.zapier.com/hooks/catch/…" autocomplete="off" style="flex:1"><button type="button" class="btn small" id="rhookSave">Save link</button></span><span class="note" style="margin:2px 0 0">Kept private: only the office can use it. Saved on its own, right away.</span></label>`:''}</div>
+      <label class="f">Old service report app link (clear it once you switch)<input id="s-rpt" type="url" value="${esc(S.reportAppUrl||'')}" ${ro}></label></div>
     ${ta('s-svc','Services', lines(S.services), 'One per line.')}
     ${ta('s-freq','Frequencies', lines(S.frequencies), 'Name | visits per year.')}
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
@@ -2682,12 +2681,6 @@ function renderSettings(){
   ${canPay()?'<div class="card" style="margin-top:16px"><h3>Change log</h3><div class="note" style="margin:0 0 8px">Every change to Settings and the team list, and every deleted proposal, with who did it and when. Proposal changes are in each proposal\'s Activity.</div><div id="logBox"><div class="note">Loading…</div></div></div>':''}`;
   organizeSettings();
   if(canPay()) loadAdminLog();
-  if($('#rhookSave')){
-    sb.rpc('report_hook').then(({data,error})=>{ const i=$('#s-rhook'); if(!i) return; if(error){ i.placeholder='Run database update 017 first'; i.disabled=true; $('#rhookSave').disabled=true; } else i.value=data||''; });
-    $('#rhookSave').onclick=async ()=>{ const b=$('#rhookSave'), v=$('#s-rhook').value.trim(); b.disabled=true;
-      const {error}=await sb.rpc('set_report_hook',{url:v}); b.disabled=false;
-      toast(error?error.message:(v?'Zap link saved':'Zap link removed')); if(!error) loadAdminLog(); };
-  }
 }
 // group the settings cards under a few headings (cards keep their fields, so saving is unchanged)
 function organizeSettings(){
@@ -2695,7 +2688,7 @@ function organizeSettings(){
   const cards=[...root.querySelectorAll('.card')], find=t=>cards.find(c=>(c.querySelector('h3')?.textContent||'').trim().startsWith(t));
   // "Proposal valid for" and the service report link are not guardrails: give them their own card
   const extra=document.createElement('div'); extra.className='card listedit'; extra.innerHTML='<h3>Proposal &amp; links</h3>';
-  for(const id of ['#s-exp','#s-rpt','#s-rhook']){ const l=root.querySelector(id)?.closest('label'); if(l) extra.appendChild(l); }
+  for(const id of ['#s-exp','#s-rpt']){ const l=root.querySelector(id)?.closest('label'); if(l) extra.appendChild(l); }
   const groups=[
     ['Team', ['Team']],
     ['Commission', ['Client type → BD rate','Estimator rate by margin','BD goals']],

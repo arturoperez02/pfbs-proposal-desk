@@ -449,18 +449,7 @@ async function api(path, opts = {}) {
       await saveRow(r);
       const link = location.origin + location.pathname + '#/r/' + r.id;
       ok(await sb.rpc('report_approved', { p_id: r.id, p_link: link }));
-      // Outlook draft via the same "report approved" Zap as before
-      const email = SRV.buildEmail(r, { SIGNATURE: ENV.SIGNATURE });
-      const payload = { report_id: r.id, job_number: r.job_number || '', pfbs: r.num || '', client: r.client, address: r.address, to: SRV.splitEmails(r.email_to).join(', '),
-                        subject: email.subject, body: email.body, body_html: email.body_html, pdf_url: signed.signedUrl, file_name: fileName, service_dates: r.service_dates };
-      let zapier = { sent: false, status: 0 };
-      const hook = (await sb.rpc('report_hook')).data;
-      if (hook) {
-        try { const res = await fetch(hook, { method: 'POST', body: new URLSearchParams(payload) }); zapier = { sent: res.ok, status: res.status }; }
-        catch (e) { try { await fetch(hook, { method: 'POST', mode: 'no-cors', body: new URLSearchParams(payload) }); zapier = { sent: true, status: 0 }; } catch (_) { zapier = { sent: false, status: 0 }; } }
-      }
-      r.last_zapier = { ...zapier, at: new Date().toISOString() }; await saveRow(r);
-      return { ok: true, report: r, zapier, pdf_url: signed.signedUrl };
+      return { ok: true, report: r, pdf_url: signed.signedUrl };
     }
     fail('Not found');
   } catch (e) { if (e instanceof ApiError) throw new Error(e.message); throw e; }
@@ -642,7 +631,7 @@ async function showReport(id) {
   <header><button id="back">‹ Back</button><div class="t">${esc(r.job_number ? 'Job #' + r.job_number : 'Service Report')}</div><span class="saved" id="saved"></span></header>
   <main>
     <div class="card status">${r.status === 'approved'
-      ? `<span class="chip a">Sent ${r.approved_at ? new Date(r.approved_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}</span>${r.pdf ? `<a href="${esc(r.pdf.url)}" target="_blank" rel="noopener">Open / download PDF</a>` : ''}<span class="small">Edits after sending need “Approve” again to make a new draft.</span>`
+      ? `<span class="chip a">Sent ${r.approved_at ? new Date(r.approved_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}</span>${r.pdf ? `<a href="${esc(r.pdf.url)}" target="_blank" rel="noopener">Open / download PDF</a>` : ''}<button type="button" class="btn sec" id="emailAgain" style="padding:6px 12px">Email again</button><span class="small">Edits after sending need “Approve again” for a new PDF.</span>`
       : `<span class="chip p">Needs review</span><span class="small">Check the details, add photos, then tap Approve.</span>`}${r.status === 'approved' ? '<button type="button" class="btn sec dup" id="dup">Duplicate for next visit</button>' : ''}</div>
     ${prevBanner(r)}
     <div class="card"><h2>Property details</h2>${FIELDS.map(f => input(...f) + (f[0] === 'email_to' ? '<div class="hint">Separate multiple emails with ;</div>' : '')).join('')}</div>
@@ -671,16 +660,17 @@ async function showReport(id) {
       <label for="f_contact_first">Greeting name</label><input id="f_contact_first" data-k="contact_first" type="text" value="${esc(r.contact_first)}">
       <label for="f_email_subject">Subject</label><input id="f_email_subject" data-k="email_subject" type="text" value="${esc(r.email_subject)}" placeholder="${esc(defaultSubject(r))}">
       <label for="f_email_body">Message</label><textarea id="f_email_body" data-k="email_body" rows="7" placeholder="${esc(defaultBody(r))}">${esc(r.email_body)}</textarea>
-      <div class="hint">Leave subject/message blank to use the standard text. The draft lands in Outlook for a final look before sending.</div></div>
+      <div class="hint">Leave subject/message blank to use the standard text. Outlook adds your signature when you send.</div></div>
     <div style="text-align:center"><button class="linkbtn" id="delrep">Delete this report</button></div>
   </main>
-  <div class="bar"><div class="in"><button class="btn sec" id="prev">Preview PDF</button><button class="btn pri" id="approve">${r.status === 'approved' ? 'Approve again' : 'Approve & send to Outlook'}</button></div></div>`;
+  <div class="bar"><div class="in"><button class="btn sec" id="prev">Preview PDF</button><button class="btn pri" id="approve">${r.status === 'approved' ? 'Approve again' : 'Approve & email'}</button></div></div>`;
 
   $('#back').onclick = () => go('/');
   app.querySelectorAll('[data-k]').forEach(el => el.oninput = el.onchange = () => { r[el.dataset.k] = el.value; queueSave(); });
   app.querySelectorAll('[data-listk]').forEach(box => wireList(box, r));
   app.querySelectorAll('[data-addli]').forEach(b => b.onclick = () => { const box = $('#f_' + b.dataset.addli); addLiRow(box, r, null); });
   const ec = $('#editcrew'); if (ec) ec.onclick = editCrew;
+  const ea = $('#emailAgain'); if (ea) ea.onclick = async () => { ea.disabled = true; try { await signPdf(r); const b = await (await fetch(r.pdf.url)).blob(); await emailFlow(r, b); } catch (e) { toast('Could not get the PDF: ' + e.message, 4000); } ea.disabled = false; };
   const dp = $('#dup'); if (dp) dp.onclick = async () => {
     await flushSave(); const n = await api(`/api/reports/${r.id}/duplicate`, { method: 'POST' });
     toast('New report created from this one — pick the new dates and add photos'); state.report = n; go('/r/' + n.id);
@@ -777,8 +767,31 @@ function shrink(file, max = 1600) {
 
 // ---------------------------------------------------------------- approve
 function defaultSubject(r) { return DEFAULT_SUBJECT; }
-function defaultBody(r) { const f = (r.contact_first || '').trim(); return `Hi ${f ? f.charAt(0).toUpperCase() + f.slice(1).toLowerCase() : 'there'},\n\n${DEFAULT_MESSAGE}\n\nBest regards,\n\nOscar Perez\nPF Building Services\n(510) 359-5181 | info@pfbuildingservices.com\nwww.pfbservices.com`; }
+function defaultBody(r) { const f = (r.contact_first || '').trim(); return `Hi ${f ? f.charAt(0).toUpperCase() + f.slice(1).toLowerCase() : 'there'},\n\n${DEFAULT_MESSAGE}`; }
 function titleAddr(s) { return String(s || '').toLowerCase().replace(/\b([a-z])/g, c => c.toUpperCase()).replace(/\b(Ca|Ne|Nw|Se|Sw)\b/g, x => x.toUpperCase()); }
+
+// download the PDF and open the email, like proposals in the CRM (Outlook adds the signature)
+async function emailFlow(r, blob) {
+  const name = (r.pdf && r.pdf.file_name) || SRV.reportFileName(r, ENV.TZ);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  const to = SRV.splitEmails(r.email_to).join('; '), subj = r.email_subject || defaultSubject(r), body = r.email_body || defaultBody(r);
+  const o = document.createElement('div'); o.className = 'overlay';
+  o.innerHTML = `<div class="dialog"><h3>Email the report</h3><p class="small">The PDF just downloaded (<b>${esc(name)}</b>). Open the email, attach the PDF, and send.</p>
+    <label>To</label><input id="emTo" type="email" value="${esc(to)}" placeholder="client@company.com">
+    <label>Subject</label><input id="emSubj" type="text" value="${esc(subj)}">
+    <label>Message</label><textarea id="emBody" rows="6">${esc(body)}</textarea>
+    <div class="acts" style="flex-wrap:wrap"><button class="btn sec" data-em="close">Close</button><button class="btn sec" data-em="copy">Copy</button><button class="btn sec" data-em="mailto">Mail app</button><button class="btn pri" data-em="owa">Open in Outlook</button></div></div>`;
+  document.body.appendChild(o);
+  o.querySelectorAll('[data-em]').forEach(b => b.onclick = async () => {
+    const k = b.dataset.em, t = $('#emTo', o).value.trim(), s = $('#emSubj', o).value, m = $('#emBody', o).value, enc = encodeURIComponent;
+    if (k === 'close') { o.remove(); return; }
+    if (k === 'copy') { try { await navigator.clipboard.writeText(`To: ${t}\nSubject: ${s}\n\n${m}`); toast('Copied'); } catch (_) { toast('Select the text and copy it'); } return; }
+    if (k === 'owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(t)}&subject=${enc(s)}&body=${enc(m)}`, '_blank', 'noopener');
+    else location.href = `mailto:${enc(t)}?subject=${enc(s)}&body=${enc(m)}`;
+    if (r.num) await sb.from('proposal_activity').insert({ num: r.num, kind: 'note', note: `Service report emailed to ${t || 'client'}: ${s}` });
+    o.remove(); toast('Attach the downloaded PDF, then send');
+  });
+}
 
 function dialog(html, okLabel, cancelLabel = 'Cancel') {
   return new Promise(res => {
@@ -807,10 +820,10 @@ async function approveFlow() {
   await flushSave();
   const emails = (r.email_to || '').match(/[^\s,;]+@[^\s,;]+\.[A-Za-z]{2,}/g) || [];
   const warns = [];
-  if (!emails.length) warns.push('There is no client email. The Outlook draft will have no recipient.');
+  if (!emails.length) warns.push('There is no client email. The email will have no recipient yet.');
   if (!(r.photos || []).length) warns.push('No photos have been added.');
   if (!(r.work || []).length) warns.push('Work Performed is empty.');
-  const ok = await dialog(`<h3>Approve this report?</h3><p>This creates the PDF and puts an email draft in Outlook${emails.length ? ` to <b>${esc(emails.join(', '))}</b>` : ''} with the PDF attached. You can also download the PDF from the top of the report anytime.</p>${warns.map(w => `<p class="warn">⚠ ${esc(w)}</p>`).join('')}`, 'Approve');
+  const ok = await dialog(`<h3>Approve this report?</h3><p>This creates the PDF, downloads it, and opens an email${emails.length ? ` to <b>${esc(emails.join(', '))}</b>` : ''}. Attach the PDF and send.</p>${warns.map(w => `<p class="warn">⚠ ${esc(w)}</p>`).join('')}`, 'Approve');
   if (!ok) return;
   const btn = $('#approve'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Creating PDF…';
   try {
@@ -818,12 +831,11 @@ async function approveFlow() {
     btn.innerHTML = '<span class="spin"></span>Sending…';
     const res = await api(`/api/reports/${r.id}/approve`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: blob });
     state.report = res.report;
-    if (res.zapier && res.zapier.sent) await dialog(`<h3>Done ✓</h3><p>The PDF was created and the email draft is on its way to Outlook (usually within a minute). Open Outlook → <b>Drafts</b>, check it, and hit Send.</p>`, 'OK', null);
-    else await dialog(`<h3>PDF saved, but Outlook wasn't reached</h3><p class="warn">Zapier did not respond${res.zapier && res.zapier.status ? ` (status ${res.zapier.status})` : ''}. Check that the "Report approved" Zap is turned on.</p><p>You can open the PDF from the top of this report and email it manually, or tap Approve again later.</p>`, 'OK', null);
     showReport(r.id);
+    await emailFlow(state.report, blob);
   } catch (e) {
     if (e.message !== 'login') toast('Approve failed: ' + e.message, 5000);
-    btn.disabled = false; btn.textContent = 'Approve & send to Outlook';
+    btn.disabled = false; btn.textContent = 'Approve & email';
   }
 }
 
