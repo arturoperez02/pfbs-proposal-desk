@@ -120,7 +120,7 @@ end $$;
 -- plus  token = your integration key.
 create or replace function public.zap_report_job(payload jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare d jsonb := coalesce(payload,'{}'::jsonb) - 'token'; jid text; jnum text; n text; mt text[]; existing uuid; newid uuid; txt text;
+declare d jsonb := coalesce(payload,'{}'::jsonb) - 'token'; jid text; jnum text; n text; st text; via text; mt text[]; existing uuid; newid uuid; txt text;
 begin
   perform public.zap_check(payload->>'token');
   perform set_config('pfbs.actor', 'HousecallPro', true);
@@ -139,14 +139,30 @@ begin
   mt := regexp_match(coalesce(txt,''), 'PFBS[\s#:-]*0*([0-9]{1,6})', 'i');
   if mt is not null then select num into n from public.proposals where num = 'PFBS-' || lpad(mt[1], 4, '0'); end if;
   if n is null and jid is not null then select num into n from public.proposals where hcp_job in (jid, coalesce(jnum, jid)) order by num desc limit 1; end if;
+  -- HousecallPro's Zapier trigger has no job description, so also match the job by its street address:
+  -- house number + street name, on an open job at that address (scheduled first, then approved, invoiced, recently paid)
+  if n is null then
+    st := upper(regexp_replace(coalesce(nullif(d->>'street',''), split_part(coalesce(d->>'address',''), ',', 1)), '[^A-Za-z0-9 ]', ' ', 'g'));
+    mt := regexp_match(st, '^\s*([0-9]+)\s+(?:(?:N|S|E|W|NORTH|SOUTH|EAST|WEST)\s+)?([A-Z0-9]+)');
+    if mt is not null then
+      select pr.num into n from public.proposals pr
+       where pr.cancelled_on is null
+         and (pr.status in ('Approved','Scheduled','Invoiced') or (pr.status = 'Paid' and coalesce(pr.date_paid, current_date) > current_date - 400))
+         and upper(regexp_replace(coalesce(pr.site_address,'') || ' ' || coalesce(pr.property,''), '[^A-Za-z0-9 ]', ' ', 'g'))
+             ~ ('(^|\s)' || mt[1] || '\s+((N|S|E|W|NORTH|SOUTH|EAST|WEST)\s+)?' || mt[2] || '(\s|$)')
+       order by case pr.status when 'Scheduled' then 0 when 'Approved' then 1 when 'Invoiced' then 2 else 3 end, pr.num desc
+       limit 1;
+      if n is not null then via := 'address'; end if;
+    end if;
+  end if;
   insert into public.service_reports(num, hcp_job, status, client, address, doc)
   values (n, jid, 'pending', upper(coalesce(d->>'client','')), upper(coalesce(d->>'address', d->>'street','')), jsonb_build_object('_raw', d))
   returning id into newid;
   if n is not null then
-    insert into public.proposal_activity(num, by_name, kind, note) values (n, 'HousecallPro', 'note', 'Job finished in HousecallPro: service report started' || coalesce(' (HCP job ' || jid || ')',''));
+    insert into public.proposal_activity(num, by_name, kind, note) values (n, 'HousecallPro', 'note', 'Job finished in HousecallPro: service report started' || coalesce(' (HCP job ' || jid || ')','') || case when via = 'address' then ', matched by address' else '' end);
   end if;
   return jsonb_build_object('ok', true, 'duplicate', false, 'id', newid, 'num', n, 'review_url', 'https://apps.pfbservices.com/reports.html#/r/' || newid,
-                            'job_number', coalesce(jnum, jid), 'client', upper(coalesce(d->>'client','')), 'address', upper(coalesce(d->>'address', d->>'street','')));
+                            'job_number', coalesce(jnum, jid), 'matched_by', coalesce(via, case when n is null then null else 'number' end), 'client', upper(coalesce(d->>'client','')), 'address', upper(coalesce(d->>'address', d->>'street','')));
 end $$;
 
 -- ---------- report approved: show it on the job --------------------------

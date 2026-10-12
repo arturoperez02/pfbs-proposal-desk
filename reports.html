@@ -363,7 +363,10 @@ async function fillFromJob(r, num) {
 async function normalize(row) {
   const raw = row.doc && row.doc._raw;
   if (!raw) return fromRow(row);
-  const r = SRV.newReport(raw, ENV); r.id = row.id; r.status = row.status; r.num = row.num;
+  // HousecallPro's trigger sends no dates: the Zap fires when the job is finished, so that day is the service date
+  const noDates = !raw.start && !raw.end && !raw.started_at && !raw.completed_at;
+  const r = SRV.newReport(noDates ? { ...raw, started_at: row.created_at, completed_at: row.created_at } : raw, ENV); r.id = row.id; r.status = row.status; r.num = row.num;
+  if (noDates) { r.times = ''; r.time_start = ''; r.time_end = ''; }
   const q = r._weather_query; delete r._weather_query; delete r.raw;
   try { r.weather = (await SRV.lookupWeather(q)) || 'N/A'; } catch (_) { r.weather = 'N/A'; }
   if (row.num) await fillFromJob(r, row.num);
