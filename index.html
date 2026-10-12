@@ -240,7 +240,7 @@ table.cmp td,table.cmp th{white-space:nowrap}
 input.qa{width:78px;padding:6px 8px} input.qa.qd{width:132px} table.qatable td{vertical-align:middle}
 .revb{display:inline-block;font-size:10.5px;font-weight:700;color:var(--info);background:var(--info-bg);border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:middle}.revb.rnw{color:var(--warn);background:var(--warn-bg)}
 .revline{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:6px}
-.p-lead{background:var(--gold-soft);color:var(--ink)}
+.p-lead{background:var(--gold-soft);color:var(--ink)} .p-budget{background:#E6EEFB;color:#1F3F8F}
 .lockline{font-size:13px;background:var(--neutral-bg);border-radius:6px;padding:8px 10px;margin-bottom:8px}.lockline.owner{background:var(--warn-bg)}
 .actadd{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.actadd select{width:auto}.actadd input{flex:1 1 200px}
 .actlist{display:grid;gap:4px;font-size:13px;max-height:280px;overflow:auto}.actlist .when{color:var(--muted);font-variant-numeric:tabular-nums}.actlist .who{font-weight:600}.actlist .bad{color:var(--bad)}
@@ -360,7 +360,7 @@ td input,td select{padding:5px 8px}
 const SUPABASE_URL = window.PFBS_CONFIG?.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = window.PFBS_CONFIG?.SUPABASE_ANON_KEY || '';
 (() => {
-const STATUSES = ['Lead','Estimating','Needs Review','Sent','Approved','Scheduled','Invoiced','Paid','Declined','Expired','Withdrawn'];
+const STATUSES = ['Lead','Estimating','Needs Review','Sent','Budget','Approved','Scheduled','Invoiced','Paid','Declined','Expired','Withdrawn'];
 const WON = ['Approved','Scheduled','Invoiced','Paid'], LOST = ['Declined','Expired'], OPEN = ['Sent','Follow-up'], PRE = ['Estimating','Needs Review'], PRELOCK = ['Lead','Estimating','Needs Review'];
 const ROLES = ['Owner','Admin','Senior Estimator','Estimator','BD Rep'];
 const DEFAULTS = {
@@ -377,11 +377,11 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt',budget_year:'budgetYear',budget_check:'budgetCheck'};
 const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp',report_sent_on:'reportSentOn',report_url:'reportUrl',est_comm_rate:'estCommRate',bd_comm_rate:'bdCommRate'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt'].includes(c)) v=num(v); o[c]=v; } return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt','budget_year'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -405,12 +405,12 @@ const canLead = () => isManager() || role()==='BD Rep';
 let newLead=false;
 
 // ---------- calculations (same rules as the Excel log) ----------
-function outcome(p){ if(p.status==='Lead') return 'Lead'; if(WON.includes(p.status)) return 'Won'; if(LOST.includes(p.status)) return 'Lost'; if(p.status==='Withdrawn') return 'Withdrawn'; if(PRE.includes(p.status)) return 'Draft'; return 'Open'; }
+function outcome(p){ if(p.status==='Lead') return 'Lead'; if(p.status==='Budget') return 'Budget'; if(WON.includes(p.status)) return 'Won'; if(LOST.includes(p.status)) return 'Lost'; if(p.status==='Withdrawn') return 'Withdrawn'; if(PRE.includes(p.status)) return 'Draft'; return 'Open'; }
 function daysOpen(p){ if(outcome(p)!=='Open' || !p.dateSent) return null; return days(parse(p.dateSent), today()); }
 const FU_STEPS = () => { const a=[3,10,21]; for(let k=35;k<S.expiryDays;k+=14) a.push(k); return a.filter(k=>k<S.expiryDays); };
-function followUp(p){ if(outcome(p)!=='Open' || !p.dateSent) return null; const s=parse(p.dateSent), last=p.lastFollowUp?parse(p.lastFollowUp):s;
+function followUp(p){ if(p.status==='Budget') return p.budgetCheck ? parse(p.budgetCheck) : null; if(outcome(p)!=='Open' || !p.dateSent) return null; const s=parse(p.dateSent), last=p.lastFollowUp?parse(p.lastFollowUp):s;
   for(const d of FU_STEPS()){ const f=new Date(s); f.setDate(f.getDate()+d); if(f>last) return f; } return null; }
-function fuStep(p){ const f=followUp(p); if(!f) return null; const d=days(parse(p.dateSent),f); return d<=3?1:d<=10?2:d<=21?3:4; }
+function fuStep(p){ if(p.status==='Budget') return null; const f=followUp(p); if(!f) return null; const d=days(parse(p.dateSent),f); return d<=3?1:d<=10?2:d<=21?3:4; }
 function gpPct(p){ return (num(p.gp)!=null && num(p.amount)) ? num(p.gp)/num(p.amount) : null; }
 function visits(p){ const f=S.frequencies.find(x=>x[0]===p.frequency); return f?f[1]:1; }
 const hasVal = v => v!=null && v!=='';
@@ -558,11 +558,12 @@ const estOwed = p => Math.max(0, (estComm(p)||0) - estPaid(p));
 const bdOwed  = p => Math.max(0, (bdComm(p)||0) - bdPaid(p));
 function earnedIn(fn, p, per){ const a=perStart(per), b=perEnd(per), t=today(), e=new Date(Math.min(+b-864e5, +t)); if(e<a) return 0; return (fn(p, e)||0) - (fn(p, new Date(+a-864e5))||0); }
 const commMonthsTxt = p => isRecurring(p) && p.datePaid ? ` <span class="note" style="margin:0">${commMonths(p)} of 12 mo</span>` : '';
-function pillClass(st){ if(st==='Lead') return 'p-lead'; if(WON.includes(st)) return 'p-won'; if(LOST.includes(st)) return 'p-lost'; if(OPEN.includes(st)) return 'p-open'; if(PRE.includes(st)) return 'p-review'; return 'p-neutral'; }
+function pillClass(st){ if(st==='Lead') return 'p-lead'; if(st==='Budget') return 'p-budget'; if(WON.includes(st)) return 'p-won'; if(LOST.includes(st)) return 'p-lost'; if(OPEN.includes(st)) return 'p-open'; if(PRE.includes(st)) return 'p-review'; return 'p-neutral'; }
 
 // ---------- pipeline ----------
 const FILTERS = [
   ['Open', p=>outcome(p)==='Open'],
+  ['Budgets', p=>p.status==='Budget'],
   ['Needs review', p=>PRE.includes(p.status)],
   ['Follow-up due', p=>{const f=followUp(p); return f && f<=today();}],
   ['Past 90 days', p=>{const d=daysOpen(p); return d!=null && d>S.expiryDays;}],
@@ -585,7 +586,7 @@ function renderPipeline(){
     ['Won', money(sum(won,wonAmt)), won.length+' proposals',''],
     ['Recurring / month', money(sum(act,monthlyValue)), act.length+' active contract'+(act.length===1?'':'s'),''],
     ['Win rate', rate==null?'—':pct(rate), (won.length+lost.length)+' decided','']
-  ].map(([l,v,s,c])=>`<div class="kpi ${c}"><div class="l">${l}</div><div class="v num">${v}</div><div class="sub">${s}</div></div>`).join('');
+  ].concat((b=>b.length?[['Budgets out', money(sum(b)), b.length+' budget estimate'+(b.length===1?'':'s'),'']]:[])(PV.filter(p=>p.status==='Budget'))).map(([l,v,s,c])=>`<div class="kpi ${c}"><div class="l">${l}</div><div class="v num">${v}</div><div class="sub">${s}</div></div>`).join('');
   $('#chips').innerHTML = FILTERS.map(([n,f])=>`<button class="chip" aria-pressed="${filter===n}" data-f="${esc(n)}">${n}<span class="c num">${PV.filter(f).length}</span></button>`).join('');
   const fn=FILTERS.find(f=>f[0]===filter)[1], q=query.trim().toLowerCase();
   const list=PV.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
@@ -605,7 +606,10 @@ function isLocked(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) &
 function ownerOverride(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && role()==='Owner'; }
 let DTAB='prop';
 // the usual next steps from each status; everything else allowed is under "More"
-function nextSteps(st){ return ({'Estimating':['Needs Review','Sent'], 'Needs Review':['Sent'], 'Sent':['Approved','Declined','Expired'], 'Follow-up':['Approved','Declined','Expired'],
+const isBudgetDoc = p => p.status==='Budget' || (PRE.includes(p.status) && !!p.budgetYear);
+function nextSteps(st, p){ const bud=p && !!p.budgetYear && PRE.includes(st);
+  if(bud) return ({'Estimating':['Needs Review','Budget'], 'Needs Review':['Budget']})[st];
+  return ({'Budget':['Sent','Approved','Declined'], 'Estimating':['Needs Review','Sent'], 'Needs Review':['Sent'], 'Sent':['Approved','Declined','Expired'], 'Follow-up':['Approved','Declined','Expired'],
   'Approved':['Scheduled'], 'Scheduled':['Invoiced'], 'Invoiced':['Paid'], 'Declined':['Sent'], 'Expired':['Sent'], 'Withdrawn':['Estimating']})[st]||[]; }
 async function openDrawer(id, opts={}){
   DTAB = (current()==='orders' || role()==='Admin') ? 'job' : 'prop';
@@ -718,11 +722,12 @@ function drawDrawer(){
     ${review}
     <fieldset><legend>Status</legend>
       <div class="stages">${(()=>{ const all=(STATUSES.includes(p.status)?[]:[p.status]).concat(STATUSES).filter(s=>s===p.status || (ed && !preLocked(s) && s!=='Lead'));
-        const nx=nextSteps(p.status).filter(s=>all.includes(s)), rest=all.filter(s=>s!==p.status && !nx.includes(s));
+        const nx=nextSteps(p.status, p).filter(s=>all.includes(s)), rest=all.filter(s=>s!==p.status && !nx.includes(s));
         const btn=s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`;
         return btn(p.status) + (nx.length?'<span class="stnext">→</span>':'') + nx.map(btn).join('') + (rest.length?`<button type="button" class="stmore" data-stmore>More ▾</button><span class="strest" hidden>${rest.map(btn).join('')}</span>`:''); })()}</div>
       ${!canReview()&&PRE.includes(orig?.status??'Estimating')?'<div class="note">Move it to Needs Review when it is ready. The senior estimator sends it.</div>':''}
-      <div id="openline">${openLine(p)}</div>
+      ${p.status==='Budget' ? `<div class="grid2" style="margin-top:6px">${field('Budget year','budgetYear','number')}${field('Check back on','budgetCheck','date')}</div>
+        <div class="note">Budget numbers stay out of the pipeline, win rate and follow-up emails. On the check-back date it shows under Follow-up due. When the client is ready, click <b>Sent</b> to turn it into a proposal (follow-ups start that day), or <b>Approved</b> if they approve the budget price.</div>` : `<div id="openline">${openLine(p)}</div>`}
       ${!isNew && p.status!=='Lead' ? `<div class="revline"><span>Revision <b>${p.rev||1}</b>${(p.revisions||[]).length?` · ${(p.revisions||[]).map(r=>`Rev ${r.rev}: ${money(r.amount)} on ${fmtD(r.date)}`).join(' · ')}`:''}</span>${ed && !PRE.includes(p.status) && outcome(p)!=='Won' ? `<button type="button" class="btn ghost small" id="revBtn">${draft._revArmed?'Confirm: start Rev '+((p.rev||1)+1):'Create revision'}</button>`:''}</div>`:''}
       ${p.renewalOf?`<div class="gpline">Renewal of <a href="#" data-open="${esc(p.renewalOf)}">${esc(p.renewalOf)}</a></div>`:''}
       ${LOST.includes(p.status)?`<div class="grid2" style="margin-top:6px">${sel('Lost reason','lostReason',S.lostReasons)}</div>`:''}
@@ -731,7 +736,9 @@ function drawDrawer(){
 
     ${won ? `<div class="dtabs" role="tablist"><button type="button" role="tab" data-dtab="prop" aria-selected="${tab==='prop'}">Proposal</button><button type="button" role="tab" data-dtab="job" aria-selected="${tab==='job'}">Job</button></div>` : ''}
     <div class="dpane" data-pane="prop" ${tab==='prop'?'':'hidden'}>
-    <fieldset><legend>Proposal</legend><div class="grid2">
+    <fieldset><legend>Proposal</legend>
+      ${PRE.includes(p.status) ? `<label class="acc" style="margin:0 0 10px"><input type="checkbox" id="budChk" ${p.budgetYear?'checked':''} ${dis}> Budget estimate <span class="note" style="margin:0">(pricing for the client's ${today().getFullYear()+1} budget, not an offer to accept now)</span></label>` : ''}
+      <div class="grid2">
       ${field('Date sent','dateSent','date')}
       ${sel(p.status==='Lead'?'Assign to estimator':'Estimator (sent by)','sentBy',names,'',!(isManager() || (p.status==='Lead' && role()==='BD Rep')))}
       ${field('Client (company)','client','text','full','list="clientList" autocomplete="off" placeholder="Start typing to pick a past client"')}
@@ -826,6 +833,8 @@ function setStatus(st){
   if(draft.status===st) return;
   draft.status=st;
   if((st==='Approved'||LOST.includes(st)) && !draft.dateResolved) draft.dateResolved=iso(today());
+  if(st==='Budget'){ const y=today().getFullYear()+1; if(!draft.budgetYear) draft.budgetYear=y; if(!draft.budgetCheck) draft.budgetCheck=`${draft.budgetYear}-01-15`; if(!draft.dateSent) draft.dateSent=iso(today()); }
+  if(st==='Sent' && orig?.status==='Budget'){ draft.dateSent=iso(today()); draft.lastFollowUp=null; toast('Now a proposal: follow-ups start today. Save to keep it.'); }
   if(st==='Sent' && !draft.dateSent) draft.dateSent=iso(today());
   if(st==='Paid' && !draft.datePaid) draft.datePaid=iso(today());
   if(WON.includes(st) && !(draft.parts||[]).length){ const b=buildParts(draft); if(b.length){ draft.parts=b; const r=b.filter(isRent).length; toast(`From the estimate: ${b.length-r} part${b.length-r===1?'':'s'} to order${r?`, ${r} rental${r===1?'':'s'} to reserve`:''}. Save to keep.`); } }
@@ -861,6 +870,7 @@ function itemEvent(e, final){
   else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); if(estimateTotals(draft)) refreshGp(); const sm=e.target.closest('.item')?.querySelector('.estsum'); if(sm && it.estimate) sm.outerHTML=estSummary(it); refreshCalcs(); }
   return true;
 }
+$('#drawer').addEventListener('change', e=>{ if(e.target.id!=='budChk' || !draft) return; draft.budgetYear = e.target.checked ? today().getFullYear()+1 : null; if(!e.target.checked) draft.budgetCheck=null; drawDrawer(); $('#dmsg').textContent = e.target.checked ? 'Budget estimate: the PDF and email say so. Save to keep it.' : 'Normal proposal again. Save to keep it.'; });
 $('#drawer').addEventListener('click', e=>{ const m=e.target.closest('[data-stmore]'); if(m){ const r=m.nextElementSibling; r.hidden=!r.hidden; m.textContent=r.hidden?'More ▾':'Less ▴'; } });
 $('#drawer').addEventListener('click', e=>{ const dt=e.target.closest('[data-dtab]'); if(!dt) return; DTAB=dt.dataset.dtab;
   for(const b of document.querySelectorAll('#drawer [data-dtab]')) b.setAttribute('aria-selected', b===dt);
@@ -1188,7 +1198,15 @@ function proposalEmail(p){
   const first=(p.contactName||'').trim().split(/\s+/)[0]||'there', place=p.property||p.client||'your property';
   const L=countedItems(p), scope=niceCase(L.filter(i=>i.type!=='Add-on'&&i.description).slice(0,3).map(i=>i.description).join(', '))||'the requested services';
   const addons=(p.items||[]).filter(i=>i.type==='Add-on'&&!i.accepted).length;
-  const subject=`Proposal from PF Building Services – ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`;
+  const bud=isBudgetDoc(p), by=p.budgetYear||today().getFullYear()+1;
+  const subject=`${bud?'Budget estimate':'Proposal'} from PF Building Services – ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`;
+  if(bud) return {to:p.contactEmail||'', subject, body:`Hi ${first},
+
+Thank you for considering PF Building Services for your ${by} budget. Attached is budget estimate ${p.num} for ${scope} at ${place}.
+
+These numbers are for budgeting purposes. When you're ready to move forward, we'll confirm final pricing and scheduling. Please let me know if you have any questions.
+
+Thank you,`};
   const body=`Hi ${first},
 
 Thank you for the opportunity to provide a proposal for ${scope} at ${place}. Attached is proposal ${p.num}${(p.rev||1)>1?' (revision '+p.rev+')':''} for your review.${addons?' Optional add-ons are listed separately in the proposal.':''}
@@ -1203,7 +1221,7 @@ async function emailOpen(){
   const pre=PRELOCK.includes(draft.status) && !canReview();
   const e=proposalEmail(draft);
   box.hidden=false;
-  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Email the proposal</b><button type="button" class="btn ghost small" id="emClose">Close</button></div>
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Email the ${isBudgetDoc(draft)?'budget estimate':'proposal'}</b><button type="button" class="btn ghost small" id="emClose">Close</button></div>
     ${pre?'<div class="note" style="color:var(--warn)">This proposal has not been reviewed yet. Send it for review before emailing the client.</div>':''}
     <label class="f">To<input id="emTo" type="email" value="${esc(e.to)}" placeholder="client@company.com"></label>
     <label class="f">Subject<input id="emSubj" value="${esc(e.subject)}"></label>
@@ -1328,6 +1346,8 @@ $('#rows').addEventListener('change', async e=>{
   if(WON.includes(st) && !(p.parts||[]).length && (!COLS || COLS.has('parts'))){ const b=buildParts(p); if(b.length) patch.parts=b; }
   if((st==='Approved'||LOST.includes(st)) && !p.dateResolved) patch.date_resolved=t;
   if(st==='Sent' && !p.dateSent) patch.date_sent=t;
+  if(st==='Sent' && p.status==='Budget'){ patch.date_sent=t; patch.last_follow_up=null; }
+  if(st==='Budget'){ const y=today().getFullYear()+1; if(!p.budgetYear) patch.budget_year=y; if(!p.budgetCheck) patch.budget_check=`${p.budgetYear||y}-01-15`; if(!p.dateSent) patch.date_sent=t; }
   if(st==='Paid' && !p.datePaid) patch.date_paid=t;
   sel.disabled=true;
   const {error}=await sb.from('proposals').update(patch).eq('num',p.num);
@@ -1862,9 +1882,9 @@ async function makePdf(p){
   doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('PF Building Services',51,104);
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
   ['7172 Calais Pl  |  Newark, CA 94560','(510) 359-5181  |  info@pfbuildingservices.com','License #114036'].forEach((t,i)=>doc.text(t,51,117+i*11));
-  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...NAVY); doc.text('PROPOSAL CONTRACT',R0,66,{align:'right'});
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...NAVY); doc.text(isBudgetDoc(p)?'BUDGET ESTIMATE':'PROPOSAL CONTRACT',R0,66,{align:'right'});
   doc.setFontSize(8.5); doc.setTextColor(0);
-  [`Proposal # ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`,`Date: ${p.dateSent?fmtLong(p.dateSent):fmtLong(iso(today()))}`,`Expires: After ${S.expiryDays} Days`].forEach((t,i)=>doc.text(t,R0,84+i*12,{align:'right'}));
+  [`${isBudgetDoc(p)?'Estimate':'Proposal'} # ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`,`Date: ${p.dateSent?fmtLong(p.dateSent):fmtLong(iso(today()))}`,(isBudgetDoc(p)?`For budget year ${p.budgetYear||today().getFullYear()+1}`:`Expires: After ${S.expiryDays} Days`)].forEach((t,i)=>doc.text(t,R0,84+i*12,{align:'right'}));
   doc.setDrawColor(...NAVY); doc.setLineWidth(1.5); doc.line(40,150,572,150);
   // bill to / site
   doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text('BILL TO',51,172); doc.text('PROPERTY / JOB SITE',320,172);
@@ -1897,6 +1917,7 @@ async function makePdf(p){
       didParseCell:d=>{ if(d.section==='head'){ if(d.column.index===3) d.cell.styles.halign='right'; if(d.column.index===2) d.cell.styles.halign='center'; } } });
     y=doc.lastAutoTable.finalY+20;
   }
+  if(isBudgetDoc(p)){ doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(60); const t=doc.splitTextToSize(`Budget pricing for ${p.budgetYear||today().getFullYear()+1}. This is an estimate for budgeting purposes; final pricing and scheduling are confirmed when the work is approved.`, R0-L0); doc.text(t,L0,y); y+=t.length*11+10; doc.setTextColor(0); }
   // clarifications
   const svcs=new Set(items.filter(i=>i.type!=='Add-on').map(i=>i.service||guessService(i.description)).concat(p.service?[p.service]:[]).filter(Boolean)), gdOnly=svcs.size>0 && [...svcs].every(v=>v==='Gates & Doors');
   const clar = (p.clarifications&&p.clarifications.trim()) ? p.clarifications.split('\n').map(x=>x.replace(/^\s*\d+[.)]\s*/,'').trim()).filter(Boolean)
