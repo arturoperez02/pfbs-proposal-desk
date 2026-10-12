@@ -261,7 +261,7 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="comm" aria-selected="false" id="commTab" hidden>Commission</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
-  <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
+  <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
 </div></header>
 
 <main>
@@ -822,8 +822,9 @@ function drawDrawer(){
       <div id="actBox">${actualsHTML(p, ed)}</div></fieldset>` : ''}
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Service report</legend>
       <div class="gpline" style="margin:0 0 8px">${p.reportSentOn?`<b style="color:var(--good)">Sent to the client ${fmtD(p.reportSentOn)}</b>${safeLink(p.reportUrl)?` · <a href="${esc(safeLink(p.reportUrl))}" target="_blank" rel="noopener">open the report</a>`:''}`:`Not sent yet.${p.hcpJob?' HCP job '+esc(p.hcpJob)+'.':''}`}</div>
-      ${safeLink(S.reportAppUrl)?`<a class="btn ghost small" href="${esc(safeLink(S.reportAppUrl))}" target="_blank" rel="noopener">Open service report app ↗</a>`:''}
-      <div class="note">Reports are written in the service report app after the crew taps FINISH in HousecallPro. When Oscar approves one, it shows here as sent.</div></fieldset>` : ''}
+      <div class="toolbar" style="margin:0">${isManager()?`<a class="btn small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">${p.reportSentOn?'Open service reports':'Write service report'}</a>`:''}
+      ${safeLink(S.reportAppUrl)?`<a class="btn ghost small" href="${esc(safeLink(S.reportAppUrl))}" target="_blank" rel="noopener">Old report app ↗</a>`:''}</div>
+      <div class="note">Starts from this job: client, contact email, address and scope are filled in for you. Reports also start on their own when the crew taps FINISH in HousecallPro. When the report is approved, it shows here as sent.</div></fieldset>` : ''}
     </div>
     ${!isNew ? `<fieldset><legend>Activity</legend>
       ${canEditDraft() || canLead() || canCreate() ? `<div class="actadd"><select id="actKind" aria-label="Type"><option value="follow_up">Follow-up</option><option value="note">Note</option></select><input id="actNote" placeholder="e.g. Called Joe, waiting on budget approval" aria-label="Activity note"><button type="button" class="btn small" id="actAdd">Add</button></div>`:''}
@@ -1157,10 +1158,10 @@ function renderJobs(){
       : '<tr><td colspan="6" class="empty">Nothing waiting on payment.</td></tr>'}</tbody></table></div>
     <div class="note">Recurring contracts: mark Paid when the first monthly invoice is paid; later months are tracked in HousecallPro.</div></div>
   <div class="card"><h3>Service report not sent (${nsr.length})</h3>
-    <div class="tablewrap"><table><thead><tr><th>Job</th><th class="hide-sm">Status</th><th class="hide-sm">HCP job #</th><th class="hide-sm">Estimator</th></tr></thead><tbody>
-    ${nsr.length?nsr.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="hide-sm"><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm">${esc(p.hcpJob||'—')}</td><td class="hide-sm">${esc(p.sentBy||'')}</td></tr>`).join('')
-      : '<tr><td colspan="4" class="empty">Every finished job has its service report.</td></tr>'}</tbody></table></div>
-    <div class="note">Clears itself when the service report app logs the report on the job.</div></div>
+    <div class="tablewrap"><table><thead><tr><th>Job</th><th class="hide-sm">Status</th><th class="hide-sm">HCP job #</th><th class="hide-sm">Estimator</th><th></th></tr></thead><tbody>
+    ${nsr.length?nsr.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="hide-sm"><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm">${esc(p.hcpJob||'—')}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td>${isManager()?`<a class="btn small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">Write report</a>`:''}</td></tr>`).join('')
+      : '<tr><td colspan="5" class="empty">Every finished job has its service report.</td></tr>'}</tbody></table></div>
+    <div class="note">Clears itself when the report is approved and sent.</div></div>
   </div>`;
 }
 $('#jobsBody').addEventListener('click', async e=>{
@@ -2629,7 +2630,8 @@ function renderSettings(){
       <label class="f">Yearly price increase % (renewals and next year's budget)<input id="s-pinc" type="number" step="any" value="${Math.round((S.priceIncrease??0.05)*1000)/10}" ${ro}></label>
       <label class="f">Estimator rate when a BD rep is on the job (% of normal)<input id="s-estbd" type="number" step="any" value="${Math.round((S.estBdShare??1)*1000)/10}" ${ro}></label>
       <label class="f">Proposal valid for (days)<input id="s-exp" type="number" value="${S.expiryDays}" ${ro}></label>
-      <label class="f">Service report app link<input id="s-rpt" type="url" value="${esc(S.reportAppUrl||'')}" ${ro}></label></div>
+      <label class="f">Old service report app link (clear it once you switch)<input id="s-rpt" type="url" value="${esc(S.reportAppUrl||'')}" ${ro}></label>
+      ${['Owner','Admin'].includes(role())?`<label class="f">"Report approved" Zap link (Outlook draft)<span style="display:flex;gap:6px"><input id="s-rhook" type="url" placeholder="https://hooks.zapier.com/hooks/catch/…" autocomplete="off" style="flex:1"><button type="button" class="btn small" id="rhookSave">Save link</button></span><span class="note" style="margin:2px 0 0">Kept private: only the office can use it. Saved on its own, right away.</span></label>`:''}</div>
     ${ta('s-svc','Services', lines(S.services), 'One per line.')}
     ${ta('s-freq','Frequencies', lines(S.frequencies), 'Name | visits per year.')}
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
@@ -2670,6 +2672,12 @@ function renderSettings(){
   ${canPay()?'<div class="card" style="margin-top:16px"><h3>Change log</h3><div class="note" style="margin:0 0 8px">Every change to Settings and the team list, and every deleted proposal, with who did it and when. Proposal changes are in each proposal\'s Activity.</div><div id="logBox"><div class="note">Loading…</div></div></div>':''}`;
   organizeSettings();
   if(canPay()) loadAdminLog();
+  if($('#rhookSave')){
+    sb.rpc('report_hook').then(({data,error})=>{ const i=$('#s-rhook'); if(!i) return; if(error){ i.placeholder='Run database update 017 first'; i.disabled=true; $('#rhookSave').disabled=true; } else i.value=data||''; });
+    $('#rhookSave').onclick=async ()=>{ const b=$('#rhookSave'), v=$('#s-rhook').value.trim(); b.disabled=true;
+      const {error}=await sb.rpc('set_report_hook',{url:v}); b.disabled=false;
+      toast(error?error.message:(v?'Zap link saved':'Zap link removed')); if(!error) loadAdminLog(); };
+  }
 }
 // group the settings cards under a few headings (cards keep their fields, so saving is unchanged)
 function organizeSettings(){
@@ -2677,7 +2685,7 @@ function organizeSettings(){
   const cards=[...root.querySelectorAll('.card')], find=t=>cards.find(c=>(c.querySelector('h3')?.textContent||'').trim().startsWith(t));
   // "Proposal valid for" and the service report link are not guardrails: give them their own card
   const extra=document.createElement('div'); extra.className='card listedit'; extra.innerHTML='<h3>Proposal &amp; links</h3>';
-  for(const id of ['#s-exp','#s-rpt']){ const l=root.querySelector(id)?.closest('label'); if(l) extra.appendChild(l); }
+  for(const id of ['#s-exp','#s-rpt','#s-rhook']){ const l=root.querySelector(id)?.closest('label'); if(l) extra.appendChild(l); }
   const groups=[
     ['Team', ['Team']],
     ['Commission', ['Client type → BD rate','Estimator rate by margin','BD goals']],
@@ -2787,7 +2795,7 @@ async function loadProposals(){
 // ---------- auth ----------
 $('#emailForm').addEventListener('submit', async e=>{
   e.preventDefault();
-  const {error}=await sb.auth.signInWithOtp({email:$('#loginEmail').value.trim().toLowerCase(), options:{shouldCreateUser:true, emailRedirectTo: location.origin+location.pathname}});
+  const {error}=await sb.auth.signInWithOtp({email:$('#loginEmail').value.trim().toLowerCase(), options:{shouldCreateUser:true, emailRedirectTo: location.origin+location.pathname+location.search}});
   $('#loginMsg').textContent = error ? error.message : 'Check your email for the sign-in link.';
 });
 for(const id of ['#signOut','#signOut2']) $(id).addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
@@ -2800,6 +2808,8 @@ async function start(session){
   const {data:m}=await sb.from('team_members').select('*').eq('email',email).eq('active',true).maybeSingle();
   if(!m){ show('blocked'); $('#blockedMsg').textContent=`${email} isn't on the PF Building Services team list. Ask Arturo to add you.`; return; }
   me=m; $('#whoName').textContent=`${m.name} · ${m.role}`; $('#who').hidden=false; $('#tabs').hidden=false;
+  const nx=new URLSearchParams(location.search).get('next'); if(nx && /^reports\.html(#\/r\/[a-z0-9-]+)?$|^reports\.html\?num=PFBS-\d+$/i.test(nx)){ location.replace(nx); return; }
+  $('#rptLink').hidden = !['Owner','Admin','Senior Estimator'].includes(m.role);
   await Promise.all([loadTeam(), loadSettings()]);
   $('#salesTab').hidden = false;
   $('#ordersTab').hidden = m.role==='BD Rep';

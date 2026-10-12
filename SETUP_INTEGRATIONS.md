@@ -87,6 +87,27 @@ Webhooks POST to `.../rpc/zap_report_sent` with `token` = your key, `hcp_job` = 
 The job in the Proposal Desk then shows **"Service report sent"** with the date, and the **No service report** filter on the Pipeline
 lists finished jobs whose report hasn't gone out.
 
+## Service reports inside the CRM (update 017)
+
+The service report screens now live at **apps.pfbservices.com/reports.html**, using the CRM login (Owner, Admin and Senior Estimator).
+The old Cloudflare app keeps working until step 4, so nothing breaks while you try it.
+
+1. Run `sql/017_service_reports.sql` in Supabase.
+2. In Zapier, open the **"report approved → Outlook draft"** Zap and copy the webhook URL from its first step (Catch Hook).
+   In the CRM: Settings → **Proposal & links** → "Report approved" Zap link → paste → **Save link**. Only the office can see it.
+3. Try one: open a scheduled job → Job tab → **Write service report**. The client, contact email, address and scope come from the job.
+   Add a photo, tap **Approve & send to Outlook**, and check the draft lands in Outlook. The job shows "Sent to the client".
+4. Switch over: open the **"PFBS – Job finished → Service report"** Zap. In the step that posts to the old Cloudflare link, change:
+   - URL → `https://igerptqlkbxmmajixlao.supabase.co/rest/v1/rpc/zap_report_job`
+   - Payload type → json
+   - Headers → `apikey` = your anon key · `Content-Type` = `application/json` · `Prefer` = `params=single-object`
+   - Data → keep every field it sends today, and add `token` = your integration key.
+
+   The reply still has `review_url` (now a CRM link), so any later step that uses it keeps working.
+   The report links itself to the PFBS job by the PFBS number in the HCP job description, or by the HCP job ID.
+5. After a week with no problems: clear "Old service report app link" in Settings. The **zap_report_sent** step above is no longer needed
+   (approving in the CRM marks the job), so you can delete that step. Keep the Cloudflare app for a while as a read-only archive of old reports.
+
 ## SharePoint auto-save
 
 1. entra.microsoft.com → App registrations → **New registration**: name `PFBS Proposal Desk`, accounts in this organization only.
