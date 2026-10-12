@@ -91,10 +91,26 @@ aside.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);backgro
 .dhead .t{flex:1;min-width:0}
 .dhead .t b{font-family:var(--display);font-size:24px;color:var(--accent)}
 .dbody{padding:16px 18px;overflow-y:auto;flex:1;display:grid;gap:18px}
+.estmini{display:none}
+@media (max-width:900px){.estmini{display:flex;gap:14px;align-items:center;justify-content:space-between;border:0;border-top:1px solid var(--line);background:var(--surface,#fff);color:var(--ink);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));font:inherit;font-size:14px;cursor:pointer;width:100%}.estmini .go{color:var(--accent);font-weight:600}}
+@media (max-width:600px){
+  table.et thead{display:none} table.et,table.et tbody{display:block}
+  table.et tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  table.et td{display:block;padding:0;border:0;min-width:0} table.et td input,table.et td select{width:100%}
+  table.et td:first-child,table.et td[colspan]{grid-column:1/-1}
+  table.et td[data-l]::before{content:attr(data-l);display:block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#777);margin-bottom:2px}
+  table.et td:last-child:has(button.x){grid-column:1/-1;text-align:right}
+}
 .dfoot{padding:12px 18px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+@media (max-width:600px){
+  .dfoot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px))}
+  .dfoot .msg{grid-column:1/-1} .dfoot .msg:empty{display:none}
+  .dfoot .btn{padding:8px 4px;font-size:13px} .dfoot #saveD{grid-column:span 2}
+}
 .dfoot .msg{margin-right:auto;font-size:13px;color:var(--muted)}
 .stages{display:flex;flex-wrap:wrap;gap:6px}
 .stages button{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 9px;font-size:13px;cursor:pointer}
+.stages .stnext{align-self:center;color:var(--muted,#888);padding:0 2px} .stages .strest{display:contents} .stages .strest[hidden]{display:none} .stages button.stmore{background:none;border-style:dashed}
 .stages button.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 .grid2 .full{grid-column:1/-1}
@@ -588,6 +604,9 @@ function canEditDraft(){ if(isNew) return newLead ? canLead() : canCreate();
 function isLocked(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && role()!=='Owner' && (draft?.rev||1)===(orig.rev||1); }
 function ownerOverride(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && role()==='Owner'; }
 let DTAB='prop';
+// the usual next steps from each status; everything else allowed is under "More"
+function nextSteps(st){ return ({'Estimating':['Needs Review','Sent'], 'Needs Review':['Sent'], 'Sent':['Approved','Declined','Expired'], 'Follow-up':['Approved','Declined','Expired'],
+  'Approved':['Scheduled'], 'Scheduled':['Invoiced'], 'Invoiced':['Paid'], 'Declined':['Sent'], 'Expired':['Sent'], 'Withdrawn':['Estimating']})[st]||[]; }
 async function openDrawer(id, opts={}){
   DTAB = (current()==='orders' || role()==='Admin') ? 'job' : 'prop';
   PR=null; isNew=!id; newLead=!!opts.lead; orig = id ? P.find(p=>p.num===id) : null;
@@ -698,7 +717,10 @@ function drawDrawer(){
     <div id="emBox" class="fubox" hidden></div>
     ${review}
     <fieldset><legend>Status</legend>
-      <div class="stages">${(STATUSES.includes(p.status)?[]:[p.status]).concat(STATUSES).filter(s=>s===p.status || (ed && !preLocked(s) && s!=='Lead')).map(s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`).join('')}</div>
+      <div class="stages">${(()=>{ const all=(STATUSES.includes(p.status)?[]:[p.status]).concat(STATUSES).filter(s=>s===p.status || (ed && !preLocked(s) && s!=='Lead'));
+        const nx=nextSteps(p.status).filter(s=>all.includes(s)), rest=all.filter(s=>s!==p.status && !nx.includes(s));
+        const btn=s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`;
+        return btn(p.status) + (nx.length?'<span class="stnext">→</span>':'') + nx.map(btn).join('') + (rest.length?`<button type="button" class="stmore" data-stmore>More ▾</button><span class="strest" hidden>${rest.map(btn).join('')}</span>`:''); })()}</div>
       ${!canReview()&&PRE.includes(orig?.status??'Estimating')?'<div class="note">Move it to Needs Review when it is ready. The senior estimator sends it.</div>':''}
       <div id="openline">${openLine(p)}</div>
       ${!isNew && p.status!=='Lead' ? `<div class="revline"><span>Revision <b>${p.rev||1}</b>${(p.revisions||[]).length?` · ${(p.revisions||[]).map(r=>`Rev ${r.rev}: ${money(r.amount)} on ${fmtD(r.date)}`).join(' · ')}`:''}</span>${ed && !PRE.includes(p.status) && outcome(p)!=='Won' ? `<button type="button" class="btn ghost small" id="revBtn">${draft._revArmed?'Confirm: start Rev '+((p.rev||1)+1):'Create revision'}</button>`:''}</div>`:''}
@@ -839,6 +861,7 @@ function itemEvent(e, final){
   else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); if(estimateTotals(draft)) refreshGp(); const sm=e.target.closest('.item')?.querySelector('.estsum'); if(sm && it.estimate) sm.outerHTML=estSummary(it); refreshCalcs(); }
   return true;
 }
+$('#drawer').addEventListener('click', e=>{ const m=e.target.closest('[data-stmore]'); if(m){ const r=m.nextElementSibling; r.hidden=!r.hidden; m.textContent=r.hidden?'More ▾':'Less ▴'; } });
 $('#drawer').addEventListener('click', e=>{ const dt=e.target.closest('[data-dtab]'); if(!dt) return; DTAB=dt.dataset.dtab;
   for(const b of document.querySelectorAll('#drawer [data-dtab]')) b.setAttribute('aria-selected', b===dt);
   for(const x of document.querySelectorAll('#drawer .dpane')) x.hidden = x.dataset.pane!==DTAB; });
@@ -1463,6 +1486,10 @@ function rowsHTML(sec){
     <td class="r num" id="et-${sec}-${i}"></td><td><button type="button" class="x" data-erm="${sec}.${i}" aria-label="Remove row">×</button></td></tr>
     ${det&&open?`<tr class="matdet"><td colspan="6"><div class="matgrid"><label class="f">Supplier<input data-e="${sec}.${i}.supplier" value="${esc(r.supplier||'')}" placeholder="e.g. Home Depot, Grainger"></label><label class="f">Part / SKU #<input data-e="${sec}.${i}.sku" value="${esc(r.sku||'')}"></label><label class="f">Link<input data-e="${sec}.${i}.link" type="url" value="${esc(r.link||'')}" placeholder="https://…"></label>${safeLink(r.link)?`<a class="btn ghost small" href="${esc(safeLink(r.link))}" target="_blank" rel="noopener" style="align-self:end">Open ↗</a>`:''}</div></td></tr>`:''}`; }).join('');
 }
+// phones: estimate tables stack each row; give every cell its column name
+function labelTables(root){ if(!root) return; for(const t of root.querySelectorAll('table.et')){ const h=[...t.querySelectorAll('thead th')].map(x=>x.childNodes[0]?.textContent?.trim()||'');
+  for(const tr of t.querySelectorAll('tbody tr')) [...tr.children].forEach((td,i)=>{ if(h[i] && !td.hasAttribute('colspan')) td.dataset.l=h[i]; }); } }
+$('#est').addEventListener('click', e=>{ if(e.target.closest('#estMini')) $('#estTot')?.scrollIntoView({behavior:'smooth', block:'start'}); });
 function renderEst(){ // keep the scroll position when the estimate redraws
   const sc=$('#est .estbody'), top=sc?sc.scrollTop:0, af=document.activeElement?.dataset?.e;
   renderEstInner();
@@ -1517,8 +1544,9 @@ function renderEstInner(){
       ${sec==='misc'?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" data-eadd="misc">+ Cost</button></div><details class="calcbox"><summary>Fuel calculator</summary>${fuelHTML()}</details>${E.sheet==='PW'?`<details class="calcbox"><summary>Batch mixing guide</summary>${mixHTML()}</details>`:''}`:''}
     </details>`).join('')}
   </div>
-  <aside class="esttot card" id="estTot"></aside></div>`;
-  updateEstTotals();
+  <aside class="esttot card" id="estTot"></aside></div>
+  <button type="button" class="estmini" id="estMini" aria-label="Jump to the estimate totals"></button>`;
+  updateEstTotals(); labelTables($('#est'));
   $('#est').classList.toggle('ro', EST_RO);
   if(EST_RO){ $('#est').querySelectorAll('.estmain input, .estmain select').forEach(x=>x.disabled=true); const h=$('#est .esthead .sub'); if(h) h.innerHTML+=' · <b>view only</b> (sent proposals are locked; create a revision to change)'; }
 }
@@ -1553,6 +1581,7 @@ function updateEstTotals(){
   const rnd=Math.floor(c.total), floor=S.marginFloor, gpp=c.total?c.gp/c.total:null;
   const roles=Object.entries(c.byRole);
   const lo=laborOnly(E), profit=c.total-(lo?c.laborCost:c.cost);
+  const mini=$('#estMini'); if(mini){ const m=c.total?profit/c.total:null; mini.innerHTML=`<span>Price <b>${usd(c.total)}</b></span><span>Margin <b class="${m!=null&&m<floor?'down':''}">${m==null?'—':pct(m)}</b></span><span class="go">Totals ↓</span>`; }
   $('#estTot').innerHTML = `${marginCheckHTML(c, rnd)}
     <dl class="tots key">
       <dt>Price</dt><dd>${usd(c.total)}</dd>
@@ -2498,6 +2527,11 @@ function renderSettings(){
     <label class="f" style="margin-top:8px">Acknowledgment text<textarea id="s-ack" rows="2" ${ro}>${esc(S.ack)}</textarea></label>
   </div>
   ${owner?'<div style="margin-top:16px"><button class="btn" id="saveS">Save settings</button></div>':''}
+  ${owner?`<div class="card listedit"><h3>Clean up old proposals</h3>
+    <div class="note" style="margin:0 0 8px">Marks open proposals (Sent) that were sent before a date as <b>Expired</b>. Use it once to clear out old imported proposals so follow-ups show only real ones. Each one gets a note in its history, and its expired date is set to when it actually ran out (sent date + ${S.expiryDays} days), so this month's win rate isn't affected.</div>
+    <label class="f">Sent before<input type="date" id="cuDate"></label>
+    <div class="gpline" id="cuInfo">Pick a date to see how many proposals it affects.</div>
+    <div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn" id="cuGo" disabled>Mark as Expired</button></div></div>`:''}
   ${canPay()?'<div class="card" style="margin-top:16px"><h3>Change log</h3><div class="note" style="margin:0 0 8px">Every change to Settings and the team list, and every deleted proposal, with who did it and when. Proposal changes are in each proposal\'s Activity.</div><div id="logBox"><div class="note">Loading…</div></div></div>':''}`;
   organizeSettings();
   if(canPay()) loadAdminLog();
@@ -2515,7 +2549,8 @@ function organizeSettings(){
     ['Estimating', ['Margins & guardrails','Estimate defaults','Labor roles','Solar panel rates','Gates & doors tasks','Material presets']],
     ['Lists', ['Services','Frequencies','Lead sources','Lost reasons','Add-on suggestions']],
     ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
-    ['Change log', ['Change log']]];
+    ['Change log', ['Change log']],
+    ['Clean up', ['Clean up old proposals']]];
   const save=root.querySelector('#saveS')?.parentElement, frag=document.createDocumentFragment();
   for(const [title, names] of groups){
     const got=names.map(n=> n==='Proposal & links' ? extra : find(n)).filter(Boolean); if(!got.length) continue;
@@ -2536,7 +2571,19 @@ async function loadAdminLog(){
   box.innerHTML = data.length ? `<div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Area</th><th>What</th><th class="hide-sm">Before</th><th>After</th></tr></thead><tbody>${data.map(x=>`<tr style="cursor:default"><td class="num">${new Date(x.at).toLocaleString([], {month:'numeric',day:'numeric',year:'2-digit',hour:'numeric',minute:'2-digit'})}</td><td>${esc(x.by_name||'')}</td><td>${esc(x.area)}</td><td>${esc(x.item||'')}</td><td class="hide-sm wrap">${short(x.old_value)}</td><td class="wrap">${short(x.new_value)}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="note">No changes logged yet.</div>';
 }
+const cuList = d => d ? P.filter(p=>OPEN.includes(p.status) && p.dateSent && p.dateSent < d) : [];
+$('#settingsBody').addEventListener('input', e=>{ if(e.target.id!=='cuDate') return; const L=cuList(e.target.value), b=$('#cuGo');
+  $('#cuInfo').innerHTML = e.target.value ? `<b>${L.length}</b> open proposal${L.length===1?'':'s'} sent before ${fmtD(e.target.value)} (${money(L.reduce((s,p)=>s+contractValue(p),0))}).` : 'Pick a date to see how many proposals it affects.';
+  b.disabled=!L.length; b.textContent=L.length?`Mark ${L.length} as Expired`:'Mark as Expired'; delete b.dataset.armed; });
 $('#settingsBody').addEventListener('click', async e=>{
+  if(e.target.id==='cuGo'){ const b=e.target, d=$('#cuDate').value, L=cuList(d); if(!L.length) return;
+    if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent=`Confirm: expire ${L.length}`; return; }
+    b.disabled=true; let done=0;
+    for(const p of L){ const dr=iso(new Date(+parse(p.dateSent)+S.expiryDays*864e5));
+      const {error}=await sb.from('proposals').update({status:'Expired', date_resolved: dr<iso(today())?dr:iso(today())}).eq('num',p.num);
+      if(error){ toast(`${p.num}: ${error.message}`); continue; }
+      await addActivity(p.num,'note',`Marked Expired in the cleanup of proposals sent before ${fmtD(d)}.`); done++; b.textContent=`Working… ${done}/${L.length}`; }
+    toast(`${done} proposal${done===1?'':'s'} marked Expired`); await loadProposals(); renderSettings(); return; }
   if(e.target.id==='addMember'){
     const name=$('#nt-name').value.trim(), email=$('#nt-email').value.trim().toLowerCase(), r=$('#nt-role').value;
     if(!name||!email){ toast('Add a name and email.'); return; }
