@@ -57,13 +57,13 @@ Owners and admins can also make one any time: Settings → **Download backup**.
 ## HousecallPro → Proposal Desk (add steps to your existing Zaps)
 
 In HousecallPro, put the PFBS number in the job description when you create the job, for example `PFBS-0801`.
-Use the HCP **Job ID** (the long number) for `hcp_job` everywhere, the same ID your service report Zap already sends.
+Use the HCP **Job #** (the number customers see on their confirmation) for `hcp_job` everywhere, the same number you type in the CRM when a job is approved.
 
 - **Job scheduled:** new Zap, trigger Housecall Pro → New Scheduled Job. Action: Webhooks POST to `.../rpc/zap_hcp` with data
-  `token` = your key, `event` = `scheduled`, `ref` = the job description, `hcp_job` = Job ID.
-  The proposal moves to **Scheduled** and gets the HCP job ID.
+  `token` = your key, `event` = `scheduled`, `ref` = the job description, `hcp_job` = Job #.
+  The proposal moves to **Scheduled** and gets the HCP job #.
 - **Job finished:** don't make a new Zap. Open your existing **"PFBS – Job finished → Service report"** Zap and add one more step at the end:
-  Webhooks POST to `.../rpc/zap_hcp` with `token`, `event` = `completed`, `ref` = the job description, `hcp_job` = Job ID.
+  Webhooks POST to `.../rpc/zap_hcp` with `token`, `event` = `completed`, `ref` = the job description, `hcp_job` = Job #.
   The proposal moves to **Invoiced** at the same moment the service report is created.
 
 HousecallPro's Zapier connection has no "invoice paid" trigger, so **Paid** is still marked in the Proposal Desk.
@@ -100,11 +100,11 @@ The old Cloudflare app keeps working until step 3, so nothing breaks while you t
    - URL → `https://igerptqlkbxmmajixlao.supabase.co/rest/v1/rpc/zap_report_job`
    - Payload type → json
    - Headers → `apikey` = your anon key · `Content-Type` = `application/json` · `Prefer` = `params=single-object`
-   - Data → keep every field it sends today, and add `token` = your integration key.
+   - Data → keep every field it sends today, and add `token` = your integration key, `job_number` = Job # (the one customers see), `job_id` = Job ID, `client`, `email`, `line_items`, `notes` = job description, `start`, `end`.
 
    The reply still has `review_url` (now a CRM link), so any later step that uses it keeps working.
    If the Zap has a step that emails Oscar "a report is ready", delete it: new reports show in the CRM (Jobs → **Service reports to send**, and the count on the **Reports** button).
-   The report links itself to the PFBS job by the PFBS number in the HCP job description, or by the HCP job ID.
+   The report links itself to the PFBS job by the PFBS number in the HCP job description, or by the HCP job # (or job ID).
 4. After a week with no problems: clear "Old service report app link" in Settings. Turn off the "report approved → Outlook draft" Zap; the CRM opens the email itself now. Keep the Cloudflare app for a while as a read-only archive of old reports.
 
 ## SharePoint auto-save
