@@ -12,5 +12,6 @@
 | 008_proposal_photos.sql | Run once: site photos on proposals (private storage bucket). |
 | 009_parts_to_order.sql | Run once: Parts to order and lift/equipment rental tracking on approved jobs, buyer, monthly report section, follow-up email wording. Needs 007. |
 | 010_recurring_contracts.sql | Run once: recurring contracts (term, contract value, recurring revenue per month, cancelled contracts), commission earned month by month for the first year, monthly report updated to match. Needs 007 and 009. |
+| 011_commission_ledger_audit.sql | Run once: commission payout ledger (never edited, only voided), commission rates locked when a job is paid, change log for Settings and the team, archive of deleted proposals. Needs 010. |
 
 Client data is never stored in this repository.

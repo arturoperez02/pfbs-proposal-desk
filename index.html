@@ -64,7 +64,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .search{flex:1 1 220px;max-width:340px}
 .btn{border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer}
 .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
-dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px}
+dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px} tr.voided td{color:var(--muted,#888)}
 .btn.small{padding:5px 10px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
@@ -238,6 +238,7 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="leads" aria-selected="false">Leads</button>
     <button role="tab" data-tab="sales" aria-selected="false" id="salesTab" hidden>My Sales</button>
     <button role="tab" data-tab="orders" aria-selected="false" id="ordersTab" hidden>Jobs</button>
+    <button role="tab" data-tab="comm" aria-selected="false" id="commTab" hidden>Commission</button>
     <button role="tab" data-tab="scorecard" aria-selected="false">Scorecards</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
@@ -307,6 +308,14 @@ td input,td select{padding:5px 8px}
     <div id="ordersBody"></div>
   </section>
 
+  <section id="view-comm" hidden>
+    <div class="toolbar" style="justify-content:space-between">
+      <div><h2>Commission</h2><div class="sub" id="commSub">What each person has earned, what was paid, and every payout on record.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="commPerson" hidden aria-label="Person"></select><button class="btn ghost" id="commCsv">Export CSV</button><button class="btn" id="commPay" hidden>Record payout</button></div>
+    </div>
+    <div id="commBody"></div>
+  </section>
+
   <section id="view-scorecard" hidden>
     <div class="toolbar" style="justify-content:space-between"><h2>Scorecards</h2><button class="btn ghost" id="repBtn" hidden>Monthly report</button></div>
     <div class="sub" style="margin-bottom:16px">Won = Approved through Paid. Commission counts only proposals with a Date paid.</div>
@@ -354,7 +363,7 @@ const DEFAULTS = {
 };
 // DB column  <->  app field
 const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt'};
-const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp',report_sent_on:'reportSentOn',report_url:'reportUrl'};
+const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp',report_sent_on:'reportSentOn',report_url:'reportUrl',est_comm_rate:'estCommRate',bd_comm_rate:'bdCommRate'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
 const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt'].includes(c)) v=num(v); o[c]=v; } return o; };
@@ -389,6 +398,7 @@ function followUp(p){ if(outcome(p)!=='Open' || !p.dateSent) return null; const 
 function fuStep(p){ const f=followUp(p); if(!f) return null; const d=days(parse(p.dateSent),f); return d<=3?1:d<=10?2:d<=21?3:4; }
 function gpPct(p){ return (num(p.gp)!=null && num(p.amount)) ? num(p.gp)/num(p.amount) : null; }
 function visits(p){ const f=S.frequencies.find(x=>x[0]===p.frequency); return f?f[1]:1; }
+const hasVal = v => v!=null && v!=='';
 function visitsOf(f){ const x=S.frequencies.find(y=>y[0]===f); return x ? (Number(x[1])||1) : 1; }
 const lineVisits = i => Math.max(num(i.qty)||1, visitsOf(i.frequency||''));
 function annual(p){ const L=countedItems(p); if(L.length) return L.reduce((s,i)=>s+lineVisits(i)*(num(i.amount)||0),0); return num(p.amount)!=null && p.frequency ? num(p.amount)*visits(p) : null; }
@@ -499,7 +509,7 @@ function syncFromItems(p){
   const auto=estimateTotals(p); if(auto){ p.gp=auto.gp; p.passThrough=auto.pass; }
 }
 const SVC_CODE = {'Window Cleaning':'WC','Pressure Wash':'PW','Solar Panel Cleaning':'SP','Janitorial':'JAN','Gutter Cleaning':'GC','Graffiti Removal':'GR','Gates & Doors':'GD','Lights - Decor':'LD','Multiple services':'MULTI'};
-function bdRate(p){ if(!p.bdRep || !p.clientType) return null; const t=S.clientTypes.find(x=>x[0]===p.clientType); if(!t) return null; const g=gpPct(p); return t[1]*((g!=null && g<S.marginFloor)?S.belowFloorShare:1); }
+function bdRate(p){ if(p.datePaid && hasVal(p.bdCommRate)) return num(p.bdCommRate); if(!p.bdRep || !p.clientType) return null; const t=S.clientTypes.find(x=>x[0]===p.clientType); if(!t) return null; const g=gpPct(p); return t[1]*((g!=null && g<S.marginFloor)?S.belowFloorShare:1); }
 const FREQ_MONTHS={'Annual':12,'Semi-annual':6,'Quarterly':3,'Bi-monthly':2,'Monthly':12,'Weekly':12};
 function addMonths(s,m){ const d=parse(s); const t=new Date(d.getFullYear(), d.getMonth()+m, d.getDate()); return iso(t); }
 function suggestRenewal(p){
@@ -520,19 +530,18 @@ function bdCommTo(p, upto=today()){ const r=bdRate(p); if(!p.datePaid || r==null
   if(!isRecurring(p)) return gpAll(p)*r;
   const a=num(p.amount)||0, yrGP = a ? num(p.gp)*(annual(p)||0)/a : 0; return (yrGP/12*commMonths(p,upto) + coGP(p))*r; }
 const bdComm = p => bdCommTo(p);
-function estRate(p){ const g=gpPct(p); if(g==null) return null; let r=S.estTiers[0][1]; for(const [min,rate] of S.estTiers) if(g>=min) r=rate; return r; }
+function estRate(p){ if(p.datePaid && hasVal(p.estCommRate)) return num(p.estCommRate); const g=gpPct(p); if(g==null) return null; let r=S.estTiers[0][1]; for(const [min,rate] of S.estTiers) if(g>=min) r=rate; return r; }
 function estBase(p){ return num(p.amount)!=null ? num(p.amount)-(num(p.passThrough)||0)+coRevenue(p) : null; }
 function isEstimator(name){ const m=TEAM.find(t=>t.name===name); return m && ['Estimator','Senior Estimator'].includes(m.role); }
 function estCommTo(p, upto=today()){ if(!p.datePaid || !isEstimator(p.sentBy)) return null; const r=estRate(p), b=estBase(p); if(r==null||b==null) return null; if(parse(p.datePaid)>upto) return 0;
   if(!isRecurring(p)) return b*r;
   const a=num(p.amount)||0, yr=(annual(p)||0)*(a ? 1-(num(p.passThrough)||0)/a : 1); return (yr/12*commMonths(p,upto) + coRevenue(p))*r; }
 const estComm = p => estCommTo(p);
-const hasVal = v => v!=null && v!=='';
 const estPaid = p => hasVal(p.estCommPaidAmt) ? num(p.estCommPaidAmt)||0 : (p.estCommPaidOn ? (estComm(p)||0) : 0);
 const bdPaid  = p => hasVal(p.commPaidAmt) ? num(p.commPaidAmt)||0 : (p.commPaidOn ? (bdComm(p)||0) : 0);
 const estOwed = p => Math.max(0, (estComm(p)||0) - estPaid(p));
 const bdOwed  = p => Math.max(0, (bdComm(p)||0) - bdPaid(p));
-function earnedIn(fn, p, per){ const a=perStart(per), b=perEnd(per); return (fn(p, new Date(+b-864e5))||0) - (fn(p, new Date(+a-864e5))||0); }
+function earnedIn(fn, p, per){ const a=perStart(per), b=perEnd(per), t=today(), e=new Date(Math.min(+b-864e5, +t)); if(e<a) return 0; return (fn(p, e)||0) - (fn(p, new Date(+a-864e5))||0); }
 const commMonthsTxt = p => isRecurring(p) && p.datePaid ? ` <span class="note" style="margin:0">${commMonths(p)} of 12 mo</span>` : '';
 function pillClass(st){ if(st==='Lead') return 'p-lead'; if(WON.includes(st)) return 'p-won'; if(LOST.includes(st)) return 'p-lost'; if(OPEN.includes(st)) return 'p-open'; if(PRE.includes(st)) return 'p-review'; return 'p-neutral'; }
 
@@ -2027,19 +2036,106 @@ function group(key, names){
       bdEarned:sum(mine,bdComm), bdPaid:sum(mine,bdPaid), estEarned:sum(mine,estComm), estPaid:sum(mine,estPaid)};
   });
 }
-function payBtn(kind,name,owed){ return owed>0.005 ? `<button class="btn small" data-pay="${kind}" data-name="${esc(name)}" data-owed="${owed}">Mark ${money(owed)} paid</button>` : ''; }
-$('#score').addEventListener('click', async e=>{
-  const b=e.target.closest('[data-pay]'); if(!b) return;
-  if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent=`Confirm: paid today`; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.armed; b.textContent=`Mark ${money(+b.dataset.owed)} paid`; } },5000); return; }
-  const n=b.dataset.name, kind=b.dataset.pay;
-  const col = kind==='bd' ? 'comm_paid_on' : 'est_comm_paid_on';
-  const list=P.filter(p=> kind==='bd' ? (p.bdRep===n && bdOwed(p)>0.005) : (p.sentBy===n && estOwed(p)>0.005)), nums=list.map(p=>p.num);
-  if(!nums.length) return; b.disabled=true;
-  const amtCol = kind==='bd' ? 'comm_paid_amt' : 'est_comm_paid_amt', hasAmt = !COLS || COLS.has(amtCol);
-  for(const p of list){ const row={[col]:iso(today())}; if(hasAmt) row[amtCol]=Math.round((kind==='bd'?bdComm(p):estComm(p))*100)/100;
-    const {error}=await sb.from('proposals').update(row).eq('num',p.num);
-    if(error){ toast(/column|schema/i.test(error.message)?'Run database update 010 to turn on monthly commission.':error.message); b.disabled=false; return; } }
-  toast(`Recorded commission paid to ${n} on ${nums.length} proposal${nums.length===1?'':'s'}`); await loadProposals();
+function payBtn(kind,name,owed){ return owed>0.005 ? `<button class="btn small" data-paygo="${esc(name)}">Pay ${money(owed)}</button>` : ''; }
+function gotoComm(name){ commPerson=name; for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab==='comm'); show('comm'); renderComm(); }
+$('#score').addEventListener('click', e=>{ const b=e.target.closest('[data-paygo]'); if(b) gotoComm(b.dataset.paygo); });
+
+// ---------- Commission: statement per person + payout ledger (011) ----------
+let CP=[], cpOK=true, commPerson=null;
+async function loadPayouts(){ const {data,error}=await sb.from('commission_payouts').select('*').order('paid_on',{ascending:false}).order('id',{ascending:false}); cpOK=!error; CP=error?[]:(data||[]); if(current()==='comm') renderComm(); }
+const canPay = () => ['Owner','Admin'].includes(role());
+function commNames(){ return [...new Set(TEAM.filter(t=>['Estimator','Senior Estimator','BD Rep'].includes(t.role)).map(t=>t.name)
+  .concat(P.filter(p=>estComm(p)!=null).map(p=>p.sentBy), P.filter(p=>bdComm(p)!=null).map(p=>p.bdRep)).filter(Boolean))].sort(); }
+function commLines(name){ const L=[];
+  for(const p of P){ if(p.sentBy===name && estComm(p)!=null) L.push({p, kind:'est', earned:estComm(p)||0, paid:estPaid(p), owed:estOwed(p), rate:estRate(p), base: isRecurring(p)?monthlyValue(p):estBase(p)});
+    if(p.bdRep===name && bdComm(p)!=null) L.push({p, kind:'bd', earned:bdComm(p)||0, paid:bdPaid(p), owed:bdOwed(p), rate:bdRate(p), base: gpAll(p)}); }
+  return L.sort((a,b)=>(b.owed>0.005)-(a.owed>0.005) || String(b.p.datePaid).localeCompare(String(a.p.datePaid))); }
+function renderComm(){
+  const mgr=canPay(), names=commNames(), pick=$('#commPerson');
+  if(!mgr) commPerson=me.name; else if(!names.includes(commPerson)) commPerson=names[0]||null;
+  pick.hidden=!mgr || !names.length; if(mgr) pick.innerHTML=names.map(n=>`<option ${n===commPerson?'selected':''}>${esc(n)}</option>`).join('');
+  if(!cpOK){ $('#commBody').innerHTML='<div class="card"><div class="empty">Run database update 011 (sql/011_commission_ledger_audit.sql) in Supabase to turn on the commission ledger.</div></div>'; $('#commPay').hidden=true; return; }
+  if(!commPerson){ $('#commBody').innerHTML='<div class="card"><div class="empty">No one earns commission yet. Estimators and BD reps show here once a job they sold is paid.</div></div>'; $('#commPay').hidden=true; return; }
+  const L=commLines(commPerson), owedL=L.filter(x=>x.owed>0.005), owed=owedL.reduce((s,x)=>s+x.owed,0);
+  const mine=CP.filter(x=>x.person===commPerson), live=mine.filter(x=>!x.voided), y=String(today().getFullYear());
+  const paidYr=live.filter(x=>String(x.paid_on).startsWith(y)).reduce((s,x)=>s+(num(x.amount)||0),0);
+  const earnedYr=L.reduce((s,x)=>s+earnedIn(x.kind==='est'?estCommTo:bdCommTo, x.p, 'year'),0), last=live[0];
+  $('#commPay').hidden=!mgr || owed<0.005; $('#commPay').textContent=`Record payout · ${money(owed)}`;
+  $('#commSub').textContent = `${commPerson}${TEAM.find(t=>t.name===commPerson)?' · '+TEAM.find(t=>t.name===commPerson).role:''}`;
+  const kpi=(l,v,cls='',sub='')=>`<div class="kpi ${cls}"><div class="l">${l}</div><div class="v">${v}</div>${sub?`<div class="note" style="margin:2px 0 0">${sub}</div>`:''}</div>`;
+  const kindL=k=>k==='est'?'Estimator':'BD';
+  $('#commBody').innerHTML = `<div class="kpis">
+      ${kpi('Owed now',money(owed), owed>0.005?'warn':'', `${owedL.length} job${owedL.length===1?'':'s'}`)}
+      ${kpi('Earned this year',money(earnedYr))}
+      ${kpi('Paid this year',money(paidYr),'',`${live.filter(x=>String(x.paid_on).startsWith(y)).length} payout${live.length===1?'':'s'}`)}
+      ${kpi('Last payout',last?money(last.amount):'—','',last?`${fmtD(last.paid_on)}${last.method?' · '+esc(last.method):''}`:'none yet')}
+    </div>
+    <div class="cards">
+    <div class="card"><h3>Statement</h3>
+      <div class="tablewrap"><table><thead><tr><th>PFBS #</th><th>Client</th><th class="hide-sm">Type</th><th class="hide-sm">Date paid</th><th class="r hide-sm">Basis</th><th class="r">Rate</th><th class="r">Earned</th><th class="r">Paid</th><th class="r">Owed</th></tr></thead><tbody>
+      ${L.length?L.map(x=>`<tr data-id="${esc(x.p.num)}" tabindex="0"><td class="pnum">${esc(x.p.num)}</td><td>${esc(x.p.client)}</td><td class="hide-sm">${kindL(x.kind)}</td><td class="hide-sm num">${fmtD(x.p.datePaid)}</td>
+        <td class="r num hide-sm">${x.kind==='est'?(isRecurring(x.p)?money(x.base)+'/mo':money(x.base)):money(x.base)+' GP'}</td>
+        <td class="r num">${pct(x.rate)}${hasVal(x.kind==='est'?x.p.estCommRate:x.p.bdCommRate)?' <span class="note" style="margin:0" title="Locked the day the job was paid">locked</span>':''}</td>
+        <td class="r num">${money(x.earned)}${isRecurring(x.p)?`<div class="note" style="margin:0">${commMonths(x.p)} of 12 mo</div>`:''}</td><td class="r num">${money(x.paid)}</td><td class="r num">${x.owed>0.005?`<b class="flag warn">${money(x.owed)}</b>`:'—'}</td></tr>`).join('')
+        : '<tr><td colspan="9" class="empty">No commission yet.</td></tr>'}</tbody></table></div>
+      <div class="note">Earned counts jobs with a Date paid. The rate is locked the day the job is paid, so changing rates in Settings never changes past commission. Recurring contracts earn month by month for the first 12 months.</div></div>
+    <div class="card"><h3>Payout history (${mine.length})</h3>
+      <div class="tablewrap"><table><thead><tr><th>Paid on</th><th class="r">Amount</th><th>Method</th><th class="hide-sm">Reference</th><th class="hide-sm">Jobs</th><th class="hide-sm">Recorded by</th><th></th></tr></thead><tbody>
+      ${mine.length?mine.map(x=>`<tr style="cursor:default" class="${x.voided?'voided':''}"><td class="num">${fmtD(x.paid_on)}</td><td class="r num">${x.voided?`<s>${money(x.amount)}</s>`:`<b>${money(x.amount)}</b>`}</td><td>${esc(x.method||'')}</td><td class="hide-sm">${esc(x.reference||'')}</td>
+        <td class="hide-sm wrap">${(x.lines||[]).map(l=>`<a href="#" data-open="${esc(l.num)}">${esc(l.num)}</a> ${money(l.amount)}`).join(' · ')}</td>
+        <td class="hide-sm">${esc(x.recorded_by||'')}<div class="note" style="margin:0">${x.created_at?new Date(x.created_at).toLocaleString([], {month:'numeric',day:'numeric',year:'2-digit',hour:'numeric',minute:'2-digit'}):''}</div></td>
+        <td>${x.voided?`<span class="flag bad">Voided</span><div class="note" style="margin:0">${esc(x.void_reason||'')} · ${esc(x.voided_by||'')}</div>`:(mgr?`<button class="btn ghost small" data-void="${x.id}">Void</button>`:'')}</td></tr>`).join('')
+        : '<tr><td colspan="7" class="empty">No payouts recorded yet.</td></tr>'}</tbody></table></div>
+      <div class="note">Payouts can't be edited or deleted. If one is wrong, void it with a reason and record it again; both stay on record.</div></div>
+    </div>`;
+}
+function formDialog(title, body, okText){
+  return new Promise(res=>{ const d=document.createElement('dialog'); d.className='ask';
+    d.innerHTML=`<h3>${title}</h3>${body}<div class="toolbar"><button type="button" class="btn ghost" data-a="x">Cancel</button><button type="button" class="btn" data-a="ok">${okText}</button></div>`;
+    document.body.appendChild(d); const done=v=>{ d.close(); d.remove(); res(v); };
+    d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='x') done(null);
+      if(a==='ok'){ const v={}; for(const i of d.querySelectorAll('[name]')) v[i.name]=i.value.trim(); if(d.querySelector('[required]') && [...d.querySelectorAll('[required]')].some(i=>!i.value.trim())){ d.querySelector('[required]').focus(); return; } done(v); } });
+    d.addEventListener('cancel', e=>{ e.preventDefault(); done(null); }); d.showModal(); d.querySelector('input,select')?.focus(); });
+}
+$('#commPerson').addEventListener('change', e=>{ commPerson=e.target.value; renderComm(); });
+$('#commPay').addEventListener('click', async ()=>{
+  const name=commPerson, L=commLines(name).filter(x=>x.owed>0.005), total=Math.round(L.reduce((s,x)=>s+x.owed,0)*100)/100; if(!L.length) return;
+  const v=await formDialog(`Pay ${esc(name)} ${money(total)}`, `<div class="note" style="margin:0 0 8px">Covers everything owed now: ${L.map(x=>esc(x.p.num)).join(', ')}.</div>
+    <div class="grid2"><label class="f">Paid on<input type="date" name="paid_on" value="${iso(today())}" required></label>
+    <label class="f">How<select name="method"><option>Payroll</option><option>Check</option><option>Direct deposit</option><option>Other</option></select></label></div>
+    <label class="f">Reference <span class="note" style="margin:0;font-weight:400">check # or payroll period</span><input name="reference" placeholder="e.g. Payroll 10/15–10/31"></label>
+    <label class="f">Notes<input name="notes"></label>`, 'Record payout');
+  if(!v) return;
+  const lines=L.map(x=>({num:x.p.num, kind:x.kind, amount:Math.round(x.owed*100)/100}));
+  const ins=await sb.from('commission_payouts').insert({person:name, amount:total, paid_on:v.paid_on, method:v.method, reference:v.reference||null, notes:v.notes||null, lines}).select().single();
+  if(ins.error){ toast(/relation|schema|does not exist/i.test(ins.error.message)?'Run database update 011 to turn on the commission ledger.':ins.error.message); return; }
+  for(const x of L){ const amtCol=x.kind==='est'?'est_comm_paid_amt':'comm_paid_amt', dCol=x.kind==='est'?'est_comm_paid_on':'comm_paid_on';
+    const {error}=await sb.from('proposals').update({[amtCol]:Math.round(x.earned*100)/100, [dCol]:v.paid_on}).eq('num',x.p.num); if(error) toast(error.message);
+    await addActivity(x.p.num,'note',`${x.kind==='est'?'Estimator':'BD'} commission paid to ${name}: ${money(x.owed)} (${v.method}${v.reference?' · '+v.reference:''}, payout #${ins.data.id})`); }
+  toast(`Recorded ${money(total)} paid to ${name}`); await loadProposals(); await loadPayouts();
+});
+$('#commBody').addEventListener('click', async e=>{
+  const o=e.target.closest('[data-open]'); if(o){ e.preventDefault(); openDrawer(o.dataset.open); return; }
+  const vb=e.target.closest('[data-void]');
+  if(vb){ const x=CP.find(c=>String(c.id)===vb.dataset.void); if(!x) return;
+    const v=await formDialog(`Void payout of ${money(x.amount)}?`, `<div class="note" style="margin:0 0 8px">It stays on record, crossed out, and the amount goes back to owed on: ${(x.lines||[]).map(l=>esc(l.num)).join(', ')}.</div><label class="f">Reason<input name="reason" required placeholder="e.g. wrong amount, paid twice"></label>`, 'Void payout');
+    if(!v) return;
+    const {error}=await sb.from('commission_payouts').update({voided:true, void_reason:v.reason}).eq('id',x.id); if(error){ toast(error.message); return; }
+    for(const l of x.lines||[]){ const p=P.find(q=>q.num===l.num); if(!p) continue; const est=l.kind==='est', amtCol=est?'est_comm_paid_amt':'comm_paid_amt';
+      const cur=est?estPaid(p):bdPaid(p), next=Math.max(0, Math.round((cur-(num(l.amount)||0))*100)/100);
+      await sb.from('proposals').update({[amtCol]:next}).eq('num',l.num);
+      await addActivity(l.num,'note',`Commission payout #${x.id} voided (${money(l.amount)}): ${v.reason}`); }
+    toast('Payout voided'); await loadProposals(); await loadPayouts(); return; }
+  if(e.target.closest('input,button,a')) return;
+  const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id);
+});
+$('#commCsv').addEventListener('click', ()=>{
+  const q=v=>{ const t=String(v??''); return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
+  const L=commLines(commPerson||''), rows=[['Statement for',commPerson],[],['PFBS #','Client','Type','Date paid','Rate','Earned','Paid','Owed']]
+    .concat(L.map(x=>[x.p.num,x.p.client,x.kind==='est'?'Estimator':'BD',x.p.datePaid||'',x.rate!=null?(x.rate*100).toFixed(2)+'%':'',x.earned.toFixed(2),x.paid.toFixed(2),x.owed.toFixed(2)]))
+    .concat([[],['Payouts'],['Paid on','Amount','Method','Reference','Jobs','Recorded by','Voided','Void reason']])
+    .concat(CP.filter(x=>x.person===commPerson).map(x=>[x.paid_on,x.amount,x.method||'',x.reference||'',(x.lines||[]).map(l=>l.num+' '+l.amount).join('; '),x.recorded_by||'',x.voided?'yes':'',x.void_reason||'']));
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'})); a.download=`Commission - ${commPerson} - ${iso(today())}.csv`; a.click();
 });
 let SB_COUNTS=null;
 async function loadSendBacks(){ const {data,error}=await sb.from('proposal_activity').select('num').eq('kind','review_sent_back'); SB_COUNTS={}; if(!error) for(const r of data||[]) SB_COUNTS[r.num]=(SB_COUNTS[r.num]||0)+1; }
@@ -2413,7 +2509,17 @@ function renderSettings(){
   <div class="card listedit" style="margin-top:16px"><h3>Terms &amp; Conditions (page 2 of every PDF)</h3><textarea id="s-terms" style="min-height:260px" ${ro}>${esc(S.terms.map(t=>t.join(' | ')).join('\n'))}</textarea><div class="note">One term per line: Heading | text.</div>
     <label class="f" style="margin-top:8px">Acknowledgment text<textarea id="s-ack" rows="2" ${ro}>${esc(S.ack)}</textarea></label>
   </div>
-  ${owner?'<div style="margin-top:16px"><button class="btn" id="saveS">Save settings</button></div>':''}`;
+  ${owner?'<div style="margin-top:16px"><button class="btn" id="saveS">Save settings</button></div>':''}
+  ${canPay()?'<div class="card" style="margin-top:16px"><h3>Change log</h3><div class="note" style="margin:0 0 8px">Every change to Settings and the team list, and every deleted proposal, with who did it and when. Proposal changes are in each proposal\'s Activity.</div><div id="logBox"><div class="note">Loading…</div></div></div>':''}`;
+  if(canPay()) loadAdminLog();
+}
+async function loadAdminLog(){
+  const box=$('#logBox'); if(!box) return;
+  const {data,error}=await sb.from('admin_log').select('*').order('at',{ascending:false}).limit(150);
+  if(error){ box.innerHTML='<div class="note">Run database update 011 to turn on the change log.</div>'; return; }
+  const short=v=>{ const t=String(v??''); return t.length>120?esc(t.slice(0,120))+'…':esc(t); };
+  box.innerHTML = data.length ? `<div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Area</th><th>What</th><th class="hide-sm">Before</th><th>After</th></tr></thead><tbody>${data.map(x=>`<tr style="cursor:default"><td class="num">${new Date(x.at).toLocaleString([], {month:'numeric',day:'numeric',year:'2-digit',hour:'numeric',minute:'2-digit'})}</td><td>${esc(x.by_name||'')}</td><td>${esc(x.area)}</td><td>${esc(x.item||'')}</td><td class="hide-sm wrap">${short(x.old_value)}</td><td class="wrap">${short(x.new_value)}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="note">No changes logged yet.</div>';
 }
 $('#settingsBody').addEventListener('click', async e=>{
   if(e.target.id==='addMember'){
@@ -2451,14 +2557,14 @@ $('#settingsBody').addEventListener('change', async e=>{
 });
 
 // ---------- tabs / views ----------
-function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','scorecard','settings']) $('#view-'+v).hidden = v!==view; }
+function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','comm','scorecard','settings']) $('#view-'+v).hidden = v!==view; }
 $('#tabs').addEventListener('click', e=>{
   const b=e.target.closest('[data-tab]'); if(!b) return;
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x===b);
   show(b.dataset.tab); renderAll();
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
-function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='scorecard') renderScore(); if(c==='settings') renderSettings(); }
+function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='scorecard') renderScore(); if(c==='comm') renderComm(); if(c==='settings') renderSettings(); }
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
@@ -2491,10 +2597,11 @@ async function start(session){
   await Promise.all([loadTeam(), loadSettings()]);
   $('#salesTab').hidden = false;
   $('#ordersTab').hidden = m.role==='BD Rep';
+  $('#commTab').hidden = false;
   $('#salesTab').textContent = ['BD Rep','Estimator'].includes(m.role) ? 'My Sales' : 'Sales';
   const home = ['BD Rep','Estimator'].includes(m.role) ? 'sales' : m.role==='Admin' ? 'orders' : 'pipeline';
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===home); show(home);
-  await loadProposals(); loadProspects();
+  await loadProposals(); loadProspects(); loadPayouts();
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(loadProposals,400); })
     .on('postgres_changes',{event:'*',schema:'public',table:'settings'},async()=>{ await loadSettings(); renderAll(); })
