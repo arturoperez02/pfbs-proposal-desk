@@ -64,6 +64,10 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .search{flex:1 1 220px;max-width:340px}
 .btn{border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer}
 .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+#drawer .dtabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin:4px 0 14px;position:sticky;top:0;background:var(--card,#fff);z-index:2}
+#drawer .dtabs button{border:0;background:none;padding:10px 16px;font-weight:600;color:var(--muted,#666);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+#drawer .dtabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+h3.setsec{margin:28px 0 10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#666)} h3.setsec:first-child{margin-top:4px}
 dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px} tr.voided td{color:var(--muted,#888)}
 .btn.small{padding:5px 10px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -340,7 +344,7 @@ td input,td select{padding:5px 8px}
 const SUPABASE_URL = window.PFBS_CONFIG?.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = window.PFBS_CONFIG?.SUPABASE_ANON_KEY || '';
 (() => {
-const STATUSES = ['Lead','Estimating','Needs Review','Sent','Follow-up','Approved','Scheduled','Invoiced','Paid','Declined','Expired','Withdrawn'];
+const STATUSES = ['Lead','Estimating','Needs Review','Sent','Approved','Scheduled','Invoiced','Paid','Declined','Expired','Withdrawn'];
 const WON = ['Approved','Scheduled','Invoiced','Paid'], LOST = ['Declined','Expired'], OPEN = ['Sent','Follow-up'], PRE = ['Estimating','Needs Review'], PRELOCK = ['Lead','Estimating','Needs Review'];
 const ROLES = ['Owner','Admin','Senior Estimator','Estimator','BD Rep'];
 const DEFAULTS = {
@@ -583,7 +587,9 @@ function canEditDraft(){ if(isNew) return newLead ? canLead() : canCreate();
   return isManager() || (role()==='Estimator' && orig?.sentBy===me.name) || (role()==='BD Rep' && orig?.bdRep===me.name && orig?.status==='Lead'); }
 function isLocked(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && role()!=='Owner' && (draft?.rev||1)===(orig.rev||1); }
 function ownerOverride(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && role()==='Owner'; }
+let DTAB='prop';
 async function openDrawer(id, opts={}){
+  DTAB = (current()==='orders' || role()==='Admin') ? 'job' : 'prop';
   PR=null; isNew=!id; newLead=!!opts.lead; orig = id ? P.find(p=>p.num===id) : null;
   draft = orig ? structuredClone(orig) : newLead ? {num:'', dateSent:null, sentBy: role()==='Estimator'?me.name:'', bdRep: role()==='BD Rep'?me.name:'', leadSource: role()==='BD Rep'?'BD rep':'', status:'Lead', items:[]} : {num:'', dateSent:iso(today()), sentBy: me.name, status:'Estimating', items:[{type:'Service',service:'',qty:1,frequency:'',amount:'',description:'',note:''}]};
   hist=[]; drawDrawer();
@@ -681,7 +687,7 @@ function drawDrawer(){
   const sel=(label,key,list,cls='',lock=false)=>`<label class="f ${cls}">${label}<select id="f-${key}" data-k="${key}" ${ed&&!lock?'':'disabled'}>${opts(list,p[key])}</select></label>`;
   const names=TEAM.filter(t=>t.active&&t.role!=='BD Rep').map(t=>t.name), bds=TEAM.filter(t=>t.active&&t.role==='BD Rep').map(t=>t.name);
   const preLocked = st => (role()==='BD Rep' && st!=='Lead') || (PRELOCK.includes(orig?.status ?? draft.status) && !PRELOCK.includes(st) && !canReview());
-  const locked=isLocked(), edScope=ed && !locked;
+  const locked=isLocked(), edScope=ed && !locked, won=outcome(p)==='Won', tab = won ? DTAB : 'prop';
   const review = p.status==='Needs Review' && !isNew ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>Waiting on review.</b> The senior estimator checks price and scope, then approves to send or sends it back with a reason.</div>
     ${canReview()?`<textarea id="revNote" rows="2" placeholder="Review note (required to send back)" style="flex-basis:100%"></textarea><div class="toolbar" style="margin:0"><button class="btn small" id="approveSend">Approve &amp; mark Sent</button><button class="btn ghost small" id="sendBack">Send back to estimator</button></div>`:''}</div>`
     : (p.status==='Lead' && !isNew) ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>New lead${p.bdRep?' from '+esc(p.bdRep):''}.</b> ${p.sentBy?'Assigned to '+esc(p.sentBy)+'.':'Assign an estimator.'}${p.leadAt?' Logged '+fmtD(p.leadAt)+'.':''}</div>${(isManager()||(role()==='Estimator'&&p.sentBy===me.name))?'<button class="btn small" id="startEst">Start estimate</button>':''}</div>` : '';
@@ -692,7 +698,7 @@ function drawDrawer(){
     <div id="emBox" class="fubox" hidden></div>
     ${review}
     <fieldset><legend>Status</legend>
-      <div class="stages">${STATUSES.map(s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`).join('')}</div>
+      <div class="stages">${(STATUSES.includes(p.status)?[]:[p.status]).concat(STATUSES).filter(s=>s===p.status || (ed && !preLocked(s) && s!=='Lead')).map(s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`).join('')}</div>
       ${!canReview()&&PRE.includes(orig?.status??'Estimating')?'<div class="note">Move it to Needs Review when it is ready. The senior estimator sends it.</div>':''}
       <div id="openline">${openLine(p)}</div>
       ${!isNew && p.status!=='Lead' ? `<div class="revline"><span>Revision <b>${p.rev||1}</b>${(p.revisions||[]).length?` · ${(p.revisions||[]).map(r=>`Rev ${r.rev}: ${money(r.amount)} on ${fmtD(r.date)}`).join(' · ')}`:''}</span>${ed && !PRE.includes(p.status) && outcome(p)!=='Won' ? `<button type="button" class="btn ghost small" id="revBtn">${draft._revArmed?'Confirm: start Rev '+((p.rev||1)+1):'Create revision'}</button>`:''}</div>`:''}
@@ -700,6 +706,9 @@ function drawDrawer(){
       ${LOST.includes(p.status)?`<div class="grid2" style="margin-top:6px">${sel('Lost reason','lostReason',S.lostReasons)}</div>`:''}
       ${p.reviewedBy?`<div class="gpline">Reviewed by ${esc(p.reviewedBy)}${p.reviewedAt?' on '+fmtD(p.reviewedAt):''}</div>`:''}
     </fieldset>
+
+    ${won ? `<div class="dtabs" role="tablist"><button type="button" role="tab" data-dtab="prop" aria-selected="${tab==='prop'}">Proposal</button><button type="button" role="tab" data-dtab="job" aria-selected="${tab==='job'}">Job</button></div>` : ''}
+    <div class="dpane" data-pane="prop" ${tab==='prop'?'':'hidden'}>
     <fieldset><legend>Proposal</legend><div class="grid2">
       ${field('Date sent','dateSent','date')}
       ${sel(p.status==='Lead'?'Assign to estimator':'Estimator (sent by)','sentBy',names,'',!(isManager() || (p.status==='Lead' && role()==='BD Rep')))}
@@ -731,13 +740,22 @@ function drawDrawer(){
       ${sel('Lead source','leadSource',S.leadSources)}
       ${sel('BD rep','bdRep',bds)}
     </div></fieldset>
+    <fieldset><legend>Files</legend><div class="grid2">
+      ${field('Bid sheet link (SharePoint)','bidLink','url','full','placeholder="https://…sharepoint.com/…"')}
+      ${field('Proposal folder link','folderLink','url','full','placeholder="https://…sharepoint.com/…"')}
+    </div>
+    ${spOn()?`<div class="gpline" id="spLine" style="margin:0 0 6px">${spLine(p)}</div><div class="toolbar" style="margin:0 0 6px"><button type="button" class="btn ghost small" id="spPick">${/sharepoint\.com/.test(p.folderLink||'')?'Change SharePoint folder':'Choose SharePoint folder'}</button></div><div id="spBox" class="fubox" hidden></div>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${/^https:\/\//.test(p.bidLink||'')?`<a class="btn ghost small" href="${esc(p.bidLink)}" target="_blank" rel="noopener">Open bid sheet</a>`:''}${/^https:\/\//.test(p.folderLink||'')?`<a class="btn ghost small" href="${esc(p.folderLink)}" target="_blank" rel="noopener">Open folder</a>`:''}</div>
+    </fieldset>
+    </div>
+    <div class="dpane" data-pane="job" ${tab==='job'?'':'hidden'}>
     ${outcome(p)==='Won' ? `<fieldset><legend>Payment &amp; commission</legend><div class="grid2">
       ${field(isRecurring(p)?'First HCP job #':'HCP job #','hcpJob')}
       ${field('Date paid','datePaid','date')}
     </div>
     <div id="calc2">${calc2(p)}</div>
     ${isRecurring(p)?`<div class="note">Each visit gets its own HCP job #. Put <b>${esc(p.num)}</b> in the HCP job description (or the recurring job template) and every visit links here.</div>`:''}
-    <div class="note">Date paid fills in when you mark it Paid. Commission payouts are recorded on the Commission tab.${p.commPaidOn?` BD commission paid ${fmtD(p.commPaidOn)}.`:''}${p.estCommPaidOn?` Estimator commission paid ${fmtD(p.estCommPaidOn)}.`:''} Owners don't earn estimator commission.</div>
+    <div class="note">Date paid fills in when you mark it Paid. Payouts are recorded on the Commission tab.</div>
     </fieldset>` : ''}
     ${outcome(p)==='Won' && (FREQ_MONTHS[p.frequency]||isRecurring(p)) && !p.cancelledOn ? `<fieldset><legend>Renewal</legend>
       <div class="grid2"><label class="f">${renewalKind(p)} date<input type="date" id="f-renewalDate" data-k="renewalDate" value="${esc(renewalOf(p)||'')}" ${dis}></label>
@@ -755,13 +773,7 @@ function drawDrawer(){
       <div class="gpline" style="margin:0 0 8px">${p.reportSentOn?`<b style="color:var(--good)">Sent to the client ${fmtD(p.reportSentOn)}</b>${safeLink(p.reportUrl)?` · <a href="${esc(safeLink(p.reportUrl))}" target="_blank" rel="noopener">open the report</a>`:''}`:`Not sent yet.${p.hcpJob?' HCP job '+esc(p.hcpJob)+'.':''}`}</div>
       ${safeLink(S.reportAppUrl)?`<a class="btn ghost small" href="${esc(safeLink(S.reportAppUrl))}" target="_blank" rel="noopener">Open service report app ↗</a>`:''}
       <div class="note">Reports are written in the service report app after the crew taps FINISH in HousecallPro. When Oscar approves one, it shows here as sent.</div></fieldset>` : ''}
-    <fieldset><legend>Files</legend><div class="grid2">
-      ${field('Bid sheet link (SharePoint)','bidLink','url','full','placeholder="https://…sharepoint.com/…"')}
-      ${field('Proposal folder link','folderLink','url','full','placeholder="https://…sharepoint.com/…"')}
     </div>
-    ${spOn()?`<div class="gpline" id="spLine" style="margin:0 0 6px">${spLine(p)}</div><div class="toolbar" style="margin:0 0 6px"><button type="button" class="btn ghost small" id="spPick">${/sharepoint\.com/.test(p.folderLink||'')?'Change SharePoint folder':'Choose SharePoint folder'}</button></div><div id="spBox" class="fubox" hidden></div>`:''}
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${/^https:\/\//.test(p.bidLink||'')?`<a class="btn ghost small" href="${esc(p.bidLink)}" target="_blank" rel="noopener">Open bid sheet</a>`:''}${/^https:\/\//.test(p.folderLink||'')?`<a class="btn ghost small" href="${esc(p.folderLink)}" target="_blank" rel="noopener">Open folder</a>`:''}</div>
-    </fieldset>
     ${!isNew ? `<fieldset><legend>Activity</legend>
       ${canEditDraft() || canLead() || canCreate() ? `<div class="actadd"><select id="actKind" aria-label="Type"><option value="follow_up">Follow-up</option><option value="note">Note</option></select><input id="actNote" placeholder="e.g. Called Joe, waiting on budget approval" aria-label="Activity note"><button type="button" class="btn small" id="actAdd">Add</button></div>`:''}
       ${OPEN.includes(p.status) && (canEditDraft()||canLead()) ? `<div class="toolbar" style="margin:8px 0"><button type="button" class="btn ghost small" id="fuBtn">${(()=>{const f=followUp(p); return f&&f<=today()?'Write follow-up email (due)':'Write follow-up email';})()}</button></div><div id="fuBox" class="fubox" hidden></div>`:''}
@@ -827,6 +839,9 @@ function itemEvent(e, final){
   else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); if(estimateTotals(draft)) refreshGp(); const sm=e.target.closest('.item')?.querySelector('.estsum'); if(sm && it.estimate) sm.outerHTML=estSummary(it); refreshCalcs(); }
   return true;
 }
+$('#drawer').addEventListener('click', e=>{ const dt=e.target.closest('[data-dtab]'); if(!dt) return; DTAB=dt.dataset.dtab;
+  for(const b of document.querySelectorAll('#drawer [data-dtab]')) b.setAttribute('aria-selected', b===dt);
+  for(const x of document.querySelectorAll('#drawer .dpane')) x.hidden = x.dataset.pane!==DTAB; });
 $('#drawer').addEventListener('input', e=>{ if(itemEvent(e,false)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
 // ---------- lead form (a lead is a request, not a priced proposal yet) ----------
 const TIMING=['As soon as possible','This month','Next 1–3 months','Planning / budgeting'];
@@ -1274,7 +1289,8 @@ function canEditRow(p){ return isManager() || (role()==='Estimator' && p.sentBy=
 function quickStatus(p){
   if(!canEditRow(p)) return `<span class="pill ${pillClass(p.status)}">${esc(p.status)}</span>`;
   const locked = st => PRELOCK.includes(p.status) && !PRELOCK.includes(st) && !canReview();
-  return `<select class="pill qs ${pillClass(p.status)}" data-qs="${esc(p.num)}" aria-label="Status for ${esc(p.num)}">${STATUSES.map(st=>`<option ${st===p.status?'selected':''} ${locked(st)?'disabled':''}>${st}</option>`).join('')}</select>`;
+  const list=(STATUSES.includes(p.status)?[]:[p.status]).concat(STATUSES.filter(st=>st===p.status || (!locked(st) && st!=='Lead')));
+  return `<select class="pill qs ${pillClass(p.status)}" data-qs="${esc(p.num)}" aria-label="Status for ${esc(p.num)}">${list.map(st=>`<option ${st===p.status?'selected':''}>${st}</option>`).join('')}</select>`;
 }
 $('#rows').addEventListener('change', async e=>{
   const sel=e.target.closest('select[data-qs]'); if(!sel) return;
@@ -2483,7 +2499,34 @@ function renderSettings(){
   </div>
   ${owner?'<div style="margin-top:16px"><button class="btn" id="saveS">Save settings</button></div>':''}
   ${canPay()?'<div class="card" style="margin-top:16px"><h3>Change log</h3><div class="note" style="margin:0 0 8px">Every change to Settings and the team list, and every deleted proposal, with who did it and when. Proposal changes are in each proposal\'s Activity.</div><div id="logBox"><div class="note">Loading…</div></div></div>':''}`;
+  organizeSettings();
   if(canPay()) loadAdminLog();
+}
+// group the settings cards under a few headings (cards keep their fields, so saving is unchanged)
+function organizeSettings(){
+  const root=$('#settingsBody'); if(!root) return;
+  const cards=[...root.querySelectorAll('.card')], find=t=>cards.find(c=>(c.querySelector('h3')?.textContent||'').trim().startsWith(t));
+  // "Proposal valid for" and the service report link are not guardrails: give them their own card
+  const extra=document.createElement('div'); extra.className='card listedit'; extra.innerHTML='<h3>Proposal &amp; links</h3>';
+  for(const id of ['#s-exp','#s-rpt']){ const l=root.querySelector(id)?.closest('label'); if(l) extra.appendChild(l); }
+  const groups=[
+    ['Team', ['Team']],
+    ['Commission', ['Client type → BD rate','Estimator rate by margin','BD goals']],
+    ['Estimating', ['Margins & guardrails','Estimate defaults','Labor roles','Solar panel rates','Gates & doors tasks','Material presets']],
+    ['Lists', ['Services','Frequencies','Lead sources','Lost reasons','Add-on suggestions']],
+    ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
+    ['Change log', ['Change log']]];
+  const save=root.querySelector('#saveS')?.parentElement, frag=document.createDocumentFragment();
+  for(const [title, names] of groups){
+    const got=names.map(n=> n==='Proposal & links' ? extra : find(n)).filter(Boolean); if(!got.length) continue;
+    const h=document.createElement('h3'); h.className='setsec'; h.textContent=title; frag.appendChild(h);
+    const g=document.createElement('div'); g.className='settings-grid'; got.forEach(c=>{ c.style.marginTop=''; g.appendChild(c); }); frag.appendChild(g);
+    if(title==='Proposal text' && save) frag.appendChild(save);
+  }
+  const left=cards.filter(c=>!frag.contains(c));   // anything not listed stays, at the end
+  if(left.length){ const g=document.createElement('div'); g.className='settings-grid'; left.forEach(c=>g.appendChild(c)); frag.appendChild(g); }
+  root.querySelectorAll('.settings-grid').forEach(x=>{ if(!x.children.length) x.remove(); });
+  root.innerHTML=''; root.appendChild(frag);
 }
 async function loadAdminLog(){
   const box=$('#logBox'); if(!box) return;
