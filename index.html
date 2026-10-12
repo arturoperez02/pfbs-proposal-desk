@@ -1235,18 +1235,14 @@ function proposalEmail(p){
   const subject=`${bud?'Budget proposal':'Proposal'} from PF Building Services – ${p.num}${rev?' Rev '+p.rev:''}`;
   if(bud) return {to:p.contactEmail||'', subject, body:`Hi ${first},
 
-Here are our ${by} budget numbers for the ${scope} at ${place} (${p.num}).
+Attached are the ${by} budget numbers you requested. Please take a look and let me know if you have any questions.
 
-Whenever you're ready to move forward, just let me know and we'll lock in pricing and get you on the schedule.
-
-Thanks,`};
+Looking forward to hearing from you soon.`};
   const body=`Hi ${first},
 
-${rev?`Here's the updated proposal (${p.num}, revision ${p.rev})`:`Attached is our proposal (${p.num})`} for the ${scope} at ${place}.${addons?` I also included a few optional add-ons in case they're helpful.`:''}
+Attached is the ${rev?'updated ':''}proposal you requested. Please take a look and let me know if you have any questions.
 
-If everything looks good, just reply to this email or sign the last page and send it back. Happy to walk the site again or adjust anything if needed.
-
-Thanks,`;
+Looking forward to hearing from you soon.`;
   return {to:p.contactEmail||'', subject, body};
 }
 async function emailOpen(){
