@@ -15,6 +15,6 @@
 | 011_commission_ledger_audit.sql | Run once: commission payout ledger (never edited, only voided), commission rates locked when a job is paid, change log for Settings and the team, archive of deleted proposals. Needs 010. |
 | 012_estimator_commission_plan.sql | Run once: estimator rate 2% / 3% / 4% by job margin, 75% of that when a BD rep is on the job. Past paid jobs keep their locked rate. Needs 011. |
 | 013_follow_up_status.sql | Run once: proposals marked Follow-up become Sent (follow-ups are tracked automatically). |
-| 014_budget_estimates.sql | Run once: Budget status for next-year budget numbers (kept out of pipeline, win rate and follow-ups), budget year and check-in date. |
+| 014_budget_estimates.sql | Run once: Budget status for next-year budget proposals (kept out of pipeline, win rate and follow-ups), budget year and check-in date. |
 
 Client data is never stored in this repository.

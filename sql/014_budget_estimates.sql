@@ -1,5 +1,5 @@
 -- =====================================================================
--- PFBS Proposal Desk — update 014: budget estimates
+-- PFBS Proposal Desk — update 014: budget proposals
 --   • new status "Budget": pricing a client asked for next year's budget.
 --     It stays out of the open pipeline, win rate, follow-up emails and the
 --     monthly report's open/follow-up counts (those only look at "Sent").

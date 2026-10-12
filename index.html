@@ -586,7 +586,7 @@ function renderPipeline(){
     ['Won', money(sum(won,wonAmt)), won.length+' proposals',''],
     ['Recurring / month', money(sum(act,monthlyValue)), act.length+' active contract'+(act.length===1?'':'s'),''],
     ['Win rate', rate==null?'—':pct(rate), (won.length+lost.length)+' decided','']
-  ].concat((b=>b.length?[['Budgets out', money(sum(b)), b.length+' budget estimate'+(b.length===1?'':'s'),'']]:[])(PV.filter(p=>p.status==='Budget'))).map(([l,v,s,c])=>`<div class="kpi ${c}"><div class="l">${l}</div><div class="v num">${v}</div><div class="sub">${s}</div></div>`).join('');
+  ].concat((b=>b.length?[['Budgets out', money(sum(b)), b.length+' budget proposal'+(b.length===1?'':'s'),'']]:[])(PV.filter(p=>p.status==='Budget'))).map(([l,v,s,c])=>`<div class="kpi ${c}"><div class="l">${l}</div><div class="v num">${v}</div><div class="sub">${s}</div></div>`).join('');
   $('#chips').innerHTML = FILTERS.map(([n,f])=>`<button class="chip" aria-pressed="${filter===n}" data-f="${esc(n)}">${n}<span class="c num">${PV.filter(f).length}</span></button>`).join('');
   const fn=FILTERS.find(f=>f[0]===filter)[1], q=query.trim().toLowerCase();
   const list=PV.filter(fn).filter(p=>!q || [p.num,p.client,p.property,p.sentBy,p.bdRep].join(' ').toLowerCase().includes(q)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
@@ -737,7 +737,7 @@ function drawDrawer(){
     ${won ? `<div class="dtabs" role="tablist"><button type="button" role="tab" data-dtab="prop" aria-selected="${tab==='prop'}">Proposal</button><button type="button" role="tab" data-dtab="job" aria-selected="${tab==='job'}">Job</button></div>` : ''}
     <div class="dpane" data-pane="prop" ${tab==='prop'?'':'hidden'}>
     <fieldset><legend>Proposal</legend>
-      ${PRE.includes(p.status) ? `<label class="acc" style="margin:0 0 10px"><input type="checkbox" id="budChk" ${p.budgetYear?'checked':''} ${dis}> Budget estimate <span class="note" style="margin:0">(pricing for the client's ${today().getFullYear()+1} budget, not an offer to accept now)</span></label>` : ''}
+      ${PRE.includes(p.status) ? `<label class="acc" style="margin:0 0 10px"><input type="checkbox" id="budChk" ${p.budgetYear?'checked':''} ${dis}> Budget proposal <span class="note" style="margin:0">(pricing for the client's ${today().getFullYear()+1} budget, not an offer to accept now)</span></label>` : ''}
       <div class="grid2">
       ${field('Date sent','dateSent','date')}
       ${sel(p.status==='Lead'?'Assign to estimator':'Estimator (sent by)','sentBy',names,'',!(isManager() || (p.status==='Lead' && role()==='BD Rep')))}
@@ -870,7 +870,7 @@ function itemEvent(e, final){
   else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); if(estimateTotals(draft)) refreshGp(); const sm=e.target.closest('.item')?.querySelector('.estsum'); if(sm && it.estimate) sm.outerHTML=estSummary(it); refreshCalcs(); }
   return true;
 }
-$('#drawer').addEventListener('change', e=>{ if(e.target.id!=='budChk' || !draft) return; draft.budgetYear = e.target.checked ? today().getFullYear()+1 : null; if(!e.target.checked) draft.budgetCheck=null; drawDrawer(); $('#dmsg').textContent = e.target.checked ? 'Budget estimate: the PDF and email say so. Save to keep it.' : 'Normal proposal again. Save to keep it.'; });
+$('#drawer').addEventListener('change', e=>{ if(e.target.id!=='budChk' || !draft) return; draft.budgetYear = e.target.checked ? today().getFullYear()+1 : null; if(!e.target.checked) draft.budgetCheck=null; drawDrawer(); $('#dmsg').textContent = e.target.checked ? 'Budget proposal: the PDF and email say so. Save to keep it.' : 'Normal proposal again. Save to keep it.'; });
 $('#drawer').addEventListener('click', e=>{ const m=e.target.closest('[data-stmore]'); if(m){ const r=m.nextElementSibling; r.hidden=!r.hidden; m.textContent=r.hidden?'More ▾':'Less ▴'; } });
 $('#drawer').addEventListener('click', e=>{ const dt=e.target.closest('[data-dtab]'); if(!dt) return; DTAB=dt.dataset.dtab;
   for(const b of document.querySelectorAll('#drawer [data-dtab]')) b.setAttribute('aria-selected', b===dt);
@@ -1199,10 +1199,10 @@ function proposalEmail(p){
   const L=countedItems(p), scope=niceCase(L.filter(i=>i.type!=='Add-on'&&i.description).slice(0,3).map(i=>i.description).join(', '))||'the requested services';
   const addons=(p.items||[]).filter(i=>i.type==='Add-on'&&!i.accepted).length;
   const bud=isBudgetDoc(p), by=p.budgetYear||today().getFullYear()+1;
-  const subject=`${bud?'Budget estimate':'Proposal'} from PF Building Services – ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`;
+  const subject=`${bud?'Budget proposal':'Proposal'} from PF Building Services – ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`;
   if(bud) return {to:p.contactEmail||'', subject, body:`Hi ${first},
 
-Thank you for considering PF Building Services for your ${by} budget. Attached is budget estimate ${p.num} for ${scope} at ${place}.
+Thank you for considering PF Building Services for your ${by} budget. Attached is budget proposal ${p.num} for ${scope} at ${place}.
 
 These numbers are for budgeting purposes. When you're ready to move forward, we'll confirm final pricing and scheduling. Please let me know if you have any questions.
 
@@ -1221,7 +1221,7 @@ async function emailOpen(){
   const pre=PRELOCK.includes(draft.status) && !canReview();
   const e=proposalEmail(draft);
   box.hidden=false;
-  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Email the ${isBudgetDoc(draft)?'budget estimate':'proposal'}</b><button type="button" class="btn ghost small" id="emClose">Close</button></div>
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Email the ${isBudgetDoc(draft)?'budget proposal':'proposal'}</b><button type="button" class="btn ghost small" id="emClose">Close</button></div>
     ${pre?'<div class="note" style="color:var(--warn)">This proposal has not been reviewed yet. Send it for review before emailing the client.</div>':''}
     <label class="f">To<input id="emTo" type="email" value="${esc(e.to)}" placeholder="client@company.com"></label>
     <label class="f">Subject<input id="emSubj" value="${esc(e.subject)}"></label>
@@ -1882,9 +1882,9 @@ async function makePdf(p){
   doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('PF Building Services',51,104);
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
   ['7172 Calais Pl  |  Newark, CA 94560','(510) 359-5181  |  info@pfbuildingservices.com','License #114036'].forEach((t,i)=>doc.text(t,51,117+i*11));
-  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...NAVY); doc.text(isBudgetDoc(p)?'BUDGET ESTIMATE':'PROPOSAL CONTRACT',R0,66,{align:'right'});
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...NAVY); doc.text(isBudgetDoc(p)?'BUDGET PROPOSAL':'PROPOSAL CONTRACT',R0,66,{align:'right'});
   doc.setFontSize(8.5); doc.setTextColor(0);
-  [`${isBudgetDoc(p)?'Estimate':'Proposal'} # ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`,`Date: ${p.dateSent?fmtLong(p.dateSent):fmtLong(iso(today()))}`,(isBudgetDoc(p)?`For budget year ${p.budgetYear||today().getFullYear()+1}`:`Expires: After ${S.expiryDays} Days`)].forEach((t,i)=>doc.text(t,R0,84+i*12,{align:'right'}));
+  [`Proposal # ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`,`Date: ${p.dateSent?fmtLong(p.dateSent):fmtLong(iso(today()))}`,(isBudgetDoc(p)?`For budget year ${p.budgetYear||today().getFullYear()+1}`:`Expires: After ${S.expiryDays} Days`)].forEach((t,i)=>doc.text(t,R0,84+i*12,{align:'right'}));
   doc.setDrawColor(...NAVY); doc.setLineWidth(1.5); doc.line(40,150,572,150);
   // bill to / site
   doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text('BILL TO',51,172); doc.text('PROPERTY / JOB SITE',320,172);
@@ -1917,7 +1917,7 @@ async function makePdf(p){
       didParseCell:d=>{ if(d.section==='head'){ if(d.column.index===3) d.cell.styles.halign='right'; if(d.column.index===2) d.cell.styles.halign='center'; } } });
     y=doc.lastAutoTable.finalY+20;
   }
-  if(isBudgetDoc(p)){ doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(60); const t=doc.splitTextToSize(`Budget pricing for ${p.budgetYear||today().getFullYear()+1}. This is an estimate for budgeting purposes; final pricing and scheduling are confirmed when the work is approved.`, R0-L0); doc.text(t,L0,y); y+=t.length*11+10; doc.setTextColor(0); }
+  if(isBudgetDoc(p)){ doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(60); const t=doc.splitTextToSize(`Budget pricing for ${p.budgetYear||today().getFullYear()+1}. This proposal is for budgeting purposes; final pricing and scheduling are confirmed when the work is approved.`, R0-L0); doc.text(t,L0,y); y+=t.length*11+10; doc.setTextColor(0); }
   // clarifications
   const svcs=new Set(items.filter(i=>i.type!=='Add-on').map(i=>i.service||guessService(i.description)).concat(p.service?[p.service]:[]).filter(Boolean)), gdOnly=svcs.size>0 && [...svcs].every(v=>v==='Gates & Doors');
   const clar = (p.clarifications&&p.clarifications.trim()) ? p.clarifications.split('\n').map(x=>x.replace(/^\s*\d+[.)]\s*/,'').trim()).filter(Boolean)
@@ -1972,8 +1972,8 @@ async function makeEstimatePdf(p, pairs){
   const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), NAVY=[31,42,92], RED=[179,38,30], L0=46, R0=566, logo=await logoData(), n=v=>num(v)||0;
   const head=()=>{
     if(logo) doc.addImage(logo,'JPEG',46,30,100,23);
-    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...NAVY); doc.text('ESTIMATE WORKSHEET',R0,42,{align:'right'});
-    doc.setFontSize(8); doc.setTextColor(...RED); doc.text('INTERNAL – NOT FOR CLIENT',R0,54,{align:'right'});
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...NAVY); doc.text(isBudgetDoc(p)?'BUDGET PROPOSAL WORKSHEET':'ESTIMATE WORKSHEET',R0,42,{align:'right'});
+    doc.setFontSize(8); doc.setTextColor(...RED); doc.text(isBudgetDoc(p)?`INTERNAL – NOT FOR CLIENT · BUDGET YEAR ${p.budgetYear||today().getFullYear()+1}`:'INTERNAL – NOT FOR CLIENT',R0,54,{align:'right'});
     doc.setDrawColor(...NAVY); doc.setLineWidth(1); doc.line(40,66,572,66); doc.setTextColor(0);
   };
   const tbl=(title, headRow, body, foot, colStyles)=>{
