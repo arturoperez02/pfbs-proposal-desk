@@ -2154,7 +2154,7 @@ async function fetchScheduledJobs() {
 async function renderScheduledJobsPanel() {
   const card = document.getElementById('scheduled-jobs-card');
   const el = document.getElementById('scheduled-jobs-list');
-  if (localStorage.getItem('kt_techsched_enabled') === '0') { card.style.display = 'none'; return; }
+  if (localStorage.getItem('kt_crm_topack') === '0') { card.style.display = 'none'; return; }
   card.style.display = '';
   if (!el.innerHTML) el.innerHTML = '<div style="font-size:11px;color:var(--txt2);padding:6px 0">Loading...</div>';
   const { data, error } = await db.rpc('warehouse_jobs', { p_days: 7 });
@@ -2187,7 +2187,7 @@ function crmJob(v) {
   return { _src: 'CRM', id: v.id, visit_id: v.id,
     jobNum: v.job_no || '', date: v.visit_date || '', endDate: v.end_date || '', start: v.start_time || '',
     client: [v.client, v.property].filter(Boolean).join(' · '), address: v.address || '',
-    type: (v.work || [])[0] || '', types: v.work || [], techs: v.techs || [], vehicle: v.vehicle || '',
+    type: ((v.work || []).length ? v.work : (v.scope || []))[0] || '', types: (v.work || []).length ? v.work : (v.scope || []), techs: v.techs || [], vehicle: v.vehicle || '',
     equipment: v.equipment || [], scope: v.scope || [], notes: v.notes || '', jobStatus: 'scheduled' };
 }
 function startChecklistFromCrm(idx) {
@@ -3679,7 +3679,7 @@ async function loadAllSettings() {
       try {
         const val = JSON.parse(row.value);
         const str = typeof val === 'string' ? val : JSON.stringify(val);
-        if (['kt_company','kt_pin','kt_autolock','kt_techsched_enabled','kt_wh_lang'].includes(row.key)) localStorage.setItem(row.key, str);
+        if (['kt_company','kt_pin','kt_autolock','kt_crm_topack','kt_wh_lang'].includes(row.key)) localStorage.setItem(row.key, str);
         else localStorage.setItem(row.key, JSON.stringify(val));
       } catch(e) {}
     });
@@ -3760,8 +3760,8 @@ function setWarehouseLang(lang) {
 
 function settingsSaveTechSched() {
   const enabled = document.getElementById('s-techsched-enabled').checked;
-  localStorage.setItem('kt_techsched_enabled', enabled ? '1' : '0');
-  syncSettingToSupabase('kt_techsched_enabled', enabled ? '1' : '0');
+  localStorage.setItem('kt_crm_topack', enabled ? '1' : '0');
+  syncSettingToSupabase('kt_crm_topack', enabled ? '1' : '0');
   renderScheduledJobsPanel();
 }
 
@@ -3967,7 +3967,7 @@ function openSettings() {
     const company = document.getElementById('s-company');
     if (company) company.value = getCompanyName();
     const tsToggle = document.getElementById('s-techsched-enabled');
-    if (tsToggle) tsToggle.checked = localStorage.getItem('kt_techsched_enabled') !== '0';
+    if (tsToggle) tsToggle.checked = localStorage.getItem('kt_crm_topack') !== '0';
     applyWarehouseLang();
     renderPrefixList();
     renderVehiclesList();
@@ -7762,7 +7762,15 @@ const JOB_TYPE_MAP = {
   'ground pressure washing': 'Pressure Washing',
   'rope access': 'Rope Access',
 };
-function mapJobType(type) { return JOB_TYPE_MAP[(type||'').toLowerCase().trim()] || ''; }
+function mapJobType(type) {
+  const t = (type||'').toLowerCase().trim(); if (JOB_TYPE_MAP[t]) return JOB_TYPE_MAP[t];
+  // CRM jobs send the scope of work ("Pressure washing - parking structure"): match by key words
+  if (/bosun|swing stage|boom lift/.test(t)) return 'Bosun Chair';
+  if (/rope access/.test(t)) return 'Rope Access';
+  if (/window/.test(t)) return 'Window Cleaning';
+  if (/pressure|power wash/.test(t)) return 'Pressure Washing';
+  return '';
+}
 
 function parseFirestoreDoc(doc) {
   const f = doc.fields || {};

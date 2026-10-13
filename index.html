@@ -3274,7 +3274,7 @@ function renderSettings(){
       <div class="note">The warehouse tablet signs in to the <b>Warehouse</b> tab with this email and its password (create it once in Supabase → Authentication → Add user). It can use the warehouse and read upcoming jobs: no prices, proposals, clients or money. The office team doesn't need to be listed here.</div>
       ${role()==='Owner'?`<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" id="whCopy">Copy data from the old KitTracker</button></div><div id="whCopyMsg" class="note" style="margin:4px 0 0"></div>`:''}</div>`:''}
     ${ta('s-crew','Crew', crew().map(c=>c.filter((x,i)=>i<2||x).join(' | ')).join('\n'), 'Name | email | es or en (the language of their schedule email). One tech per line. Emails stay in the database, not on any page.')}
-    ${ta('s-work','Work types (schedule)', workTypes().join('\n'), 'One per line. Ticked on each visit and listed in the crew email.')}
+    ${ta('s-esterms','Spanish words for crew emails', (S.esTerms||[]).join('\n'), 'English | Español, one per line (e.g. "Loading dock | Andén de carga"). The scope of work is translated with these plus the built-in list for techs who get their schedule in Spanish.')}
     ${ta('s-equip','Equipment (schedule)', equipList().join('\n'), 'One per line.')}
     ${ta('s-veh','Vehicles', (S.vehicles||[]).join('\n'), 'One per line, e.g. Truck 1 (white F-250). Leave empty if you don\'t assign vehicles.')}
     ${ta('s-svc','Services', lines(S.services), 'One per line.')}
@@ -3420,7 +3420,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
       reportAppUrl:/hooks\.zapier\.com/i.test($('#s-rpt').value)?'':$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, priceIncrease:(num($('#s-pinc').value)??5)/100, expiryDays:Number($('#s-exp').value)||90,
-      crew:L('s-crew').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, b||'', /^es/i.test(c||'')?'es':'en']; }).filter(c=>c[0]), workTypes:L('s-work'), equipment:L('s-equip'), vehicles:L('s-veh'),
+      crew:L('s-crew').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, b||'', /^es/i.test(c||'')?'es':'en']; }).filter(c=>c[0]), esTerms:L('s-esterms').filter(l=>l.includes('|')), equipment:L('s-equip'), vehicles:L('s-veh'),
       invoice:{ terms:Math.max(0,Math.round(num($('#s-invterms').value)??30)), message:$('#s-invmsg').value.trim(), footer:$('#s-invfoot').value.trim(), address:$('#s-invaddr').value.trim(), phone:$('#s-invphone').value.trim(), email:$('#s-invemail').value.trim(), website:$('#s-invweb').value.trim(), license:$('#s-invlic').value.trim() } };
     const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
     if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
@@ -3554,7 +3554,7 @@ function visEdit(v, opts={}){
       <label class="f">Start time<input type="time" name="start_time" value="${esc(v.start_time||'')}" ${dis}></label><label class="f">End time<input type="time" name="end_time" value="${esc(v.end_time||'')}" ${dis}></label>
     </div>
     <div class="f"><b>Techs</b>${checks('techs', crew().map(c=>c[0]), v.techs||[])}</div>
-    ${v.kind==='event'?'':`<div class="f"><b>Work</b>${checks('work', [...new Set([...workTypes(), ...(v.work||[])])], v.work||[])}</div>`}
+
     <div class="f"><b>Equipment</b>${checks('equipment', [...new Set([...equipList(), ...(v.equipment||[])])], v.equipment||[])}</div>
     <div class="grid2">${(S.vehicles||[]).length?`<label class="f">Vehicle<select name="vehicle" ${dis}><option value="">—</option>${S.vehicles.map(x=>`<option ${x===v.vehicle?'selected':''}>${esc(x)}</option>`).join('')}</select></label>`:''}
       <label class="f">Status<select name="status" ${dis}>${['Scheduled','Done','Skipped','Cancelled'].map(x=>`<option ${x===v.status?'selected':''}>${x}</option>`).join('')}</select></label></div>
@@ -3590,7 +3590,7 @@ function visEdit(v, opts={}){
       if(isRecurring(j) && f('preset')){ const r=ruleFromJob(j, f('visit_date').value); f('preset').value='custom'; d.querySelector('.vcustom').hidden=false; d.querySelector('.vends').hidden=false; f('every').value=r.every; f('unit').value=r.unit; d.querySelector('.vmon').hidden=r.unit!=='month'; } } } });
   const collect=()=>{ const row={visit_date:f('visit_date').value, end_date:f('end_date').value||null, start_time:f('start_time').value||null, end_time:f('end_time').value||null, techs:all('techs'), equipment:all('equipment'),
       notes:f('notes').value.trim()||null, office_notes:f('office_notes').value.trim()||null, status:f('status').value, vehicle:f('vehicle')?.value||null, skip_weekends:f('skip_weekends').checked};
-    if(v.kind==='event'){ row.title=f('title').value.trim(); row.kind='event'; } else { row.work=all('work'); row.num=v.id?v.num:(f('num').value||null); const j=row.num&&P.find(x=>x.num===row.num); row.client=j?j.client:v.client; row.title=j?j.property:v.title; row.address=j?(j.siteAddress||j.property):v.address; }
+    if(v.kind==='event'){ row.title=f('title').value.trim(); row.kind='event'; } else { row.work=v.work||[]; row.num=v.id?v.num:(f('num').value||null); const j=row.num&&P.find(x=>x.num===row.num); row.client=j?j.client:v.client; row.title=j?j.property:v.title; row.address=j?(j.siteAddress||j.property):v.address; }
     if(row.end_date && row.end_date<=row.visit_date) row.end_date=null; return row; };
   const repeatOf=()=>{ if(!f('preset') || !f('preset').value) return null; const pr=f('preset').value, mode=d.querySelector('[name="mode"]:checked')?.value||'nth', ends=d.querySelector('[name="ends"]:checked')?.value||'never';
     const rule = pr!=='custom' ? presetRule(pr, f('visit_date').value) : {every:Math.max(1,Number(f('every').value)||1), unit:f('unit').value, mode, nth:Number(f('nth').value), weekday:Number(f('weekday').value), day:Number(f('day').value)||parse(f('visit_date').value).getDate()};
@@ -3637,14 +3637,38 @@ async function endSeriesFrom(ser, date){
   const {data}=await sb.from('visits').select('id,status,occ_date,visit_date').eq('series_id',ser.id); const gone=(data||[]).filter(x=>(x.occ_date||x.visit_date)>=date && x.status!=='Done').map(x=>x.id);
   for(let i=0;i<gone.length;i+=100) await sb.from('visits').delete().in('id',gone.slice(i,i+100));
 }
+// ---- Spanish for the scope of work (crew emails): phrases first, then single words; Settings adds more ----
+const ES_TERMS=[['interior & exterior window cleaning','limpieza de ventanas interior y exterior'],['interior and exterior window cleaning','limpieza de ventanas interior y exterior'],
+ ['exterior window cleaning','limpieza de ventanas exterior'],['interior window cleaning','limpieza de ventanas interior'],['window cleaning','limpieza de ventanas'],['window washing','lavado de ventanas'],
+ ['ground pressure washing','lavado a presión (planta baja)'],['pressure washing','lavado a presión'],['power washing','lavado a presión'],['pressure wash','lavar a presión'],
+ ['solar panel cleaning','limpieza de paneles solares'],['solar panels','paneles solares'],['gutter cleaning','limpieza de canaletas'],['graffiti removal','remoción de grafiti'],
+ ['high dusting','limpieza de polvo en alturas'],['parking structure','estructura de estacionamiento'],['parking garage','garaje de estacionamiento'],['parking lot','estacionamiento'],
+ ['trash enclosure','área de basura'],['trash area','área de basura'],['loading dock','andén de carga'],['all elevations','todas las fachadas'],['all sides','todos los lados'],
+ ['swing stage','andamio colgante (swing stage)'],['boom lift','grúa elevadora (boom lift)'],['scissor lift','elevador de tijera'],['bosun chair','silla de contramaestre (bosun chair)'],['rope access','acceso con cuerdas'],
+ ['common areas','áreas comunes'],['entry doors','puertas de entrada'],['front entrance','entrada principal'],['roll-up door','puerta enrollable'],['roll up door','puerta enrollable'],['door closer','cierrapuertas'],['electric strike','cerradura eléctrica'],
+ ['window','ventana'],['windows','ventanas'],['glass','vidrio'],['frames','marcos'],['screens','mallas'],['skylights','tragaluces'],['skylight','tragaluz'],['awnings','toldos'],['canopy','marquesina'],['canopies','marquesinas'],
+ ['sidewalks','banquetas'],['sidewalk','banqueta'],['walkways','pasillos'],['courtyard','patio'],['plaza','plaza'],['entrance','entrada'],['entrances','entradas'],['entry','entrada'],['lobby','vestíbulo'],['storefront','escaparate'],['storefronts','escaparates'],
+ ['stairwells','escaleras'],['stairs','escaleras'],['elevator','elevador'],['elevators','elevadores'],['balconies','balcones'],['railings','barandales'],['roof','techo'],['walls','paredes'],['wall','pared'],['floors','pisos'],['floor','piso'],['levels','niveles'],['level','nivel'],
+ ['signage','letreros'],['signs','letreros'],['gutters','canaletas'],['dumpster','contenedor de basura'],['carpet','alfombra'],['restrooms','baños'],['restroom','baño'],['offices','oficinas'],['office','oficina'],['building','edificio'],['buildings','edificios'],
+ ['cleaning','limpieza'],['clean','limpiar'],['washing','lavado'],['wash','lavar'],['exterior','exterior'],['interior','interior'],['inside','adentro'],['outside','afuera'],['only','solamente'],['and','y'],['with','con'],['of','de'],
+ ['monthly','mensual'],['quarterly','trimestral'],['weekly','semanal'],['annual','anual'],['yearly','anual'],['first floor','primer piso'],['ground floor','planta baja'],['north','norte'],['south','sur'],['east','este'],['west','oeste'],['side','lado'],['front','frente'],['back','parte trasera'],['rear','parte trasera']];
+function toEs(text){
+  const own=(S.esTerms||[]).map(l=>l.split('|').map(x=>x.trim())).filter(x=>x[0]&&x[1]);
+  const all=[...own, ...ES_TERMS].sort((a,b)=>b[0].length-a[0].length);
+  const esc2=x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const re=new RegExp('\\b('+all.map(x=>esc2(x[0])).join('|')+')\\b','gi'), map=new Map(all.map(x=>[x[0].toLowerCase(),x[1]]));
+  const out=String(text||'').replace(re, m=>map.get(m.toLowerCase())||m);
+  return out.charAt(0).toUpperCase()+out.slice(1);
+}
+window.pfbsToEs=toEs;   // used by the tests
 // ---- crew emails (same wording as TechSched) ----
 const crewOf = n => crew().find(c=>c[0]===n) || [n,'','en'];
 function visMailText(v, tech, lang){ const t=I18[lang], dts=dLong(v.visit_date,lang)+(v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang)+(v.skip_weekends?` (${t.weekdays})`:''):'');
   const team=(v.techs||[]).filter(x=>x!==tech), addr=String(v.address||'').replace(/\n/g,', ');
   const L=[...(v.job_no?[`${t.job}: ${v.job_no}`]:[]), `${t.when}: ${dts}`, `${t.time}: ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)}`, `${t.address}: ${addr}`];
-  if(team.length) L.push(`${t.team}: ${team.join(', ')}`); if((v.work||[]).length) L.push(`${t.work}: ${v.work.map(x=>lang==='es'?(WORK_ES[x]||x):x).join(', ')}`);
+  if(team.length) L.push(`${t.team}: ${team.join(', ')}`);
   if((v.equipment||[]).length) L.push(`${t.equipment}: ${v.equipment.map(x=>lang==='es'?(EQUIP_ES[x]||x):x).join(', ')}`); if(v.vehicle) L.push(`${t.vehicle}: ${v.vehicle}`); if(v.notes) L.push(`${t.notes}: ${v.notes}`);
-  const sc=scopeLines(visJob(v)); if(sc.length) L.push('', `${t.scope}:`, ...sc.map(x=>'- '+x));
+  const sc=scopeLines(visJob(v)).map(x=>lang==='es'?toEs(x):x); if(sc.length) L.push('', `${t.scope}:`, ...sc.map(x=>'- '+x));
   L.push('', t.questions, '', t.thanks, 'PFBS');
   return {subject:(lang==='es'?'Detalles del trabajo':'Job details')+` — ${addr.split(',')[0]} — ${fmtD(v.visit_date)}`, body:L.join('\n')}; }
 function weekText(tech, monday, lang){ const t=I18[lang], sun=addDays(monday,6), first=tech.split(' ')[0];
@@ -3653,8 +3677,8 @@ function weekText(tech, monday, lang){ const t=I18[lang], sun=addDays(monday,6),
   const out=[`${lang==='es'?'Hola':'Hi'} ${first},`, '', `${t.yourSchedule}, ${t.weekOf} ${dLong(monday,lang)}:`, ''];
   for(const v of L){ const team=(v.techs||[]).filter(x=>x!==tech), addr=String(v.address||'').replace(/\n/g,', ');
     out.push(`${dLong(v.visit_date,lang)}${v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang)+(v.skip_weekends?` (${t.weekdays})`:''):''}${v.job_no?` — ${t.job} ${v.job_no}`:''}`, `  ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)} — ${v.kind==='event'?(v.title||''):addr}`);
-    if(team.length) out.push(`  ${t.team}: ${team.join(', ')}`); if((v.work||[]).length) out.push(`  ${t.work}: ${v.work.map(x=>lang==='es'?(WORK_ES[x]||x):x).join(', ')}`);
-    if((v.equipment||[]).length) out.push(`  ${t.equipment}: ${v.equipment.map(x=>lang==='es'?(EQUIP_ES[x]||x):x).join(', ')}`); if(v.vehicle) out.push(`  ${t.vehicle}: ${v.vehicle}`); if(v.notes) out.push(`  ${t.notes}: ${v.notes}`); const sc=scopeLines(visJob(v)); if(sc.length) out.push(`  ${t.scope}: ${sc.join('; ')}`); out.push(''); }
+    if(team.length) out.push(`  ${t.team}: ${team.join(', ')}`);
+    if((v.equipment||[]).length) out.push(`  ${t.equipment}: ${v.equipment.map(x=>lang==='es'?(EQUIP_ES[x]||x):x).join(', ')}`); if(v.vehicle) out.push(`  ${t.vehicle}: ${v.vehicle}`); if(v.notes) out.push(`  ${t.notes}: ${v.notes}`); const sc=scopeLines(visJob(v)).map(x=>lang==='es'?toEs(x):x); if(sc.length) out.push(`  ${t.scope}: ${sc.join('; ')}`); out.push(''); }
   out.push(t.questions, '', t.thanks, 'PFBS');
   return {subject:`${t.yourSchedule} — ${first} — ${t.weekOf} ${fmtD(monday)}`, body:out.join('\n'), n:L.length}; }
 function mailBox(title, to, txt, relang){ const d=document.createElement('dialog'); d.className='ask';

@@ -208,7 +208,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.fill('dialog.ask [name="mon"]', '2026-11-02'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(300);
   await pg.click('dialog.ask [data-t="Rigo Perez"]'); await pg.waitForSelector('#cmBody', T);
   const es = await pg.$eval('#cmBody', e => e.value);
-  assert.ok(es.startsWith('Hola Rigo,') && /martes, 3 de noviembre de 2026/.test(es) && /300 Demo Ave, Oakland, CA 94612/.test(es) && /Equipo|Trabajo|Limpieza/.test(es), 'Spanish weekly email for Rigo');
+  assert.ok(es.startsWith('Hola Rigo,') && /martes, 3 de noviembre de 2026/.test(es) && /300 Demo Ave, Oakland, CA 94612/.test(es) && /Equipo|Trabajo|Limpieza|Alcance del trabajo/.test(es) && !/Exterior window|Window Cleaning/.test(es), 'Spanish weekly email for Rigo');
   assert.equal(await pg.$eval('#cmTo', e => e.value), 'rigo@example.com');
   await pg.click('dialog.ask [data-l="en"]'); assert.ok((await pg.$eval('#cmBody', e => e.value)).startsWith('Hi Rigo,'), 'switch to English');
   await pg.locator('dialog.ask').last().locator('[data-a="x"]').click(); await pg.click('dialog.ask [data-t="Ana Tech"]'); await pg.waitForTimeout(200);
@@ -390,6 +390,8 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.ok(await p3.$('#whTab:not([hidden])'), 'Warehouse tab in the CRM menu');
   await p3.click('[data-hopen="PFBS-0998"]'); await p3.waitForSelector('.jflow', T);
   assert.match(await p3.textContent('#jfBox'), /Kit packed/, 'kit status on the job');
+  assert.equal(await p3.evaluate(() => pfbsToEs('Pressure washing - parking structure')), 'Lavado a presión - estructura de estacionamiento', 'scope in Spanish');
+  assert.equal(await p3.evaluate(() => pfbsToEs('Window Cleaning')), 'Limpieza de ventanas');
   await p3.close();
 }
 
