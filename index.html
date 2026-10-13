@@ -1277,6 +1277,7 @@ function renderHome(){
       ${kpi('board', col('To invoice').length, 'Done, to invoice', col('To invoice').length?'bad':'')}
       ${OPENINV?kpi('money', usd(due).replace(/\.\d\d$/,''), `Owed · ${OI.length} open invoice${OI.length===1?'':'s'}${od.length?` · <b class="bad">${usd(odAmt).replace(/\.\d\d$/,'')} past due</b>`:''}`):''}
       ${kpi('orders', nsr, 'Service reports to send', nsr?'bad':'')}
+      ${MINV.length?(n=>kpi('money', n, 'Payment reminders to send', n?'bad':''))(MINV.filter(v=>remDue(v)!=null).length):''}
       ${leads.length?kpi('leads', leads.length, 'New leads'):''}
     </div>
     <div class="card" id="hBoard"><h3>Jobs</h3><div class="board">${BOARD.map(k=>{ const L=col(k); return `<div class="bcol"><h4>${k}<span class="c">${L.length}</span></h4>${L.slice(0,12).map(card).join('')||'<div class="bmore">None</div>'}${L.length>12?`<div class="bmore">+${L.length-12} more on the Jobs tab</div>`:''}</div>`; }).join('')}</div>
@@ -2147,6 +2148,34 @@ function invEmail(v,p){ const n=v.inv_no, place=invPlace(v,p), em=String(v.bill_
   return { to:String(v.bill_to?.email||'').split(/[;,\s]+/).filter(Boolean).join('; '),
     subject:`Invoice #${n} from PF Building Services – ${place}${(()=>{ const pos=v.po_number?[v.po_number]:[...new Set((v.items||[]).map(i=>i.po).filter(Boolean))]; return pos.length?` (PO ${pos.slice(0,3).join(', ')}${pos.length>3?'…':''})`:''; })()}`,
     body:`${first?`Hi ${first},`:'Hello,'}\n\nAttached is invoice #${n} for ${place}. Please let me know if you have any questions.\n\nThank you for your business.` }; }
+// ---- payment reminders (update 029): which one is due today, the email, and a record of what was sent ----
+const remDays = () => { const r=S.invoice&&Array.isArray(S.invoice.reminders)?S.invoice.reminders:null; return r&&r.length?r:[-3,0,7,14,30]; };
+function remDue(v){ if(v.status!=='Sent' || invBal(v)<=0.004 || !invDue(v)) return null;
+  const late=daysLate(v), steps=remDays().filter(d=>late>=d); if(!steps.length) return null;
+  const cur=steps[steps.length-1], last=Math.max(-Infinity, ...(v.reminders||[]).map(x=>Number(x.day)));
+  return last>=cur ? null : cur; }   // only the latest step that's due, and never one already covered
+function remEmail(v,p,day){ const e=invEmail(v,p), late=daysLate(v), dd=fmtD(invDue(v)), place=invPlace(v,p);
+  const when = late<0 ? `is due on ${dd}` : late===0 ? `is due today (${dd})` : `was due on ${dd} and is now ${late} day${late===1?'':'s'} past due`;
+  return {to:e.to, subject:`${late>0?'Past due':'Payment reminder'}: invoice #${v.inv_no} – ${place}`,
+    body:`${e.body.split('\n')[0]}\n\nThis is a friendly reminder that invoice #${v.inv_no} for ${place}, balance ${usd(invBal(v))}, ${when}. A copy is attached.\n\nWe accept checks and ACH. If payment is already on its way, please disregard this message.\n\nThank you.`}; }
+async function remindBox(v, day){
+  const p=P.find(x=>x.num===v.num) || moneyPseudo(v), e=remEmail(v,p,day);
+  if(!String(e.to).includes('@')){ toast('This invoice has no billing email. Open it and add one.'); return; }
+  const doc=await makeInvoicePdf(v,p); if(doc) doc.save(invFile(v,p));
+  const d=document.createElement('dialog'); d.className='ask';
+  d.innerHTML=`<h3>Reminder: invoice #${esc(v.inv_no)}</h3><div class="note" style="margin:0 0 8px">The PDF just downloaded. Attach it, then send.</div>
+    <label class="f">To<input id="rmTo" value="${esc(e.to)}"></label><label class="f">Subject<input id="rmSubj" value="${esc(e.subject)}"></label>
+    <label class="f">Message<textarea id="rmBody" rows="8">${esc(e.body)}</textarea></label>
+    <div class="toolbar" style="flex-wrap:wrap"><button type="button" class="btn ghost" data-a="x">Close</button><span style="flex:1"></span><button type="button" class="btn ghost" data-a="mail">Mail app</button><button type="button" class="btn" data-a="owa">Open in Outlook</button></div>`;
+  document.body.appendChild(d); const close=()=>{ d.close(); d.remove(); }; d.addEventListener('cancel', ev=>{ ev.preventDefault(); close(); });
+  d.addEventListener('click', async ev=>{ const a=ev.target.closest('[data-a]')?.dataset.a; if(!a) return; if(a==='x') return close();
+    const to=$('#rmTo').value.trim(), s=$('#rmSubj').value, m=$('#rmBody').value, enc=encodeURIComponent;
+    if(a==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(s)}&body=${enc(m)}`,'_blank','noopener'); else location.href=`mailto:${enc(to)}?subject=${enc(s)}&body=${enc(m)}`;
+    const rem=[...(v.reminders||[]), {day, at:new Date().toISOString(), to, by:me.name}];
+    const {error}=await sb.from('invoices').update({reminders:rem}).eq('id',v.id); if(error){ toast(/reminders/.test(error.message)?'Run database update 029 in Supabase first.':error.message); return; }
+    v.reminders=rem; if(v.num) await addActivity(v.num,'note',`Payment reminder for invoice #${v.inv_no} emailed to ${to}`);
+    close(); toast('Reminder recorded'); renderAll(); });
+  d.showModal(); }
 async function makeInvoicePdf(v, p){
   if(!window.jspdf){ toast('PDF tools did not load. Check your connection and reload.'); return null; }
   const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), L0=56, R0=556, logo=await logoData(), GRAY=[110,110,110];
@@ -3264,6 +3293,7 @@ function renderSettings(){
       <label class="f">Payment terms (days)<input id="s-invterms" type="number" value="${esc(invS('terms'))}" ${ro}></label>
       <label class="f">Message on every invoice<textarea id="s-invmsg" rows="2" ${ro}>${esc(invS('message'))}</textarea></label>
       <label class="f">Terms at the bottom<textarea id="s-invfoot" rows="3" ${ro}>${esc(invS('footer'))}</textarea></label>
+      <label class="f">Payment reminders <span class="note" style="margin:0;font-weight:400">days from the due date: -3 = 3 days before, 0 = on the due date, 7 = a week late</span><input id="s-invrem" value="${esc(remDays().join(', '))}" ${ro}></label>
       <label class="f">"Contact us" address<textarea id="s-invaddr" rows="2" ${ro}>${esc(invS('address'))}</textarea></label>
       <div class="grid2"><label class="f">Phone<input id="s-invphone" value="${esc(invS('phone'))}" ${ro}></label><label class="f">Email<input id="s-invemail" value="${esc(invS('email'))}" ${ro}></label>
       <label class="f">Website<input id="s-invweb" value="${esc(invS('website'))}" ${ro}></label><label class="f">License #<input id="s-invlic" value="${esc(invS('license'))}" ${ro}></label></div></div>
@@ -3425,7 +3455,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
       reportAppUrl:/hooks\.zapier\.com/i.test($('#s-rpt').value)?'':$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, priceIncrease:(num($('#s-pinc').value)??5)/100, expiryDays:Number($('#s-exp').value)||90,
       crew:L('s-crew').map(l=>{ const [a,b,c,dd]=l.split('|').map(x=>x.trim()); return [a, b||'', /^es/i.test(c||'')?'es':'en', String(dd||'').split(',').map(x=>x.trim()).filter(Boolean)]; }).filter(c=>c[0]), skillOptions:L('s-skills'), esTerms:L('s-esterms').filter(l=>l.includes('|')), equipment:L('s-equip'), vehicles:L('s-veh'),
-      invoice:{ terms:Math.max(0,Math.round(num($('#s-invterms').value)??30)), message:$('#s-invmsg').value.trim(), footer:$('#s-invfoot').value.trim(), address:$('#s-invaddr').value.trim(), phone:$('#s-invphone').value.trim(), email:$('#s-invemail').value.trim(), website:$('#s-invweb').value.trim(), license:$('#s-invlic').value.trim() } };
+      invoice:{ reminders:String($('#s-invrem').value||'').split(/[,\s]+/).map(Number).filter(n=>Number.isFinite(n)).sort((a,b)=>a-b), terms:Math.max(0,Math.round(num($('#s-invterms').value)??30)), message:$('#s-invmsg').value.trim(), footer:$('#s-invfoot').value.trim(), address:$('#s-invaddr').value.trim(), phone:$('#s-invphone').value.trim(), email:$('#s-invemail').value.trim(), website:$('#s-invweb').value.trim(), license:$('#s-invlic').value.trim() } };
     const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
     if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
   }
@@ -3856,7 +3886,7 @@ const canMoney = () => isManager() || role()==='Accountant';
 async function loadMoney(){
   if(!canMoney()) return;
   const [a,b]=await Promise.all([sb.from('invoices').select('*').order('inv_no',{ascending:false}), sb.from('invoice_payments').select('*').order('id',{ascending:false})]);
-  if(a.error){ MOK=!invMissing(a.error); MINV=[]; MPAY=[]; } else { MOK=true; MINV=a.data||[]; MPAY=b.data||[]; }
+  if(a.error){ MOK=!invMissing(a.error); MINV=[]; MPAY=[]; } else { MOK=true; MINV=a.data||[]; MPAY=b.data||[]; } if(current()==='home') renderHome();
   if(current()==='money') renderMoney();
 }
 const daysLate = v => { const d=invDue(v); return d ? Math.round((today()-parse(d))/864e5) : 0; };
@@ -3885,6 +3915,11 @@ function renderMoney(){
       ${rowsC.map(([n,a,t])=>`<tr><td class="wrap">${esc(n)}</td>${a.map((x,i)=>`<td class="r num ${i>=3&&x?'down':''}">${x?usd(x):''}</td>`).join('')}<td class="r num"><b>${usd(t)}</b></td></tr>`).join('') || `<tr><td colspan="7" class="empty">Nothing owed.</td></tr>`}
       ${rowsC.length?`<tr><td><b>Total</b></td>${colT.map(x=>`<td class="r num"><b>${x?usd(x):''}</b></td>`).join('')}<td class="r num"><b>${usd(tot)}</b></td></tr>`:''}</tbody></table></div>
       <div class="note">Days past each invoice's due date. Click a client's invoices below to record a payment.</div></div>
+    ${(()=>{ const R=MINV.map(v=>({v, day:remDue(v)})).filter(x=>x.day!=null).sort((a,b)=>daysLate(b.v)-daysLate(a.v));
+      return `<div class="card"><h3>Payment reminders to send (${R.length})</h3>${R.length?`<div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Client</th><th>Due</th><th class="r">Balance</th><th>Reminder</th><th></th></tr></thead><tbody>${R.map(({v,day})=>{ const late=daysLate(v); return `<tr><td class="num"><b>#${esc(v.inv_no)}</b></td><td class="wrap">${esc(invName(v))}</td><td class="num">${fmtD(invDue(v))}</td><td class="r num">${usd(invBal(v))}</td>
+        <td><span class="flag ${late>0?'bad':'warn'}">${late<0?`due in ${-late}d`:late===0?'due today':`${late}d late`}</span>${(v.reminders||[]).length?`<div class="note" style="margin:0">${v.reminders.length} sent, last ${fmtD(v.reminders[v.reminders.length-1].at)}</div>`:''}</td>
+        <td>${canMoney()?`<button type="button" class="btn small" data-mrem="${esc(v.id)}" data-day="${day}">Email reminder</button>`:''}</td></tr>`; }).join('')}</tbody></table></div>`:'<div class="note" style="margin:0">No reminders due today.</div>'}
+        <div class="note">Schedule: ${remDays().map(d=>d<0?`${-d} days before`:d===0?'on the due date':`${d} days late`).join(', ')} (Settings → Invoicing). Each one shows once; sending marks it done.</div></div>`; })()}
     <div class="card"><h3>Find an invoice</h3><input id="mFind" type="search" placeholder="Invoice #, client or job #" value="${esc(mFind)}" style="margin:0 0 8px"><div id="mFindL">${findInvHTML()}</div></div>
     <div class="card"><h3>Open invoices (${open.length})</h3><div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Client</th><th class="hide-sm">Job</th><th>Due</th><th class="r">Late</th><th class="r">Balance</th><th></th></tr></thead><tbody>
       ${open.sort((a,b)=>String(invDue(a)).localeCompare(String(invDue(b)))).map(v=>{ const d=daysLate(v); return `<tr><td class="num"><b>#${esc(v.inv_no)}</b>${v.source==='hcp'?'<div class="note" style="margin:0">from HCP</div>':''}</td><td class="wrap">${esc(invName(v))}</td><td class="hide-sm num">${esc(v.job_no||v.num||'')}</td><td class="num">${fmtD(invDue(v))}</td>
@@ -3964,6 +3999,7 @@ $('#schedBody').addEventListener('click', e=>{ const t=e.target;
 $('#moneyBody').addEventListener('input', e=>{ if(e.target.id==='mFind'){ mFind=e.target.value; $('#mFindL').innerHTML=findInvHTML(); } });
 $('#moneyBody').addEventListener('change', e=>{ if(e.target.id==='mMonth'){ mMonth=e.target.value||iso(today()).slice(0,7); renderMoney(); } });
 $('#moneyBody').addEventListener('click', async e=>{ const t=e.target;
+  const rb=t.closest('[data-mrem]'); if(rb){ const v=MINV.find(x=>x.id===rb.dataset.mrem); if(v) await remindBox(v, Number(rb.dataset.day)); return; }
   const pb=t.closest('[data-mpay]'); if(pb){ const v=MINV.find(x=>x.id===pb.dataset.mpay); if(v && await invPay(v)){ await loadMoney(); loadOpenInvoices(); if(isManager()) loadProposals(); } return; }
   const ob=t.closest('[data-mopen]'); if(ob){ const v=MINV.find(x=>x.id===ob.dataset.mopen); if(!v) return; const pays=MPAY.filter(x=>x.invoice_id===v.id); invEdit(moneyPseudo(v), {...v, payments:pays}); return; }
   const db=t.closest('[data-dep]'); if(db){ const id=db.dataset.dep, d=document.querySelector(`[data-depd="${id}"]`)?.value||iso(today()); db.disabled=true; const {error}=await sb.from('invoice_payments').update({deposited_on:d}).eq('id',id); if(error){ db.disabled=false; toast(error.message); return; } toast('Marked deposited'); loadMoney(); return; }

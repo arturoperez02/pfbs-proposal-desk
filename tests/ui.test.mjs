@@ -487,6 +487,26 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 20. Payment reminders: due by the schedule, email opens, sending records it
+{
+  const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const inv = [{ id: 'r1', inv_no: 1600, num: null, status: 'Sent', invoice_date: day(-40), terms_days: 30, due_date: day(-10), total: 500, paid: 0, bill_to: { name: 'Late Payer Co', email: 'ap@late.example' }, items: [{ description: 'Windows', amount: 500 }], reminders: [] },
+               { id: 'r2', inv_no: 1601, num: null, status: 'Sent', invoice_date: day(-5), terms_days: 30, due_date: day(25), total: 300, paid: 0, bill_to: { name: 'Early Co', email: 'ap@early.example' }, items: [{ description: 'Windows', amount: 300 }], reminders: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('reminders: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_INV = x; sessionStorage.clear(); window.open = () => null; }, inv);
+  await pg.goto(BASE); await pg.waitForTimeout(800);
+  await pg.click('#tabs [data-tab="money"]'); await pg.waitForTimeout(300);
+  assert.ok(await pg.$('[data-mrem="r1"][data-day="7"]'), '10 days late → the 7-days-late reminder is due');
+  assert.equal(await pg.evaluate(() => !!document.querySelector('[data-mrem="r2"]')), false, 'not due yet → no reminder');
+  const dl = pg.waitForEvent('download', T); await pg.click('[data-mrem="r1"]'); await dl; await pg.waitForSelector('#rmBody', T);
+  assert.match(await pg.$eval('#rmBody', e => e.value), /(9|10|11) days past due/); assert.ok(!/Best regards/.test(await pg.$eval('#rmBody', e => e.value)), 'no signature');
+  await pg.click('dialog.ask [data-a="owa"]'); await pg.waitForTimeout(300);
+  assert.deepEqual(await pg.evaluate(() => DBX.invoices.find(v => v.id === 'r1').reminders.map(r => r.day)), [7], 'reminder recorded');
+  assert.equal(await pg.evaluate(() => !!document.querySelector('[data-mrem="r1"]')), false, 'and it leaves the list (earlier steps are not offered again)');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

@@ -30,5 +30,6 @@
 | 026_warehouse.sql | Run once: the warehouse (KitTracker) moves into the CRM: its tables (wh_ prefix) in this database, used by the Warehouse tab (warehouse.html) with the CRM sign-in. Managers, estimators and the warehouse tablet logins (Settings → Warehouse) can use it; the tablet still sees no proposals, clients or money. Copy the old data in from Settings → Warehouse. Needs 025. |
 | 027_techsched_import.sql | Run once: Schedule → Import from TechSched copies TechSched's upcoming jobs into the CRM schedule (linked to their CRM job when the job # or address matches). Run the import again any time to pick up new or changed jobs; TechSched is not changed. Needs 026. |
 | 028_hcp_paid_invoices.sql | Run once: the HousecallPro invoice import also brings the paid invoices in as history (amounts from the HCP Jobs export). They are not linked to CRM jobs, so they never change a job's status, date paid or commission, or count as owed. Needs 027. |
+| 029_invoice_reminders.sql | Run once: payment reminders. The Money tab (and Home) list the reminders due (before / on / after the due date, set in Settings → Invoicing) and remember which were sent. Needs 028. |
 
 Client data is never stored in this repository.
