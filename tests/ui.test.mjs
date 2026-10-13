@@ -521,6 +521,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, sj);
   await pg.goto(BASE); await pg.waitForTimeout(800);
   assert.ok(await pg.isVisible('#gq'), 'search box in the top bar');
+  assert.equal(await pg.$eval('#gq', e => getComputedStyle(e).color), 'rgb(26, 26, 26)', 'typed text is dark on the white box (was white on white)');
   await pg.keyboard.press('/'); await pg.keyboard.type('10420'); await pg.waitForSelector('#gres .gitem', T);
   assert.match(await pg.textContent('#gres'), /Job #10420 · Searchable Towers/, 'finds a job by its job #');
   await pg.fill('#gq', 'skylight'); await pg.waitForTimeout(250); assert.match(await pg.textContent('#gres'), /Searchable Towers/, 'finds by scope of work');
