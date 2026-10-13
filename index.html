@@ -921,7 +921,7 @@ function drawDrawer(){
   </div>
   <div class="dfoot"><span class="msg" id="dmsg">${ed?'':'View only'}</span>
     <button class="btn ghost" id="cancelD">Cancel</button>
-    ${isNew?'':`<button class="btn ghost" id="estPdfD">Pricing PDF</button><button class="btn ghost" id="pdfD">Download PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
+    ${isNew?'':`<button class="btn ghost" id="estPdfD">Pricing PDF</button><button class="btn ghost" id="pdfD">Preview PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
     <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save changes'}</button></div>`;
 }
 const incPct = () => S.priceIncrease ?? 0.05;
@@ -980,7 +980,21 @@ function missingForSend(p){ const m=[];
   if(num(p.gp)==null && !estimateTotals(p)) m.push('pricing (or Est. gross profit)');
   return m; }
 const SEND_STEPS=['Needs Review','Sent','Budget'];
+// approving: tick the add-ons the client signed for, so the job, invoice and commission include them (nothing to retype later)
+function confirmAddons(){ const A=(draft.items||[]).map((it,i)=>[it,i]).filter(([it])=>it.type==='Add-on'); if(!A.length) return Promise.resolve(true);
+  return new Promise(res=>{ const d=document.createElement('dialog'); d.className='ask';
+    d.innerHTML=`<h3>Which add-ons did the client accept?</h3><div class="note" style="margin:0 0 8px">Check their signed copy. Ticked add-ons go on the job, the invoice and commission.</div>
+      <div style="display:grid;gap:6px">${A.map(([it,i])=>`<label class="acc" style="margin:0"><input type="checkbox" data-ai="${i}" ${it.accepted?'checked':''}> ${esc(it.description||'Add-on')} <span class="note" style="margin:0">${money(num(it.amount))}${it.frequency?' · '+esc(it.frequency):''}</span></label>`).join('')}</div>
+      <div class="toolbar"><span style="flex:1"></span><button type="button" class="btn ghost" data-a="x">Cancel</button><button type="button" class="btn" data-a="ok">Approve</button></div>`;
+    document.body.appendChild(d); const done=v=>{ d.close(); d.remove(); res(v); };
+    d.addEventListener('cancel', e=>{ e.preventDefault(); done(false); });
+    d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='x') done(false);
+      if(a==='ok'){ for(const c of d.querySelectorAll('[data-ai]')) draft.items[+c.dataset.ai].accepted=c.checked; syncFromItems(draft); done(true); } });
+    d.showModal(); }); }
 function setStatus(st, o={}){
+  if(st==='Approved' && !o.addonsOk && draft && (draft.items||[]).some(it=>it.type==='Add-on')){ confirmAddons().then(ok=>{ if(ok) setStatus(st,{...o, addonsOk:true}); }); return; }
+  if(['Needs Review','Sent'].includes(st) && !o.pricedOk && PRELOCK.includes(draft?.status)){ const un=countedItems(draft).filter(i=>!i.estimate).map(i=>i.description||'a line');
+    if(un.length && !confirm(`Not priced yet: ${un.join(', ')}.\n\nWithout pricing on every line, gross profit and commission stay blank. Price it first? (OK = go ahead anyway)`)) return; }
   if(draft.status===st) return;
   if(SEND_STEPS.includes(st) && PRELOCK.includes(draft.status)){ syncFromItems(draft); const m=missingForSend(draft);
     if(m.length){ const msg=`Before it goes ${st==='Needs Review'?'to review':'out'}, add: ${m.join(', ')}.`;
@@ -999,7 +1013,8 @@ function setStatus(st, o={}){
 // one click: approved → job (with its job #) → schedule it
 async function convertToJob(){
   if(!draft || isNew) return; const n=draft.num;
-  setStatus('Approved', {noAsk:true}); if(draft.status!=='Approved') return;
+  if(!(await confirmAddons())) return;
+  setStatus('Approved', {noAsk:true, addonsOk:true}); if(draft.status!=='Approved') return;
   if(!JOBNO_ON && !draft.hcpJob){ const v=await askJobNo(draft); if(v) draft.hcpJob=v; }
   await save();
   const p=P.find(x=>x.num===n); if(!p || !WON.includes(p.status)) return;
@@ -2605,7 +2620,7 @@ async function ensureClient(d){
 // opening a proposal: anything left blank that the client record knows (billing address, AP email, PO#, contact) fills in. Typed values are never overwritten.
 function fillClientBlanks(){ if(!draft || !CLOK || !CL.length || isLocked?.()) return 0; const c=(draft.clientId && CL.find(x=>x.id===draft.clientId)) || clientOf(draft.client); if(!c) return 0;
   if(!draft.clientId) draft.clientId=c.id; const pr=draft.propertyId && PROPS.find(x=>x.id===draft.propertyId), pk=pr&&pr.contact_id&&CC.find(x=>x.id===pr.contact_id), k=pk||contactsOf(c.id)[0]||{};
-  const src={billAddress:c.billing_address, billingEmail:c.billing_email, poRequired:c.po_required?'true':'', contactName:k.name, contactEmail:k.email, contactPhone:k.phone, siteAddress:pr&&pr.address};
+  const src={billAddress:c.billing_address, billingEmail:c.billing_email, poRequired:c.po_required?'true':'', contactName:k.name, contactEmail:k.email, contactPhone:k.phone, siteAddress:pr&&pr.address, property:pr&&propLabel(pr)};
   let n=0; for(const [f,v] of Object.entries(src)) if(v && !String(draft[f]??'').trim()){ draft[f]=v; n++; } return n; }
 // proposal drawer: a drop-down of the client's addresses (picks property, site address and the property's contact in one go)
 const propOpt = x => { const L=String(x.address||'').split('\n').map(t=>t.trim()).filter(Boolean), cn=(CL.find(c=>c.id===x.client_id)||{}).name, nm=x.name&&norm(x.name)!==norm(L[0]||'')&&norm(x.name)!==norm(cn||'')?x.name+' — ':''; return nm+L.join(', '); };
@@ -2919,8 +2934,12 @@ async function makePdf(p, o={}){
     clar.forEach((c,i)=>{ const ls=doc.splitTextToSize(`${i+1}. ${c}`,W); if(y+ls.length*10>740){ doc.addPage(); y=60; } doc.text(ls,L0,y); y+=ls.length*10+2; });
     y+=12;
   }
+  if(y>720){ doc.addPage(); y=60; }
+  doc.setDrawColor(190); doc.setLineWidth(0.7); doc.rect(L0,y,W,22); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
+  doc.text('WINDOW WASHING  •  PRESSURE WASHING  •  SOLAR PANEL CLEANING  •  JANITORIAL SERVICES  •  GATES & DOORS',306,y+14,{align:'center'});
   const photos=(p.photos||[]).filter(x=>x&&x.path);
-  if(photos.length){
+  if(photos.length){   // site photos get their own page (page 2), before the terms
+    doc.addPage(); if(logo) doc.addImage(logo,'JPEG',51,28,142,33); y=80; doc.setTextColor(0);
     let first=true;
     for(const ph of photos){ const d=await photoData(ph.path); if(!d) continue;
       const maxH=330, w=Math.min(W, d.w*(maxH/d.h)), h=w*d.h/d.w, cap=ph.caption?doc.splitTextToSize(ph.caption,W):[];
@@ -2930,9 +2949,6 @@ async function makePdf(p, o={}){
       if(cap.length){ doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(60); doc.text(cap,L0,y+8); y+=cap.length*10+4; }
       y+=12; doc.setTextColor(0); }
   }
-  if(y>720){ doc.addPage(); y=60; }
-  doc.setDrawColor(190); doc.setLineWidth(0.7); doc.rect(L0,y,W,22); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
-  doc.text('WINDOW WASHING  •  PRESSURE WASHING  •  SOLAR PANEL CLEANING  •  JANITORIAL SERVICES  •  GATES & DOORS',306,y+14,{align:'center'});
   // terms page
   doc.addPage(); if(logo) doc.addImage(logo,'JPEG',51,28,142,33);
   doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(...NAVY); doc.text('PF BUILDING SERVICES — TERMS AND CONDITIONS',51,72);

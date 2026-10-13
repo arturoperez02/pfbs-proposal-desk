@@ -699,6 +699,27 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 28. Approving asks which add-ons the client accepted; going out with unpriced lines warns first
+{
+  const pr = { num: 'PFBS-1013', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Addon Co', status: 'Sent', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: 500 }, { type: 'Add-on', qty: 1, description: 'Carport solar', amount: 4600 }] };
+  const dr = { num: 'PFBS-1014', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Draft Co', status: 'Estimating', items: [{ type: 'Base', qty: 1, description: 'Gutters', amount: 300 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('add-ons: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = x; }, [pr, dr]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.click('tr[data-id="PFBS-1013"]'); await pg.waitForSelector('#convJob', T);
+  await pg.click('#convJob'); await pg.waitForSelector('dialog [data-ai]', T);
+  await pg.check('dialog [data-ai="1"]'); await pg.click('dialog [data-a="ok"]');
+  await pg.waitForSelector('#askJob', T); await pg.fill('#askJob', '10260'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(1200);
+  const row = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1013'));
+  assert.ok(['Approved', 'Scheduled'].includes(row.status) && row.items[1].accepted === true && Number(row.amount) === 5100, 'add-on accepted on approval, job amount includes it: ' + row.status + ' ' + row.amount);
+  await pg.evaluate(() => sessionStorage.setItem('pfbs.open', 'PFBS-1014')); await pg.reload(); await pg.waitForTimeout(1200);
+  let msg = ''; pg.once('dialog', async d => { msg = d.message(); await d.dismiss(); });
+  await pg.evaluate(() => [...document.querySelectorAll('#drawer button')].find(x => x.textContent.trim() === 'Sent')?.click()); await pg.waitForTimeout(300);
+  assert.match(msg, /Not priced yet: Gutters/, 'warns before sending unpriced lines');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
