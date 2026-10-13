@@ -156,3 +156,28 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: money checks passed');
 }
+
+// ---------- job numbers, invoices close visits, property contacts (update 022) ----------
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role; update proposals set hcp_job='10200', status='Scheduled' where num='PFBS-0781'`);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  let v = await q1(`insert into visits(num, visit_date) values ('PFBS-0781','2026-10-05') returning job_no`);
+  assert.equal(v.job_no, '10200', 'before switch-over: the HCP job #');
+  assert.equal((await q1(`select next_job_no() n`)).n, null);
+  await db.query(`select set_next_job_no(10300)`);
+  v = await q1(`insert into visits(num, visit_date) values ('PFBS-0781','2026-10-20') returning job_no`); assert.equal(v.job_no, '10300', 'after: CRM numbers');
+  v = await q1(`insert into visits(num, visit_date) values ('PFBS-0781','2026-11-20') returning job_no`); assert.equal(v.job_no, '10301');
+  assert.equal((await q1(`insert into visits(kind, title, visit_date) values ('event','Site walk','2026-10-21') returning job_no`)).job_no, null, 'events get no job #');
+  await assert.rejects(db.query(`select set_next_job_no(10000)`), /higher than 10301/);
+  const inv = await q1(`insert into invoices(num, items, service_date) values ('PFBS-0781','[{"amount":100}]','2026-10-20') returning id`);
+  await db.query(`update invoices set status='Sent' where id='${inv.id}'`);
+  const st = (await db.query(`select visit_date::text d, status from visits where num='PFBS-0781' order by visit_date`)).rows.map(r => r.d + ' ' + r.status);
+  assert.deepEqual(st, ['2026-10-05 Done', '2026-10-20 Done', '2026-11-20 Scheduled'], 'sent invoice closes visits up to the service date');
+  // property contact on import
+  const pl = { clients: [{ name: 'Bayshore Owner LLC', contacts: [{ name: 'Rich Demo', email: 'rich@demo.example', hcp_id: '777' }], properties: [{ address: '1699 Demo Hwy', contact_hcp_id: '777' }] }] };
+  await db.query(`select import_clients('${JSON.stringify(pl)}'::jsonb)`);
+  assert.equal((await q1(`select c.name from properties p join client_contacts c on c.id=p.contact_id where p.address='1699 Demo Hwy'`)).name, 'Rich Demo', 'property linked to its manager');
+  await db.exec('reset role');
+  console.log('db: job numbers & property contacts passed');
+}
