@@ -138,8 +138,9 @@ The old Cloudflare app keeps working until step 3, so nothing breaks while you t
    "Only this visit" or "This and all future visits", like HousecallPro.
 4. Every week: Schedule → **Crew emails** → pick the week → **Draft** for each tech (English or Spanish) → Outlook.
 5. Keep TechSched and HCP's schedule running side by side for a week or two, then stop entering jobs there.
-6. Run `sql/022_jobs_contacts.sql` too. On switch-over day: Settings → **Job numbers** → HCP's last job # + 1 → **Set**.
-   Until then each visit shows the HCP job # typed on the job.
+6. Run `sql/022_jobs_contacts.sql` and `sql/023_job_no_on_approval.sql` too. On switch-over day: Settings → **Job numbers** → HCP's last job # + 1 → **Set**.
+   From then on, approving a proposal turns it into a job with the next job #. Until then the job # is the HCP job #
+   typed when the proposal is approved.
 
 ## Money tab and your accountant (update 021)
 

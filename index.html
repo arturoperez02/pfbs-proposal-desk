@@ -68,7 +68,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 #drawer .dtabs button{border:0;background:none;padding:10px 16px;font-weight:600;color:var(--muted,#666);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
 #drawer .dtabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 h3.setsec{margin:28px 0 10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#666)} h3.setsec:first-child{margin-top:4px}
-dialog.ask.inved{max-width:760px} #schTech{width:auto;min-width:140px} .sgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)} .shead{padding:6px;font-size:12px;font-weight:700;color:var(--mut,#666);border-bottom:1px solid var(--line);text-align:center} .scell{min-height:104px;padding:4px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);cursor:pointer;min-width:0} .scell.out{background:var(--bg);opacity:.75} .scell.today .sday{background:var(--navy,#1F2A6B);color:#fff;border-radius:10px;padding:0 6px;display:inline-block} .sday{font-size:12px;font-weight:700;margin-bottom:2px} .vchip{display:block;width:100%;text-align:left;font-size:11.5px;line-height:1.25;margin:0 0 2px;padding:2px 4px;border:1px solid transparent;border-radius:4px;background:#1F2A6B;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer} .vchip.ev{background:#e4e8f5;color:#1F2A6B} .vchip.done{background:#8a8f99} .vchip.skip{background:#c9ccd3;color:#333;text-decoration:line-through} .vchip.nocrew{border-color:#d33;box-shadow:inset 3px 0 0 #d33} .vmore{font-size:11px;border:0;background:none;color:var(--navy,#1F2A6B);cursor:pointer;padding:0} .vscope{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:0 0 8px;font-size:13px} .vscope ul{margin:4px 0 0 18px;padding:0} .vchecks{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0 8px;font-weight:400} .vchecks label{font-size:13px} .vmon label,.vends label{display:inline-flex;align-items:center;gap:4px;margin:4px 10px 4px 0;font-size:13px} @media (max-width:700px){ .scell{min-height:64px} .vchip{font-size:10px} } .inved:not(.linepo) .invrow [data-f="po"]{display:none} .inved.linepo .invrow{grid-template-columns:1fr 130px 110px auto} .invrow{display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid var(--line)} .invrow textarea{grid-column:1/-1;min-height:34px;font-size:13px} .invhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:10px 0 6px;font-size:13px;color:var(--mut,#666)} .flag.ok{background:#e3f4e8;color:#1e6b3a}
+dialog.ask.inved{max-width:760px} #schTech{width:auto;min-width:140px} .jobno{font-family:var(--display);font-size:26px;font-weight:700;color:var(--navy,#1F2A6B);line-height:1.1;margin:0 0 2px} .jobno.none{font-size:15px;color:var(--muted);font-weight:600} .jobtag{display:inline-block;background:#1F2A6B;color:#fff;border-radius:6px;padding:1px 7px;font-weight:700;font-size:13px} .cjob{font-weight:800} .sgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)} .shead{padding:6px;font-size:12px;font-weight:700;color:var(--mut,#666);border-bottom:1px solid var(--line);text-align:center} .scell{min-height:104px;padding:4px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);cursor:pointer;min-width:0} .scell.out{background:var(--bg);opacity:.75} .scell.today .sday{background:var(--navy,#1F2A6B);color:#fff;border-radius:10px;padding:0 6px;display:inline-block} .sday{font-size:12px;font-weight:700;margin-bottom:2px} .vchip{display:block;width:100%;text-align:left;font-size:11.5px;line-height:1.25;margin:0 0 2px;padding:2px 4px;border:1px solid transparent;border-radius:4px;background:#1F2A6B;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer} .vchip.ev{background:#e4e8f5;color:#1F2A6B} .vchip.done{background:#8a8f99} .vchip.skip{background:#c9ccd3;color:#333;text-decoration:line-through} .vchip.nocrew{border-color:#d33;box-shadow:inset 3px 0 0 #d33} .vmore{font-size:11px;border:0;background:none;color:var(--navy,#1F2A6B);cursor:pointer;padding:0} .vscope{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:0 0 8px;font-size:13px} .vscope ul{margin:4px 0 0 18px;padding:0} .vchecks{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0 8px;font-weight:400} .vchecks label{font-size:13px} .vmon label,.vends label{display:inline-flex;align-items:center;gap:4px;margin:4px 10px 4px 0;font-size:13px} @media (max-width:700px){ .scell{min-height:64px} .vchip{font-size:10px} } .inved:not(.linepo) .invrow [data-f="po"]{display:none} .inved.linepo .invrow{grid-template-columns:1fr 130px 110px auto} .invrow{display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid var(--line)} .invrow textarea{grid-column:1/-1;min-height:34px;font-size:13px} .invhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:10px 0 6px;font-size:13px;color:var(--mut,#666)} .flag.ok{background:#e3f4e8;color:#1e6b3a}
 dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px} tr.voided td{color:var(--muted,#888)}
 .btn.small{padding:5px 10px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -757,7 +757,7 @@ function drawDrawer(){
     ${canReview()?`<textarea id="revNote" rows="2" placeholder="Review note (required to send back)" style="flex-basis:100%"></textarea><div class="toolbar" style="margin:0"><button class="btn small" id="approveSend">Approve &amp; mark Sent</button><button class="btn ghost small" id="sendBack">Send back to estimator</button></div>`:''}</div>`
     : (p.status==='Lead' && !isNew) ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>New lead${p.bdRep?' from '+esc(p.bdRep):''}.</b> ${p.sentBy?'Assigned to '+esc(p.sentBy)+'.':'Assign an estimator.'}${p.leadAt?' Logged '+fmtD(p.leadAt)+'.':''}</div>${(isManager()||(role()==='Estimator'&&p.sentBy===me.name))?'<button class="btn small" id="startEst">Start estimate</button>':''}</div>` : '';
   $('#drawer').innerHTML = `
-  <div class="dhead"><div class="t"><b id="dTitle" class="num">${isNew?'New proposal':esc(p.num)}</b><div class="sub">${isNew?(newLead?'New lead · the PFBS number is assigned when you save.':'The PFBS number is assigned when you save.'):esc(p.client||'')+' · '+esc(p.property||'')}</div></div>
+  <div class="dhead"><div class="t">${!isNew && p.hcpJob && outcome(p)==='Won' ? `<div class="jobno">Job #${esc(p.hcpJob)}</div>` : ''}<b id="dTitle" class="num">${isNew?'New proposal':esc(p.num)}</b><div class="sub">${isNew?(newLead?'New lead · the PFBS number is assigned when you save.':'The PFBS number is assigned when you save.'):esc(p.client||'')+' · '+esc(p.property||'')}</div></div>
     <button class="btn ghost small" id="closeD">Close</button></div>
   <div class="dbody">
     <div id="emBox" class="fubox" hidden></div>
@@ -830,7 +830,7 @@ function drawDrawer(){
       <div id="invBox">${invoicesHTML(p)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' && !isNew ? `<fieldset><legend>Schedule</legend><div id="visBox">${visitsHTML(p)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Payment &amp; commission</legend><div class="grid2">
-      ${field(isRecurring(p)?'First HCP job #':'HCP job #','hcpJob')}
+      ${field(isRecurring(p)?'Job # (first visit)':'Job #','hcpJob','text','',JOBNO_ON?'placeholder="Given when approved"':'placeholder="HCP job #"')}
       ${field('Date paid','datePaid','date')}
     </div>
     <div id="calc2">${calc2(p)}</div>
@@ -917,7 +917,7 @@ function setStatus(st){
   if(st==='Paid' && !draft.datePaid) draft.datePaid=iso(today());
   if(WON.includes(st) && !(draft.parts||[]).length){ const b=buildParts(draft); if(b.length){ draft.parts=b; const r=b.filter(isRent).length; toast(`From the estimate: ${b.length-r} part${b.length-r===1?'':'s'} to order${r?`, ${r} rental${r===1?'':'s'} to reserve`:''}. Save to keep.`); } }
   drawDrawer();
-  if(st==='Approved' && !draft.hcpJob){ const dr=draft; askJobNo(dr).then(v=>{ if(v && draft===dr){ draft.hcpJob=v; const f=$('#f-hcpJob'); if(f) f.value=v; $('#dmsg').textContent='HCP job # added. Save to keep it.'; } }); }
+  if(st==='Approved' && !draft.hcpJob && !JOBNO_ON){ const dr=draft; askJobNo(dr).then(v=>{ if(v && draft===dr){ draft.hcpJob=v; const f=$('#f-hcpJob'); if(f) f.value=v; $('#dmsg').textContent='HCP job # added. Save to keep it.'; } }); }
 }
 async function save(after, o={}){
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
@@ -1126,6 +1126,7 @@ $('#drawer').addEventListener('click', async e=>{ const t=e.target.closest('butt
 
 // ---------- Orders tab (office view of rentals and parts) ----------
 let ordFilter='Needs action';
+let JOBNO_ON=false; // the CRM gives jobs their # at approval (update 023)
 let SR=[]; // service reports waiting for review (office only)
 async function loadPendingReports(){
   if(!isManager()) return;
@@ -1144,7 +1145,7 @@ function renderOrders(){
   $('#ordChips').innerHTML=Object.keys(F).map(k=>`<button class="chip" data-of="${k}" aria-pressed="${k===ordFilter}">${k} <span class="c">${R.filter(F[k][0]).length+Pt.filter(F[k][1]).length}</span></button>`).join('');
   const rr=R.filter(F[ordFilter][0]).sort((a,b)=>String(a.x.deliveryDate||'9').localeCompare(String(b.x.deliveryDate||'9')));
   const pp=Pt.filter(F[ordFilter][1]).sort((a,b)=>String(a.p.dateResolved||'').localeCompare(String(b.p.dateResolved||'')));
-  const job=p=>`<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`;
+  const job=p=>{ const jn=p.hcpJob||(VIS.find(v=>v.num===p.num && v.job_no)||{}).job_no; return `${jn?`<span class="jobtag">#${esc(jn)}</span> `:''}<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`; };
   $('#ordersBody').innerHTML = `<div class="card"><h3>Lift &amp; equipment rentals (${rr.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>Job</th><th>Equipment</th><th class="hide-sm">Rental company</th><th>Status</th><th class="hide-sm">Delivery</th><th class="hide-sm">Reservation #</th><th class="hide-sm">Off-rent #</th><th>Needs</th></tr></thead><tbody>
     ${rr.length?rr.map(({p,x})=>{ const a=rentAlert(p,x); return `<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td>${esc(x.desc)}</td><td class="hide-sm">${esc(x.vendor||'')}</td><td><span class="pill ${(x.status||'To reserve')==='Picked up'?'p-won':(x.status||'To reserve')==='To reserve'?'p-open':'p-review'}">${esc(x.status||'To reserve')}</span></td><td class="hide-sm num">${fmtD(x.deliveryDate)}</td><td class="hide-sm">${esc(x.reservationNo||'')}</td><td class="hide-sm">${esc(x.offRentNo||'')}</td><td>${a?`<span class="flag ${a[0]}">${esc(a[1])}</span>`:'—'}</td></tr>`; }).join('')
@@ -1164,7 +1165,7 @@ $('#ordersBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e
 function renderJobs(){
   const up=P.filter(p=>['Approved','Scheduled'].includes(p.status) && !p.cancelledOn).sort((a,b)=>(a.status==='Approved'?0:1)-(b.status==='Approved'?0:1) || String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
   const hrs=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !hasActuals(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
-  const job=p=>`<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`;
+  const job=p=>{ const jn=p.hcpJob||(VIS.find(v=>v.num===p.num && v.job_no)||{}).job_no; return `${jn?`<span class="jobtag">#${esc(jn)}</span> `:''}<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`; };
   const needs=p=>{ const n=[]; const po=partsOpen(p), ra=rentAlerts(p);
     if(p.status==='Approved') n.push('<span class="flag warn">Not scheduled</span>');
     const jn=(VIS.find(v=>v.num===p.num && v.job_no)||{}).job_no || p.hcpJob; if(jn) n.push(`<span class="note" style="margin:0">Job #${esc(jn)}</span>`); else if(p.status!=='Approved') n.push('<span class="flag warn">No job #</span>');
@@ -1466,7 +1467,7 @@ $('#rows').addEventListener('change', async e=>{
     $('#dmsg').textContent = st==='Scheduled' ? 'Add the HCP job #, then save.' : 'Pick a lost reason, then save.'; return;
   }
   const patch={status:st}, t=iso(today());
-  if(st==='Approved' && !p.hcpJob){ const v=await askJobNo(p); if(v) patch.hcp_job=v; }
+  if(st==='Approved' && !p.hcpJob && !JOBNO_ON){ const v=await askJobNo(p); if(v) patch.hcp_job=v; }
   if(WON.includes(st) && !(p.parts||[]).length && (!COLS || COLS.has('parts'))){ const b=buildParts(p); if(b.length) patch.parts=b; }
   if((st==='Approved'||LOST.includes(st)) && !p.dateResolved) patch.date_resolved=t;
   if(st==='Sent' && !p.dateSent) patch.date_sent=t;
@@ -3328,7 +3329,7 @@ function renderSchedule(){
   const last=new Date(y,m+1,0), endG=new Date(last); endG.setDate(last.getDate()+(6-last.getDay())); const td=iso(today()), mgr=isManager();
   const L=VIS.filter(v=>v.status!=='Cancelled' && (!schTech || (v.techs||[]).includes(schTech)));
   let cells=''; for(let d=new Date(start); d<=endG; d.setDate(d.getDate()+1)){ const ds=iso(d), on=L.filter(v=>visOn(v,ds)).sort((a,b)=>String(a.start_time||'').localeCompare(String(b.start_time||'')));
-    cells+=`<div class="scell ${d.getMonth()!==m?'out':''} ${ds===td?'today':''}" data-day="${ds}"><div class="sday">${d.getDate()}</div>${on.slice(0,5).map(v=>`<button type="button" class="vchip ${v.kind==='event'?'ev':''} ${v.status==='Done'?'done':''} ${v.status==='Skipped'?'skip':''} ${!(v.techs||[]).length&&v.kind==='job'?'nocrew':''}" data-vis="${esc(v.id)}" title="${esc((v.job_no?'Job #'+v.job_no+' · ':'')+visLabel(v)+((v.techs||[]).length?' — '+v.techs.join(', '):''))}">${v.start_time&&v.visit_date===ds?`<b>${esc(t12(v.start_time).replace(':00','').replace(' ',''))}</b> `:''}${esc(visLabel(v))}</button>`).join('')}${on.length>5?`<button type="button" class="vmore" data-daylist="${ds}">+${on.length-5} more</button>`:''}</div>`; }
+    cells+=`<div class="scell ${d.getMonth()!==m?'out':''} ${ds===td?'today':''}" data-day="${ds}"><div class="sday">${d.getDate()}</div>${on.slice(0,5).map(v=>`<button type="button" class="vchip ${v.kind==='event'?'ev':''} ${v.status==='Done'?'done':''} ${v.status==='Skipped'?'skip':''} ${!(v.techs||[]).length&&v.kind==='job'?'nocrew':''}" data-vis="${esc(v.id)}" title="${esc((v.job_no?'Job #'+v.job_no+' · ':'')+visLabel(v)+((v.techs||[]).length?' — '+v.techs.join(', '):''))}">${v.start_time&&v.visit_date===ds?`<b>${esc(t12(v.start_time).replace(':00','').replace(' ',''))}</b> `:''}${v.job_no?`<span class="cjob">#${esc(v.job_no)}</span> `:''}${esc(visLabel(v))}</button>`).join('')}${on.length>5?`<button type="button" class="vmore" data-daylist="${ds}">+${on.length-5} more</button>`:''}</div>`; }
   const noCrew=VIS.filter(v=>v.kind==='job' && v.status==='Scheduled' && !(v.techs||[]).length && v.visit_date>=td && v.visit_date<=addDays(td,14)).length;
   box.innerHTML=`<div class="toolbar" style="flex-wrap:wrap;gap:8px;justify-content:space-between">
       <div style="display:flex;gap:6px;align-items:center"><button class="btn ghost small" id="schPrev" aria-label="Previous month">‹</button><b style="min-width:150px;text-align:center">${first.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</b><button class="btn ghost small" id="schNext" aria-label="Next month">›</button><button class="btn ghost small" id="schToday">Today</button></div>
@@ -3352,7 +3353,7 @@ function visEdit(v, opts={}){
   const scopeBox=pp=>{ const L=scopeLines(pp); return L.length?`<div class="vscope"><b>Scope of work</b> <span class="note" style="margin:0">from the proposal; goes in the crew email</span><ul>${L.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''; };
   const d=document.createElement('dialog'); d.className='ask inved';
   const checks=(name, list, sel)=>`<div class="vchecks">${list.map(x=>`<label><input type="checkbox" name="${name}" value="${esc(x)}" ${sel.includes(x)?'checked':''} ${dis}> ${esc(x)}</label>`).join('')}</div>`;
-  d.innerHTML=`<h3>${v.id?(v.job_no?'Job #'+esc(v.job_no):'Visit'):'Schedule'}${p?` <span class="note" style="margin:0">${esc(p.client||'')}${p.property?' · '+esc(p.property):''} · ${esc(p.num)}</span>`:v.kind==='event'?' · event':''}${ser?` <span class="flag">${esc(ruleText(ser))}</span>`:''}</h3>
+  d.innerHTML=`${v.kind==='job'?`<div class="jobno ${v.job_no?'':'none'}">${v.job_no?'Job #'+esc(v.job_no):(v.id?'No job # yet':'')}</div>`:''}<h3>${v.id?'Visit':'Schedule'}${p?` <span class="note" style="margin:0">${esc(p.client||'')}${p.property?' · '+esc(p.property):''} · ${esc(p.num)}</span>`:v.kind==='event'?' · event':''}${ser?` <span class="flag">${esc(ruleText(ser))}</span>`:''}</h3>
     ${v.kind==='event'?`<label class="f">What<input name="title" value="${esc(v.title||'')}" placeholder="e.g. Site walk, lift delivery" ${dis}></label>`
       :`<label class="f">Job<select name="num" ${dis||(v.id?'disabled':'')}><option value="">Pick a job…</option>${jobOptions(v.num)}</select></label><div id="vScope">${scopeBox(p)}</div>`}
     <div class="grid2">
@@ -3603,7 +3604,7 @@ function show(view){ for(const v of ['login','blocked','setup','pipeline','leads
 $('#tabs').addEventListener('click', e=>{
   const b=e.target.closest('[data-tab]'); if(!b) return;
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x===b);
-  show(b.dataset.tab); renderAll();
+  show(b.dataset.tab); renderAll(); try{ sessionStorage.setItem('pfbs.tab', b.dataset.tab); }catch(_){}
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
 function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='clients') renderClients(); if(c==='schedule') renderSchedule(); if(c==='money') renderMoney(); if(c==='settings') renderSettings(); }
@@ -3650,8 +3651,10 @@ async function start(session){
   if(m.role==='Accountant'){ for(const t of ['pipeline','leads','sales','orders','schedule','settings']) { const b=document.querySelector(`#tabs [data-tab="${t}"]`); if(b) b.hidden=true; } }
   $('#salesTab').textContent = ['BD Rep','Estimator'].includes(m.role) ? 'My Sales' : 'Sales';
   const home = m.role==='Accountant' ? 'money' : ['BD Rep','Estimator'].includes(m.role) ? 'sales' : m.role==='Admin' ? 'orders' : 'pipeline';
-  for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===home); show(home);
-  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); if(isManager()) loadOpenInvoices();
+  let last=''; try{ last=sessionStorage.getItem('pfbs.tab')||''; }catch(_){}
+  const lb=last && document.querySelector(`#tabs [data-tab="${last}"]`); const startTab = lb && !lb.hidden ? last : home;   // a refresh keeps you where you were
+  for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===startTab); show(startTab);
+  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); sb.rpc('crm_job_numbers').then(r=>{ JOBNO_ON=!r.error && r.data===true; }); if(isManager()) loadOpenInvoices();
   window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })

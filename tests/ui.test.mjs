@@ -261,6 +261,25 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pa.close();
 }
 
+// 10. Refresh keeps the tab; the job # is big on the visit
+{
+  const jj = { num: 'PFBS-0990', date_sent: '2026-09-01', sent_by: 'Arturo', client: 'Demo Co', property: '9 Demo St', site_address: '9 Demo St', amount: 900, status: 'Approved', hcp_job: '10240', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 900 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('jobno: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; }, jj); await pg.goto(BASE); await pg.waitForTimeout(800);
+  await pg.click('#tabs [data-tab="schedule"]', T); await pg.waitForTimeout(200); await pg.reload(); await pg.waitForTimeout(900);
+  assert.equal(await pg.$eval('#tabs [aria-selected="true"]', e => e.dataset.tab), 'schedule', 'refresh stays on Schedule');
+  await pg.click('#tabs [data-tab="orders"]', T); await pg.waitForTimeout(300);
+  assert.match(await pg.$eval('#jobsBody', e => e.innerText), /#10240 PFBS-0990/, 'Jobs tab leads with the job #');
+  await pg.click('[data-schnew="PFBS-0990"]', T); await pg.waitForSelector('dialog.inved', T);
+  await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(500);
+  await pg.click('#tabs [data-tab="schedule"]', T); await pg.click('#schToday'); await pg.waitForTimeout(300);
+  await pg.click('.vchip:has-text("Demo Co")', T); await pg.waitForSelector('dialog.inved .jobno', T);
+  assert.equal(await pg.$eval('dialog.inved .jobno', e => e.textContent), 'Job #10240');
+  assert.ok(await pg.$eval('dialog.inved .jobno', e => parseFloat(getComputedStyle(e).fontSize) >= 24), 'big');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing passed');

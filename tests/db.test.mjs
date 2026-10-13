@@ -181,3 +181,18 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: job numbers & property contacts passed');
 }
+// ---------- job # at approval (update 023) ----------
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  await db.exec(`reset role; update proposals set status='Sent', hcp_job=null where num in ('PFBS-0782','PFBS-0783')`);
+  await db.exec(`update proposals set status='Approved' where num='PFBS-0782'`);
+  const jn = (await q1(`select hcp_job from proposals where num='PFBS-0782'`)).hcp_job;
+  assert.ok(/^\d+$/.test(jn) && Number(jn) >= 10302, 'approval gives the job its number: ' + jn);
+  await db.exec(`update proposals set status='Approved', hcp_job='99999' where num='PFBS-0783'`);
+  assert.equal((await q1(`select hcp_job from proposals where num='PFBS-0783'`)).hcp_job, '99999', 'a typed job # is kept');
+  const a = await q1(`insert into visits(num, visit_date) values ('PFBS-0782','2026-12-01') returning job_no`);
+  const b2 = await q1(`insert into visits(num, visit_date) values ('PFBS-0782','2027-03-01') returning job_no`);
+  assert.equal(a.job_no, jn, 'first visit = the job #'); assert.ok(b2.job_no !== jn && Number(b2.job_no) > Number(jn), 'next recurring visit gets its own #');
+  console.log('db: job # at approval passed');
+}

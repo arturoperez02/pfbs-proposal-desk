@@ -24,5 +24,6 @@
 | 020_schedule.sql | Run once: the Schedule (visits with dates, times, techs, work, equipment, notes; recurring jobs with repeat rules), replacing HousecallPro's schedule and TechSched data entry. Crew list in Settings. Needs 019. |
 | 021_money.sql | Run once: Accountant role (Money and Clients only), open HousecallPro invoice import (Settings → Invoicing, on switch-over day). Needs 020. |
 | 022_jobs_contacts.sql | Run once: a job # on every visit (HCP's # until switch-over, then the CRM's own, set in Settings → Job numbers), weekday-only visits, invoices mark visits Done, a contact per property. Needs 021. |
+| 023_job_no_on_approval.sql | Run once: once the CRM numbers jobs, approving a proposal gives the job its job #; its first visit uses it, later recurring visits get their own. Needs 022. |
 
 Client data is never stored in this repository.
