@@ -150,6 +150,7 @@ legend{font-family:var(--display);font-size:17px;color:var(--ink);margin-bottom:
 .setnav{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px} .setnav a{font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;text-decoration:none;color:inherit;background:var(--surface)} .savebar{position:sticky;bottom:0;z-index:5;background:var(--bg,#f6f7fb);padding:10px 0;margin-top:16px;border-top:1px solid var(--line,#dde)} h3.setsec{scroll-margin-top:80px}
 .crewcard{grid-column:1/-1} .crewtbl tr[hidden]{display:none!important} .capdd{position:relative} .capdd summary{cursor:pointer;list-style:none;border:1px solid var(--line);border-radius:var(--radius);padding:7px 28px 7px 10px;background:var(--surface);min-width:170px;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;position:relative} .capdd summary::-webkit-details-marker{display:none} .capdd summary::after{content:'▾';position:absolute;right:10px;top:7px;color:var(--muted)} .capmenu{position:absolute;z-index:20;top:calc(100% + 4px);left:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px 10px;display:grid;gap:6px;min-width:240px;max-height:300px;overflow:auto} .capmenu label{display:flex;gap:6px;align-items:center;font-size:14px;white-space:nowrap}
 @media (max-width:700px){ header.bar{position:static} .crewtbl thead{display:none} .crewtbl,.crewtbl tbody,.crewtbl tr,.crewtbl td{display:block;width:100%} .crewtbl tr{border-bottom:2px solid var(--line);padding:8px 0;position:relative} .crewtbl td{border:0;padding:3px 8px} .crewtbl td:nth-child(6){text-align:left!important} .crewtbl td:nth-child(6)::before{content:'Active ';font-size:13px;color:var(--muted)} .crewtbl td:nth-child(5)::before{content:'Other names';display:block;font-size:12px;color:var(--muted)} .crewtbl td:last-child{position:absolute;top:8px;right:0;width:auto} .crewtbl td:first-child input{width:calc(100% - 48px)} .crewtbl input:not([type=checkbox]),.crewtbl select{width:100%} .capchecks{min-width:0} } .crewtbl td{vertical-align:top} .crewtbl input:not([type=checkbox]),.crewtbl select{min-width:120px} .capchecks{display:flex;flex-wrap:wrap;gap:4px 12px;min-width:260px} .capchecks label{font-size:13px;white-space:nowrap;display:flex;gap:4px;align-items:center}
+.pdfprev{width:min(1000px,96vw);max-width:none;height:92vh;display:flex;flex-direction:column} .pdfprev[open]{display:flex} .pdfprev iframe{flex:1;width:100%;border:1px solid var(--line);border-radius:6px;background:#fff}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .listedit{display:grid;gap:6px;align-content:start}
 .listedit textarea{min-height:150px;font-size:14px}
@@ -594,7 +595,7 @@ function gpBoxHTML(p, ed){
   return `<div class="grid2">
     <label class="f">Est. gross profit ($)<input id="f-gp" data-k="gp" type="number" step="any" value="${esc(p.gp??'')}" ${dis} placeholder="price − all job costs"></label>
     <label class="f">Pass-through costs ($)<input id="f-passThrough" data-k="passThrough" type="number" step="any" value="${esc(p.passThrough??'')}" ${dis} placeholder="rentals + subs, as billed"></label></div>
-    <div class="note" style="margin:4px 0 0">${auto ? 'Calculated from each line\'s pricing.' : 'Price each line (Price it) and these fill in automatically. Otherwise enter them from your bid sheet.'}</div>`;
+    <div class="note" style="margin:4px 0 0">${auto ? 'Filled in from each line\'s pricing. Used for commission (gross profit and the estimator\'s margin tier).' : (()=>{ const un=countedItems(p).filter(i=>!i.estimate).map(i=>i.description||'a line'); return un.length && un.length<countedItems(p).length ? `These fill in once every counted line is priced. Not priced yet: <b>${esc(un.join(', '))}</b> (click Price it on it). Add-ons the client hasn't accepted don't count. Or type both from your bid sheet.` : 'Click Price it on each line and these fill in by themselves (used for commission). Or type both from your bid sheet.'; })()}</div>`;
 }
 function syncFromItems(p){
   for(const i of (p.items||[])) i.service = i.description ? guessService(i.description) : '';
@@ -697,7 +698,7 @@ async function openDrawer(id, opts={}){
   DTAB = (['orders','home','schedule'].includes(current()) || role()==='Admin') ? 'job' : 'prop';
   PR=null; isNew=!id; newLead=!!opts.lead; orig = id ? P.find(p=>p.num===id) : null;
   draft = orig ? structuredClone(orig) : newLead ? {num:'', dateSent:null, sentBy: role()==='Estimator'?me.name:'', bdRep: role()==='BD Rep'?me.name:'', leadSource: role()==='BD Rep'?'BD rep':'', status:'Lead', items:[]} : {num:'', dateSent:iso(today()), sentBy: me.name, status:'Estimating', items:[{type:'Service',service:'',qty:1,frequency:'',amount:'',description:'',note:''}]};
-  hist=[]; drawDrawer();
+  hist=[]; fillClientBlanks(); drawDrawer();
   $('#scrim').hidden=false; $('#drawer').hidden=false; $('#closeD')?.focus();
   if(id && outcome(draft)==='Won' && isManager()) loadInvoices(id);
   if(id) await loadActivity(id);
@@ -840,7 +841,7 @@ function drawDrawer(){
     <fieldset><legend>Proposal</legend>
       ${PRE.includes(p.status) ? `<label class="acc" style="margin:0 0 10px"><input type="checkbox" id="budChk" ${p.budgetYear?'checked':''} ${dis}> Budget proposal <span class="note" style="margin:0">(pricing for the client's ${today().getFullYear()+1} budget, not an offer to accept now)</span></label>` : ''}
       <div class="grid2">
-      ${field('Date sent','dateSent','date')}
+      <label class="f">Date sent <span style="display:flex;gap:6px"><input id="f-dateSent" data-k="dateSent" type="date" value="${esc(p.dateSent??'')}" ${dis} style="flex:1">${dis?'':'<button type="button" class="btn ghost small" id="dsToday" title="Set to today">Today</button>'}</span></label>
       ${sel(p.status==='Lead'?'Assign to estimator':'Estimator (sent by)','sentBy',names,'',!(isManager() || (p.status==='Lead' && role()==='BD Rep')))}
       ${field('Client (company)','client','text','full','list="clientList" autocomplete="off" placeholder="Start typing to pick a past client"')}
       <div id="dupWarn" class="full"></div>
@@ -987,6 +988,7 @@ function setStatus(st, o={}){
   draft.status=st;
   if((st==='Approved'||LOST.includes(st)) && !draft.dateResolved) draft.dateResolved=iso(today());
   if(st==='Budget'){ const y=today().getFullYear()+1; if(!draft.budgetYear) draft.budgetYear=y; if(!draft.budgetCheck) draft.budgetCheck=`${draft.budgetYear}-01-15`; if(!draft.dateSent) draft.dateSent=iso(today()); }
+  if(st==='Sent' && ['Estimating','Needs Review','Lead'].includes(orig?.status) && draft.dateSent!==iso(today())){ draft.dateSent=iso(today()); const el=document.getElementById('f-dateSent'); if(el) el.value=draft.dateSent; }   // sent today = dated today
   if(st==='Sent' && orig?.status==='Budget'){ draft.dateSent=iso(today()); draft.lastFollowUp=null; toast('Now a proposal: follow-ups start today. Save to keep it.'); }
   if(st==='Sent' && !draft.dateSent) draft.dateSent=iso(today());
   if(st==='Paid' && !draft.datePaid) draft.datePaid=iso(today());
@@ -1022,6 +1024,12 @@ async function save(after, o={}){
   const saved=fromRow(res.data);
   highlight=saved.num; query=''; $('#q').value='';
   const fit=FILTERS.find(([n,f])=>n!=='All' && f(saved)); filter = fit ? fit[0] : 'All';
+  if(o.stay && !jobFlow){   // Save changes: stay right where you were in the proposal (same tab, same scroll)
+    const keep=DTAB, sc=document.querySelector('#drawer .dbody')?.scrollTop||0;
+    await loadProposals(); orig=P.find(x=>x.num===saved.num)||saved; draft=structuredClone(orig); isNew=false; PR=null; DTAB=keep;
+    try{ sessionStorage.setItem('pfbs.open', saved.num); }catch(_){}
+    drawDrawer(); const b=document.querySelector('#drawer .dbody'); if(b) b.scrollTop=sc; $('#dmsg') && ($('#dmsg').textContent='Saved.');
+    loadActivity(saved.num); if(outcome(draft)==='Won' && isManager()) loadInvoices(saved.num); return; }
   closeDrawer(); await loadProposals();
   if(jobFlow){ const pj=P.find(x=>x.num===saved.num); if(pj && VISOK){ toast(pj.hcpJob?`Job #${pj.hcpJob} created. Now schedule it.`:'Job created. Now schedule it.'); const v=visitDraft(pj, iso(today())); visEdit(v, {suggestRepeat: jobFlow==='recurring' || isRecurring(pj)}); } return; }
   if(o.reopen){ openDrawer(saved.num); return; }
@@ -1047,6 +1055,7 @@ $('#drawer').addEventListener('click', e=>{ if(!draft) return; const t=e.target;
   const vo=t.closest('[data-visopen]'); if(vo){ e.preventDefault(); const v=VIS.find(x=>x.id===vo.dataset.visopen); if(v) visEdit(v); return; }
   const o=t.closest('[data-inv]'); if(o){ invOpen(draft, o.dataset.inv); return; }
   const py=t.closest('[data-invpay]'); if(py){ const v=(INV[draft.num]||[]).find(x=>x.id===py.dataset.invpay); if(v) invPay(v).then(ok=>{ if(ok) invRefresh(v.num); }); } });
+$('#drawer').addEventListener('click', e=>{ if(e.target.id!=='dsToday' || !draft) return; draft.dateSent=iso(today()); const el=$('#f-dateSent'); if(el) el.value=draft.dateSent; if(typeof markDirty==='function') markDirty(); toast('Date set to today. Save to keep it.'); });
 $('#drawer').addEventListener('click', e=>{ const dt=e.target.closest('[data-dtab]'); if(!dt) return; DTAB=dt.dataset.dtab;
   for(const b of document.querySelectorAll('#drawer [data-dtab]')) b.setAttribute('aria-selected', b===dt);
   for(const x of document.querySelectorAll('#drawer .dpane')) x.hidden = x.dataset.pane!==DTAB; });
@@ -1808,8 +1817,8 @@ $('#drawer').addEventListener('change', e=>{ if(e.target.dataset.opt!=null) retu
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
-  else if(t.id==='saveD') save();
-  else if(t.id==='pdfD') makePdf(draft);
+  else if(t.id==='saveD') save(null,{stay:true});   // Save changes keeps the proposal open, like HousecallPro
+  else if(t.id==='pdfD') makePdf(draft, {preview:true});
   else if(t.id==='estPdfD') makeEstimatePdf(draft, (draft.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]));
   else if(t.dataset.est!=null) openEst(+t.dataset.est);
   else if(t.dataset.add){ draft.items=[...(draft.items||[])]; if(!draft.items.length && t.dataset.add==='Service' && num(draft.amount)!=null) draft.items.push({type:'Service',service:draft.service||'',qty:1,frequency:draft.frequency||'',amount:num(draft.amount),description:draft.service||''}); else draft.items.push({type:t.dataset.add,service:t.dataset.add==='Add-on'?'':(draft.service||''),qty:1,frequency:draft.frequency||'',amount:'',description:'',accepted:false}); rerenderItems(); }
@@ -2113,6 +2122,7 @@ function updateEstTotals(){
       <dt>Profit</dt><dd style="color:${(marginAt(c,c.total)??1)<floor?'var(--bad)':'inherit'}">${usd(profit)}</dd>
     </dl>
     <div class="note" style="margin:-4px 0 10px">Profit from: labor ${usd(c.laborPrice-c.laborCost)}${c.matP?` · materials markup ${usd(c.matP-c.mat)}`:''}${c.rentP?` · rentals/subs markup ${usd(c.rentP-c.rent)}`:''}${c.eqP?` · equipment ${usd(c.eqP-c.eq)}`:''}${c.miscP?` · misc ${usd(c.miscP-c.misc)}`:''}. Margin = profit ÷ (price − pass-through)${c.passCost?` = ${usd(profit)} ÷ ${usd(c.base)}`:''}.</div>
+    ${(()=>{ const la=num(draft?.items?.[EI]?.amount); if(la==null || Math.abs(la-c.total)<0.005) return ''; const lm=marginAt(c, la); return `<div class="lockline" style="margin:0 0 10px">On the proposal this line is <b>${usd(la)}</b> (rounded or typed): profit ${usd(la-c.cost)}, margin <b>${lm==null?'—':pct(lm)}</b>. The Pricing PDF uses this line price.</div>`; })()}
     ${c.crew.techs ? `<div class="crewbox">${crewText(c)}</div>` : ''}
     ${SHEETS[E.sheet]?.monthly ? `<h4>Monthly billing (quarterly service)</h4><dl class="tots"><dt>Basic (× 1.5 ÷ 3)</dt><dd>${usd(c.total*1.5/3)}</dd><dt>Standard (× 2 ÷ 3)</dt><dd>${usd(c.total*2/3)}</dd><dt>Premium (× 2.25 ÷ 3)</dt><dd>${usd(c.total*2.25/3)}</dd></dl>` : ''}
     <details class="breakdown" ${EST_BD?'open':''}><summary>Full breakdown</summary>
@@ -2300,7 +2310,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#est').hidd
 
 // ---------- PDF proposal ----------
 let LOGO=null;
-async function logoData(){ if(LOGO) return LOGO; try{ const b=await (await fetch('logo.jpg')).blob(); LOGO=await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(b); }); }catch(_){ LOGO=''; } return LOGO; }
+async function logoData(){ if(LOGO) return LOGO; try{ const b=await (await fetch('reports-logo.jpg')).blob(); LOGO=await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(b); }); }catch(_){ LOGO=''; } return LOGO; }
 const usd = v => (num(v)==null?'':'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
 // ---------- invoices (update 018): numbered invoices from the job, payments, never deleted (void instead) ----------
 let INV={}, INVOK=true, OPENINV=null;
@@ -2498,7 +2508,7 @@ function invEdit(p, v){
     b.disabled=true;
     try{
       if(a==='save'){ if(await save()){ toast(`Invoice #${v.inv_no} saved`); close(); } }
-      if(a==='pdf'){ const cur=ro?v:{...v, ...collect(), inv_no:v.inv_no||next}; cur.total=cur.items.reduce((s,i)=>s+(num(i.amount)||0),0); const doc=await makeInvoicePdf(cur,p); if(doc){ if(ro) doc.save(invFile(cur,p)); else window.open(doc.output('bloburl'),'_blank'); } }
+      if(a==='pdf'){ const cur=ro?v:{...v, ...collect(), inv_no:v.inv_no||next}; cur.total=cur.items.reduce((s,i)=>s+(num(i.amount)||0),0); const doc=await makeInvoicePdf(cur,p); if(doc){ pdfPreview(doc, invFile(cur,p), ro?()=>{ doc.save(invFile(cur,p)); }:null); } }
       if(a==='void'){ const r=await formDialog(`Void invoice #${esc(v.inv_no)}?`, '<div class="note" style="margin:0 0 8px">The invoice stays on record as void. Its number is not reused.</div><label class="f">Reason<input name="why" required placeholder="e.g. Wrong amount, re-issued as a new invoice"></label>', 'Void invoice');
         if(r){ const {error}=await sb.from('invoices').update({status:'Void', void_reason:r.why}).eq('id',v.id); if(error) toast(error.message); else { toast(`Invoice #${v.inv_no} voided`); close(); await loadInvoices(p.num); loadOpenInvoices(); } } }
       if(a==='payvoid'){ const r=await formDialog('Void this payment?', '<div class="note" style="margin:0 0 8px">It stays on record as void and the balance reopens.</div><label class="f">Reason<input name="why" required placeholder="e.g. Check bounced, entered twice"></label>', 'Void payment');
@@ -2566,7 +2576,7 @@ async function loadClients(){
   if(a.error){ CLOK=!invMissing(a.error); CL=[]; CC=[]; PROPS=[]; }
   else { CLOK=true; CL=a.data||[]; CC=b.data||[]; PROPS=c.data||[]; }
   if(CLSEL && !CL.some(x=>x.id===CLSEL)) CLSEL=null;
-  if(draft) refreshPropPick();
+  if(draft){ if(fillClientBlanks()) drawDrawer(); else refreshPropPick(); }
   if(current()==='clients') renderClients();
 }
 const clientOf = name => { const n=norm(name); if(!n) return null; return CL.find(c=>c.active!==false && (norm(c.name)===n || (c.aliases||[]).some(a=>norm(a)===n))) || null; };
@@ -2592,6 +2602,11 @@ async function ensureClient(d){
     }
   }catch(_){}
 }
+// opening a proposal: anything left blank that the client record knows (billing address, AP email, PO#, contact) fills in. Typed values are never overwritten.
+function fillClientBlanks(){ if(!draft || !CLOK || !CL.length || isLocked?.()) return 0; const c=(draft.clientId && CL.find(x=>x.id===draft.clientId)) || clientOf(draft.client); if(!c) return 0;
+  if(!draft.clientId) draft.clientId=c.id; const pr=draft.propertyId && PROPS.find(x=>x.id===draft.propertyId), pk=pr&&pr.contact_id&&CC.find(x=>x.id===pr.contact_id), k=pk||contactsOf(c.id)[0]||{};
+  const src={billAddress:c.billing_address, billingEmail:c.billing_email, poRequired:c.po_required?'true':'', contactName:k.name, contactEmail:k.email, contactPhone:k.phone, siteAddress:pr&&pr.address};
+  let n=0; for(const [f,v] of Object.entries(src)) if(v && !String(draft[f]??'').trim()){ draft[f]=v; n++; } return n; }
 // proposal drawer: a drop-down of the client's addresses (picks property, site address and the property's contact in one go)
 const propOpt = x => { const L=String(x.address||'').split('\n').map(t=>t.trim()).filter(Boolean), cn=(CL.find(c=>c.id===x.client_id)||{}).name, nm=x.name&&norm(x.name)!==norm(L[0]||'')&&norm(x.name)!==norm(cn||'')?x.name+' — ':''; return nm+L.join(', '); };
 function propPickHTML(dis){ const c=draft&&((draft.clientId&&CL.find(x=>x.id===draft.clientId)) || clientOf(draft.client)), L=c?propsOf(c.id):[];
@@ -2831,7 +2846,15 @@ async function spUpload(blob, name, folderUrl){
   const driveId=folder.parentReference?.driveId || d.id;
   return graph(`/drives/${driveId}/items/${folder.id}:/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=replace`, {method:'PUT', headers:{'Content-Type':'application/pdf'}, body:blob});
 }
-async function deliverPdf(doc, name, p, what){
+// look at a PDF before it downloads (Download PDF / Pricing PDF / change order / invoice preview)
+function pdfPreview(doc, name, onDownload){ const url=doc.output('bloburl'), d=document.createElement('dialog'); d.className='ask pdfprev';
+  d.innerHTML=`<div class="toolbar" style="margin:0 0 8px;justify-content:space-between;flex-wrap:wrap"><b style="font-size:15px">${esc(name)}</b><span style="display:flex;gap:8px"><button type="button" class="btn ghost" data-a="x">Close</button><a class="btn ghost" href="${url}" target="_blank" rel="noopener">Open in new tab</a>${onDownload?'<button type="button" class="btn" data-a="dl">Download</button>':''}</span></div><iframe src="${url}" title="PDF preview"></iframe>`;
+  document.body.appendChild(d); const close=()=>{ d.close(); d.remove(); };
+  d.addEventListener('cancel', e=>{ e.preventDefault(); close(); });
+  d.addEventListener('click', async e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='x') close(); if(a==='dl'){ close(); await onDownload(); } });
+  d.showModal(); }
+async function deliverPdf(doc, name, p, what, o={}){
+  if(o.preview){ pdfPreview(doc, name, ()=>deliverPdf(doc, name, p, what)); return; }
   doc.save(name);
   if(!spOn()){ toast(`${what} downloaded`); return; }
   if(!/sharepoint\.com/.test(p.folderLink||'')){ toast(`${what} downloaded. Set the SharePoint folder (Files) to also save it there.`); return; }
@@ -2839,7 +2862,7 @@ async function deliverPdf(doc, name, p, what){
     if(p.num) addActivity(p.num,'note',`${what} saved to SharePoint: ${name}`).then(()=>{ if(draft&&draft.num===p.num) loadActivity(p.num); }); }
   catch(e){ toast(`${what} downloaded. SharePoint save failed: ${e.message}`); }
 }
-async function makePdf(p){
+async function makePdf(p, o={}){
   if(!window.jspdf){ toast('PDF tools did not load. Check your connection and reload.'); return; }
   const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), NAVY=[31,42,92], L0=56, R0=566, W=R0-L0, logo=await logoData();
   const items=(p.items||[]).length ? p.items : (num(p.amount)!=null ? [{type:'Service',qty:1,description:p.service||'Services',frequency:p.frequency||'',amount:p.amount}] : []);
@@ -2911,7 +2934,7 @@ async function makePdf(p){
   doc.setDrawColor(190); doc.setLineWidth(0.7); doc.rect(L0,y,W,22); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
   doc.text('WINDOW WASHING  •  PRESSURE WASHING  •  SOLAR PANEL CLEANING  •  JANITORIAL SERVICES  •  GATES & DOORS',306,y+14,{align:'center'});
   // terms page
-  doc.addPage(); if(logo) doc.addImage(logo,'JPEG',51,30,100,23);
+  doc.addPage(); if(logo) doc.addImage(logo,'JPEG',51,28,142,33);
   doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(...NAVY); doc.text('PF BUILDING SERVICES — TERMS AND CONDITIONS',51,72);
   y=88; const TW=510, FS=7.3, LH=9;
   doc.setFontSize(FS); doc.setTextColor(0);
@@ -2931,9 +2954,9 @@ async function makePdf(p){
   for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'}); }
   const code=SVC_CODE[p.service]||'PROP', place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().replace(/\s+/g,' ').slice(0,40);
   const dt=parse(p.dateSent)||today();
-  await deliverPdf(doc, `${code} ${dt.getMonth()+1}-${dt.getDate()}-${dt.getFullYear()} ${place} - ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}.pdf`, p, 'Proposal PDF');
+  await deliverPdf(doc, `${code} ${dt.getMonth()+1}-${dt.getDate()}-${dt.getFullYear()} ${place} - ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}.pdf`, p, 'Proposal PDF', o);
 }
-async function makeEstimatePdf(p, pairs){
+async function makeEstimatePdf(p, pairs, o={preview:true}){
   if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
   if(!pairs.length){ toast('Nothing priced to print yet.'); return; }
   const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), NAVY=[31,42,92], RED=[179,38,30], L0=46, R0=566, logo=await logoData(), n=v=>num(v)||0;
@@ -2955,13 +2978,13 @@ async function makeEstimatePdf(p, pairs){
   pairs.forEach(([it,e],k)=>{
     if(k>0) doc.addPage(); head(); y=84;
     const c=estCalc(e), price=num(it.amount)??c.total, lo=laborOnly(e), perUnit=!!(SHEETS[e.sheet]?.unit && (e.units||[]).length);
-    const mcost=lo?c.laborCost:c.cost, profit=price-mcost, m=price?profit/price:0, tgt=num(S.est.targetMargin)||0.45, floor=S.marginFloor;
+    const profit=price-c.cost, m=marginAt(c, price)??0, tgt=num(S.est.targetMargin)||0.45, floor=S.marginFloor, need=priceForMargin(c, tgt);
     doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(`${p.num||'New proposal'}${(p.rev||1)>1?' Rev '+p.rev:''}  ·  ${p.client||''}`,L0,y); y+=13;
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
     [`Property: ${p.property||'—'}  ·  Line: ${it.description||'—'}${it.frequency?'  ·  '+it.frequency:''}${num(it.qty)>1?'  ·  qty '+it.qty:''}`,`Estimator: ${p.sentBy||'—'}  ·  Printed ${fmtLong(iso(today()))}  ·  Amounts are per visit${e.sheet&&e.sheet!=='WC'?'  ·  '+e.sheet+' bid sheet':''}`].forEach(t=>{ doc.text(t,L0,y); y+=11; });
     y+=4;
     // key numbers
-    const tiles=[['PRICE',usd(price)],[lo?'WAGES':'JOB COST',usd(mcost)],[lo?'PROFIT (PRICE − WAGES)':'GROSS PROFIT',usd(profit)],['MARGIN',pct(m)]];
+    const tiles=[['PRICE',usd(price)],[c.passCost?'PASS-THROUGH (AT COST)':'JOB COST',usd(c.passCost||c.cost)],[c.passCost?'OUR COST':'GROSS PROFIT',usd(c.passCost?c.ownCost:profit)],['MARGIN',pct(m)]];
     const good=[46,125,79], warn=[138,97,0], bad=[179,38,30], mc = m>=tgt?good : m>=floor?warn : bad, mbg = m>=tgt?[227,242,232] : m>=floor?[255,241,204] : [251,228,226];
     const tw=(R0-L0-18)/4, th=46;
     tiles.forEach(([lab,val],i)=>{ const x=L0+i*(tw+6), last=i===3;
@@ -2969,8 +2992,9 @@ async function makeEstimatePdf(p, pairs){
       doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...(last?mc:[92,99,120])); doc.text(lab,x+9,y+14);
       doc.setFontSize(15); doc.setTextColor(...(last?mc:NAVY)); doc.text(val,x+9,y+35); });
     y+=th+8; doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0);
-    const status = m>=tgt?`Healthy: at or above the ${pct(tgt)} target.` : m>=floor?`Getting thin: below the ${pct(tgt)} target. ${pct(tgt)} would be ${money(Math.ceil(mcost/(1-tgt)))}.` : `Below the ${pct(floor)} floor: needs owner approval. ${pct(tgt)} would be ${money(Math.ceil(mcost/(1-tgt)))}.`;
+    const status = m>=tgt?`Healthy: at or above the ${pct(tgt)} target.` : m>=floor?`Getting thin: below the ${pct(tgt)} target. ${pct(tgt)} would be ${money(need)}.` : `Below the ${pct(floor)} floor: needs owner approval. ${pct(tgt)} would be ${money(need)}.`;
     doc.setTextColor(...mc); doc.setFont('helvetica','bold'); doc.text(status,L0,y); doc.setFont('helvetica','normal'); doc.setTextColor(0); y+=12;
+    doc.text(`Gross profit ${usd(profit)}. Margin = profit ÷ (price - pass-through)${c.passCost?` = ${usd(profit)} ÷ ${usd(price-c.passCost)}`:''}. Lifts/subs, materials and tax are billed through at cost; only their markup is profit.`,L0,y,{maxWidth:R0-L0}); y+=c.passCost?22:12;
     if(c.crew.techs){ doc.text('Crew: '+crewText(c),L0,y); y+=12; }
     if(Math.abs(price-c.total)>=1){ doc.setTextColor(92,99,120); doc.text(`Priced total ${usd(c.total)}; line price used ${usd(price)}.`,L0,y); doc.setTextColor(0); y+=12; }
     y+=8;
@@ -2990,25 +3014,25 @@ async function makeEstimatePdf(p, pairs){
     tbl('SUBCONTRACTORS / RENTALS (PASS-THROUGH)', H, line('rentals'));
     tbl('PFBS EQUIPMENT', H, line('equipment'));
     tbl('MISCELLANEOUS', H, line('misc'));
-    if(y>600){ doc.addPage(); head(); y=84; }
+
     // summary: only lines that have money, key rows highlighted
     const rows=[['Labor',c.laborPrice],['Materials + tax',c.matP+c.tax],['Subs / rentals',c.rentP],['PFBS equipment',c.eqP],['Miscellaneous',c.miscP]].filter(r=>Math.abs(r[1])>=0.005).map(r=>[r[0],usd(r[1])]);
     rows.push(['PRICE', usd(price)]);
-    const costRows=[['Labor cost'+(c.burden?' (incl. '+pct(c.burden)+' burden)':''),c.laborCost],['Materials + tax',c.mat+c.tax],['Lifts / subs (your cost)',c.rent],['Equipment + misc',c.eq+c.misc]].filter(r=>Math.abs(r[1])>=0.005).map(r=>['  '+r[0],usd(r[1])]);
-    rows.push(['JOB COST',usd(c.cost)],...costRows);
-    if(lo) rows.push(['PROFIT (PRICE − WAGES)',usd(price-c.laborCost)],['Gross profit after all costs',usd(price-c.cost)]);
-    else rows.push(['GROSS PROFIT',usd(price-c.cost)],['Labor profit (labor only)',usd(c.laborProfit)]);
+    const sub=L=>L.filter(r=>Math.abs(r[1])>=0.005).map(r=>['  '+r[0],usd(r[1])]);
+    if(c.passCost) rows.push(['PASS-THROUGH (AT COST)',usd(c.passCost)],...sub([['Lifts / subs',c.rent],['Materials',c.mat],['Sales tax',c.tax]]));
+    rows.push([c.passCost?'OUR COST':'JOB COST',usd(c.ownCost)],...sub([['Labor cost'+(c.burden?' (incl. '+pct(c.burden)+' burden)':''),c.laborCost],['PFBS equipment',c.eq],['Miscellaneous',c.misc]]));
+    rows.push(['GROSS PROFIT',usd(profit)],...sub([['Labor profit',c.laborProfit],['Materials markup',c.matP-c.mat],['Lifts / subs markup',c.rentP-c.rent],['Equipment',c.eqP-c.eq],['Misc',c.miscP-c.misc],['Line price vs priced total',price-c.total]]));
     rows.push(['MARGIN',pct(m)]);
-    if(c.pass) rows.push(['Pass-through',usd(c.pass)]);
+    if(y > 750 - rows.length*15){ doc.addPage(); head(); y=84; }
     doc.autoTable({startY:y, margin:{left:L0,right:612-(L0+300)}, body:rows, theme:'plain', styles:{font:'helvetica',fontSize:8.5,cellPadding:3},
       columnStyles:{1:{halign:'right'}}, didParseCell:d=>{ const k=d.row.raw[0];
-        if(/^(PRICE|JOB COST|GROSS PROFIT|PROFIT \(|MARGIN)/.test(k)){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor = k==='MARGIN'?mbg : /PROFIT/.test(k)?[227,242,232]:[238,240,246]; if(k==='MARGIN') d.cell.styles.textColor=mc; } } });
+        if(/^(PRICE|JOB COST|OUR COST|PASS-THROUGH|GROSS PROFIT|MARGIN)/.test(k)){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor = k==='MARGIN'?mbg : /PROFIT/.test(k)?[227,242,232]:[238,240,246]; if(k==='MARGIN') d.cell.styles.textColor=mc; } } });
   });
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120); doc.text(`PF Building Services · internal pricing · ${p.num||''} · page ${i} of ${pages}`,306,775,{align:'center'}); }
   const place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40);
-  await deliverPdf(doc, `${p.num||'NEW'}${(p.rev||1)>1?' Rev '+p.rev:''} Pricing ${place}.pdf`, p, 'Pricing PDF');
+  await deliverPdf(doc, `${p.num||'NEW'}${(p.rev||1)>1?' Rev '+p.rev:''} Pricing ${place}.pdf`, p, 'Pricing PDF', o);
 }
-async function makeCoPdf(p, co){
+async function makeCoPdf(p, co, o={preview:true}){
   if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
   if(!co.description || num(co.amount)==null){ toast('Add a description and amount first.'); return; }
   const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), NAVY=[31,42,92], L0=56, R0=566, W=R0-L0, logo=await logoData(), id=`${p.num}-CO${co.no}`;
@@ -3034,7 +3058,7 @@ async function makeCoPdf(p, co){
   ['Client Name: _______________________________________     Date: _____________','Signature: __________________________________________________________________','Title / Company: _____________________________________________________________'].forEach(t=>{ doc.text(t,L0,y); y+=22; });
   y+=10; doc.text('PF Building Services: ______________________________     Date: _____________',L0,y);
   doc.setFontSize(8); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'});
-  await deliverPdf(doc, `${id} ${String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40)}.pdf`, p, 'Change order PDF');
+  await deliverPdf(doc, `${id} ${String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40)}.pdf`, p, 'Change order PDF', o);
 }
 function fmtLong(s){ const d=parse(s); return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+'/'+d.getFullYear(); }
 

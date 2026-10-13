@@ -674,6 +674,31 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 27. Proposal: blanks fill from the client record when opened, Today button, Save changes stays put, PDF preview before download
+{
+  const c = { id: 'c-bl', name: 'Bill Fill Co', kind: 'Business', aliases: [], active: true, billing_address: '3300 Webster St\nOakland, CA 94609', billing_email: 'ap@billfill.example' };
+  const pr = { num: 'PFBS-1012', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Bill Fill Co', status: 'Estimating', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: 500 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('proposal open: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(([x, c]) => { window.MOCK_EXTRA = [x]; window.MOCK_CLIENTS = [c]; }, [pr, c]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.evaluate(() => [...document.querySelectorAll('button')].find(x => /^All/.test(x.textContent.trim()) && x.closest('#pipeBody, #pipeline, main'))?.click());
+  await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click());
+  await pg.click('tr[data-id="PFBS-1012"]'); await pg.waitForSelector('#f-billAddress', T);
+  assert.equal(await pg.$eval('#f-billAddress', e => e.value), '3300 Webster St\nOakland, CA 94609', 'billing address comes from the client record');
+  assert.equal(await pg.$eval('#f-billingEmail', e => e.value), 'ap@billfill.example');
+  await pg.click('#dsToday'); const td = await pg.evaluate(() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); });
+  assert.equal(await pg.$eval('#f-dateSent', e => e.value), td, 'Today sets the date');
+  await pg.evaluate(() => { document.querySelector('#drawer .dbody').scrollTop = 500; }); const before = await pg.evaluate(() => document.querySelector('#drawer .dbody').scrollTop);
+  await pg.click('#saveD'); await pg.waitForTimeout(900);
+  assert.ok(await pg.evaluate(() => !document.getElementById('drawer').hidden), 'Save changes keeps the proposal open');
+  assert.equal(await pg.evaluate(() => document.querySelector('#drawer .dbody').scrollTop), before, '…at the same spot');
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1012').bill_address), '3300 Webster St\nOakland, CA 94609', 'filled billing saved');
+  await pg.click('#pdfD'); await pg.waitForSelector('dialog.pdfprev iframe', T);
+  const dl = pg.waitForEvent('download', T); await pg.click('dialog.pdfprev [data-a="dl"]'); assert.match((await dl).suggestedFilename(), /PFBS-1012/, 'download after preview');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

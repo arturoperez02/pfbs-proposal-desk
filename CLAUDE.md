@@ -110,6 +110,6 @@ punctuation, LLC/Inc/Partners/Management; proposals fill from the client record 
 HCP facts: Oscar creates each job in HCP and retypes it in TechSched; HCP job statuses are not kept up (738 "Scheduled",
 29 "Completed"), so "done" = invoiced and "paid" = payment recorded in the CRM. Invoice numbers continue after HCP's last.
 
-Proposal numbers: `proposal_seq` (031 sets the next to PFBS-0803 or after the highest used; Settings → Proposal numbers, `set_next_proposal_no`). A refresh keeps the tab, the open client + its tab and the open proposal (sessionStorage `pfbs.tab` / `pfbs.client` / `pfbs.cltab` / `pfbs.open`).
+Proposal numbers: `proposal_seq` (031 sets the next to PFBS-0803 or after the highest used; Settings → Proposal numbers, `set_next_proposal_no`). Opening a proposal fills blanks from the client record (`fillClientBlanks`: billing address, AP email, PO#, contact); Date sent has a Today button and moves to today when it goes Sent; Save changes stays in the drawer at the same scroll; Download PDF / Pricing PDF / change order / invoice preview open `pdfPreview` first (the email flow still downloads straight away); PDFs use the sharp `reports-logo.jpg`. A refresh keeps the tab, the open client + its tab and the open proposal (sessionStorage `pfbs.tab` / `pfbs.client` / `pfbs.cltab` / `pfbs.open`).
 
 Pending on Arturo's side: Supabase Pro (daily backups), Entra app for SharePoint (send client ID + tenant ID only).
