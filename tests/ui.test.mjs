@@ -425,6 +425,28 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 18. Double booking: same tech, overlapping times (a night shift past midnight included) → orange on the calendar, warning on save
+{
+  const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const d0 = day(1), d1 = day(2);
+  const jj = { num: 'PFBS-1001', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Clash Co', property: '7 Clash St', amount: 500, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10400', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 500 }] };
+  const vis = [{ id: 'n1', num: 'PFBS-1001', kind: 'job', status: 'Scheduled', visit_date: d0, start_time: '22:00', end_time: '06:00', techs: ['Rigo Perez'], work: [], equipment: [] },
+               { id: 'n2', num: 'PFBS-1001', kind: 'job', status: 'Scheduled', visit_date: d1, start_time: '05:00', end_time: '09:00', techs: ['Rigo Perez'], work: [], equipment: [] },
+               { id: 'n3', num: 'PFBS-1001', kind: 'job', status: 'Scheduled', visit_date: d1, start_time: '10:00', end_time: '14:00', techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('double booking: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); }, [jj, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(800);
+  await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForTimeout(300);
+  if (!(await pg.$('[data-vis="n2"]'))) { await pg.click('#schNext'); await pg.waitForTimeout(200); }
+  assert.ok(await pg.$('.vchip.dbl[data-vis="n2"]'), 'the 5 AM job overlaps the night shift: orange');
+  assert.equal(await pg.$('.vchip.dbl[data-vis="n3"]'), null, 'the 10 AM job does not overlap');
+  await pg.click('[data-vis="n2"]'); await pg.waitForSelector('dialog.inved', T);
+  await pg.click('dialog.inved [data-a="save"]'); await pg.waitForSelector('text=Double booked', T);
+  assert.match(await pg.textContent('dialog.ask:last-of-type'), /Rigo Perez/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
