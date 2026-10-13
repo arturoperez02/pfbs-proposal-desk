@@ -260,6 +260,7 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="sales" aria-selected="false" id="salesTab" hidden>My Sales</button>
     <button role="tab" data-tab="orders" aria-selected="false" id="ordersTab" hidden>Jobs</button>
     <button role="tab" data-tab="comm" aria-selected="false" id="commTab" hidden>Commission</button>
+    <button role="tab" data-tab="clients" aria-selected="false" id="clientsTab">Clients</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
   <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
@@ -338,6 +339,12 @@ td input,td select{padding:5px 8px}
     <div id="commBody"></div>
   </section>
 
+  <section id="view-clients" hidden>
+    <h2>Clients</h2>
+    <div class="sub" style="margin-bottom:12px">Every client with its contacts, properties, proposals and what they owe. Proposals and invoices fill in from here.</div>
+    <div id="clientsBody"></div>
+  </section>
+
   <section id="view-settings" hidden>
     <h2>Settings</h2>
     <div class="sub" style="margin-bottom:16px" id="setnote"></div>
@@ -383,7 +390,7 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt',budget_year:'budgetYear',budget_check:'budgetCheck',lost_to:'lostTo',lost_price:'lostPrice',billing_email:'billingEmail',po_number:'poNumber',po_required:'poRequired'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt',budget_year:'budgetYear',budget_check:'budgetCheck',lost_to:'lostTo',lost_price:'lostPrice',billing_email:'billingEmail',po_number:'poNumber',po_required:'poRequired',client_id:'clientId',property_id:'propertyId'};
 const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp',report_sent_on:'reportSentOn',report_url:'reportUrl',est_comm_rate:'estCommRate',bd_comm_rate:'bdCommRate'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
@@ -901,6 +908,7 @@ async function save(after, o={}){
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
   if(draft.status==='Lead' && !draft.sentBy){ $('#dmsg').textContent='Assign an estimator before saving the lead.'; return; }
   const btn=$('#saveD'); btn.disabled=true; $('#dmsg').textContent='Saving…';
+  await ensureClient(draft);
   syncFromItems(draft); draft.actualsSummary = actSummary(draft); draft.yearValue = isRecurring(draft) ? Math.round((annual(draft)||0)*100)/100 : null;
   const row=toRow(draft); if(isNew) delete row.num;
   if(!canPayComm()){ delete row.comm_paid_on; delete row.est_comm_paid_on; }
@@ -1367,7 +1375,7 @@ $('#drawer').addEventListener('change', e=>{ if(e.target.id==='spClient'){ $('#s
 
 // ---------- remember clients & properties from past proposals ----------
 const norm = v => String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
-function clientNames(){ const m=new Map(); for(const x of P){ const k=norm(x.client); if(k && !m.has(k)) m.set(k, String(x.client).trim()); } return [...m.values()].sort((a,b)=>a.localeCompare(b)); }
+function clientNames(){ const m=new Map(); for(const c of CL){ if(c.active!==false && !m.has(norm(c.name))) m.set(norm(c.name), c.name); } for(const x of P){ const k=norm(x.client); if(k && !m.has(k)) m.set(k, String(x.client).trim()); } return [...m.values()].sort((a,b)=>a.localeCompare(b)); }
 function propsFor(client){ const c=norm(client), m=new Map(); for(const x of P){ if(c && norm(x.client)!==c) continue; const k=norm(x.property); if(k && !m.has(k)) m.set(k, String(x.property).trim()); } return [...m.values()].sort((a,b)=>a.localeCompare(b)); }
 function latest(pred){ return P.filter(x=>x.num!==draft.num && pred(x)).sort((a,b)=>String(b.num).localeCompare(String(a.num))); }
 const CONTACT_KEYS=['contactName','contactPhone','contactEmail','billAddress','billingEmail','poRequired'];
@@ -1377,6 +1385,7 @@ function checkDup(){ const box=$('#dupWarn'); if(!box || !draft) return; if(!isN
   const hits=P.filter(x=>norm(x.client)===c && norm(x.property)===pr && ['Lead','Draft','Open','Budget'].includes(outcome(x)));
   box.innerHTML = hits.length ? `<div class="lockline">Already open for ${esc(draft.client)} · ${esc(draft.property)}: ${hits.map(x=>`<a href="#" data-open="${esc(x.num)}">${esc(x.num)}</a> (${esc(x.status)}${x.sentBy?', '+esc(x.sentBy):''})`).join(', ')}. Open it instead, or keep going if this is separate work.</div>` : ''; }
 function autofill(k){
+  const cf=clientFill(k); if(cf) toast(k==='client'?`Filled from the client record (${cf} field${cf===1?'':'s'})`:'Filled the site address from the property');
   if(k==='client'){
     const c=norm(draft.client); if(!c) return;
     const hit=latest(x=>norm(x.client)===c && CONTACT_KEYS.some(f=>x[f]))[0];
@@ -2115,6 +2124,167 @@ async function invPay(v){
 async function invRefresh(n){ await loadInvoices(n); loadOpenInvoices(); await loadProposals(); }
 async function invOpen(p, id){ if(!INV[p.num]) await loadInvoices(p.num); const v=(INV[p.num]||[]).find(x=>x.id===id); if(v) invEdit(p, v); }
 function invOpenNew(p){ if(!INVOK){ toast('Run database update 018 in Supabase first.'); return; } invEdit(p, invBlank(p)); }
+// ---------- clients, contacts, properties (update 019) ----------
+let CL=[], CC=[], PROPS=[], CLOK=true, CLSEL=null, clQuery='';
+const SUFX={STREET:'ST',AVENUE:'AVE',BOULEVARD:'BLVD',DRIVE:'DR',ROAD:'RD',LANE:'LN',COURT:'CT',PLACE:'PL',PARKWAY:'PKWY'};
+const akey = a => { const s=String(a||'').split('\n')[0].split(',')[0].toUpperCase().replace(/[^A-Z0-9 ]/g,' ').split(/\s+/).filter(Boolean).map(w=>SUFX[w]||w).join(' '); return s||null; };
+async function loadClients(){
+  const [a,b,c]=await Promise.all([sb.from('clients').select('*').order('name'), sb.from('client_contacts').select('*'), sb.from('properties').select('*')]);
+  if(a.error){ CLOK=!invMissing(a.error); CL=[]; CC=[]; PROPS=[]; }
+  else { CLOK=true; CL=a.data||[]; CC=b.data||[]; PROPS=c.data||[]; }
+  if(current()==='clients') renderClients();
+}
+const clientOf = name => { const n=norm(name); if(!n) return null; return CL.find(c=>c.active!==false && (norm(c.name)===n || (c.aliases||[]).some(a=>norm(a)===n))) || null; };
+const contactsOf = id => CC.filter(x=>x.client_id===id && x.active!==false).sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0));
+const propsOf = id => PROPS.filter(x=>x.client_id===id && x.active!==false).sort((a,b)=>String(a.name||a.address).localeCompare(String(b.name||b.address)));
+const propLabel = p => p.name || String(p.address||'').split('\n')[0];
+function clientProposals(c){ const names=[c.name,...(c.aliases||[])].map(norm); return P.filter(p=>p.clientId===c.id || (!p.clientId && names.includes(norm(p.client)))); }
+// a proposal names a client or property nobody has entered yet: create it so it is typed once
+async function ensureClient(d){
+  if(!CLOK || !d.client || (COLS && !COLS.has('client_id'))) return;
+  try{
+    let c=d.clientId ? CL.find(x=>x.id===d.clientId) : clientOf(d.client);
+    if(!c){ const r=await sb.from('clients').insert({name:String(d.client).trim(), billing_address:d.billAddress||null, billing_email:d.billingEmail||null, po_required:d.poRequired===true||d.poRequired==='true'}).select().single();
+      if(r.error) return; c=r.data; CL.push(c); }
+    d.clientId=c.id;
+    const em=String(d.contactEmail||'').trim().toLowerCase();
+    if((em || d.contactName) && !contactsOf(c.id).some(x=>(em && String(x.email||'').toLowerCase()===em) || (!em && norm(x.name)===norm(d.contactName)))){
+      const r=await sb.from('client_contacts').insert({client_id:c.id, name:d.contactName||null, email:d.contactEmail||null, phone:d.contactPhone||null, is_primary:!contactsOf(c.id).length}).select().single(); if(!r.error) CC.push(r.data); }
+    if(!d.propertyId && (d.property || d.siteAddress)){
+      const k=akey(d.siteAddress)||akey(d.property); let pr=propsOf(c.id).find(x=>(k && x.addr_key===k) || (d.property && norm(x.name)===norm(d.property)));
+      if(!pr && k){ const r=await sb.from('properties').insert({client_id:c.id, name:d.property||null, address:d.siteAddress||null}).select().single(); if(!r.error){ pr=r.data; PROPS.push(pr); } }
+      if(pr) d.propertyId=pr.id;
+    }
+  }catch(_){}
+}
+// proposal drawer: picking a client / property fills what the client record already knows
+function clientFill(k){
+  if(!CLOK || !draft) return 0;
+  if(k==='client'){ const c=clientOf(draft.client); draft.clientId=c?c.id:null; draft.propertyId=null; if(!c) return 0;
+    const pc=contactsOf(c.id)[0]||{};
+    const src={contactName:pc.name, contactEmail:pc.email, contactPhone:pc.phone, billAddress:c.billing_address, billingEmail:c.billing_email, poRequired:c.po_required?'true':''};
+    const n=fillEmpty(src, ['contactName','contactEmail','contactPhone','billAddress','billingEmail','poRequired']);
+    const dl=$('#propList'); if(dl){ const opts=[...new Set([...propsOf(c.id).map(propLabel), ...propsFor(draft.client)])]; dl.innerHTML=opts.map(v=>`<option value="${esc(v)}">`).join(''); }
+    return n; }
+  if(k==='property'){ const c=draft.clientId && CL.find(x=>x.id===draft.clientId); if(!c) return 0; const pr=norm(draft.property), kk=akey(draft.property);
+    const hit=propsOf(c.id).find(x=>norm(propLabel(x))===pr || norm(x.name)===pr || (kk && x.addr_key===kk)); draft.propertyId=hit?hit.id:null; if(!hit) return 0;
+    return fillEmpty({siteAddress:hit.address}, ['siteAddress']); }
+  return 0;
+}
+// ---------- HousecallPro customer export → clients (grouped by company; homeowners stay people) ----------
+function parseCsv(t){ const rows=[]; let row=[], f='', q=false; t=String(t).replace(/^﻿/,'');
+  for(let i=0;i<t.length;i++){ const ch=t[i];
+    if(q){ if(ch==='"'){ if(t[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=ch; }
+    else if(ch==='"') q=true; else if(ch===','){ row.push(f); f=''; } else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&t[i+1]==='\n') i++; row.push(f); rows.push(row); row=[]; f=''; } else f+=ch; }
+  if(f!==''||row.length){ row.push(f); rows.push(row); }
+  const head=rows.shift()||[]; return rows.filter(r=>r.some(x=>x.trim())).map(r=>Object.fromEntries(head.map((h,i)=>[h.trim(), (r[i]||'').trim()]))); }
+// company name → a key that ignores "c/o", punctuation, LLC/Inc/Partners/Management…, so spelling variants merge
+const CO_WORDS=new Set(['and','llc','inc','incorporated','corp','corporation','co','company','ltd','lp','llp','partners','management','mgmt','re','r','e','group','the']);
+function coKey(n){ const w=String(n||'').toLowerCase().replace(/^\s*\d+\s*-\s*/,'').replace(/^\s*c\/o\s+/,'').replace(/&/g,' ').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean);
+  const k=w.filter((x,i)=>i===0||!CO_WORDS.has(x)).join(''); return k||w.join(''); }
+function hcpGroup(rows){
+  const G=new Map(), V=new Map();
+  for(const r of rows){
+    const company0=(r['Company']||'').trim(), home=/homeowner/i.test(r['Customer Type']||'') && !company0, company=(r['Company']||'').trim(), display=(r['Display Name']||'').trim(), person=[r['First Name'],r['Last Name']].map(s=>(s||'').trim()).filter(Boolean).join(' ');
+    const name=home ? (display||person) : (company||display||person); if(!name) continue;
+    const key=coKey(name); if(G.has(key) && !home) G.get(key).kind='Business'; if(!G.has(key)){ G.set(key,{name, kind:home?'Homeowner':'Business', aliases:[], hcp_ids:[], contacts:[], properties:[], po_required:false, notes:[], billing_address:''}); V.set(key,new Map()); }
+    const g=G.get(key), vv=V.get(key); vv.set(name,(vv.get(name)||0)+1);
+    if(display && norm(display)!==norm(name) && norm(display)!==norm(person) && !g.aliases.some(a=>norm(a)===norm(display))) g.aliases.push(display);
+    if(r['ID']) g.hcp_ids.push(r['ID']);
+    if(/PO#?\s*Required/i.test(r['Tags']||'')) g.po_required=true;
+    if(/Invoice to AP/i.test(r['Tags']||'')) g.notes.push('Invoice to AP');
+    if(r['Notes']) g.notes.push(r['Notes']);
+    if(person || r['Email']) g.contacts.push({name:person||display, role:r['Role']||'', email:r['Email']||'', emails_extra:r['Additional Emails']||'', phone:r['Mobile Number']||r['Work Number']||r['Home Number']||'', hcp_id:r['ID']||''});
+    const addrs=[]; for(let i=1;i<=60;i++){ const s1=r[`Address_${i} Street Line 1`]; if(s1==null) break; if(!s1) continue;
+      const s2=r[`Address_${i} Street Line 2`]||'', city=r[`Address_${i} City`]||'', st=r[`Address_${i} State`]||'', zip=r[`Address_${i} Postal Code`]||'';
+      addrs.push({address:[s1+(s2?' '+s2:''), [city,[st,zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')].filter(Boolean).join('\n'), billing:/true/i.test(r[`Address_${i} Billing?`]||''), notes:r[`Address_${i} Notes`]||''}); }
+    const sites=addrs.filter(a=>!a.billing), bill=addrs.find(a=>a.billing);
+    if(bill && !g.billing_address && sites.length) g.billing_address=bill.address;
+    const use=sites.length?sites:addrs;
+    use.forEach(a=>g.properties.push({name:(use.length===1 && display && norm(display)!==norm(name) && norm(display)!==norm(person))?display:'', address:a.address, notes:a.notes}));
+  }
+  // the name used most (not a "c/o" one) becomes the client name; the other spellings become aliases
+  for(const [key,g] of G){ const vs=[...V.get(key)].sort((a,b)=>b[1]-a[1] || (/^\s*c\/o/i.test(a[0])?1:0)-(/^\s*c\/o/i.test(b[0])?1:0) || a[0].length-b[0].length).map(x=>x[0]);
+    g.name=vs[0].replace(/^\s*c\/o\s+/i,'').trim(); g.aliases=[...new Set([...vs.slice(1), ...g.aliases].filter(a=>norm(a)!==norm(g.name)))]; }
+  return [...G.values()].map(g=>({...g, notes:[...new Set(g.notes)].join(' · ')})).sort((a,b)=>a.name.localeCompare(b.name));
+}
+async function importHcp(file){
+  const groups=hcpGroup(parseCsv(await file.text()));
+  if(!groups.length){ toast('No customers found in that file. Use HousecallPro → Customers → Export.'); return; }
+  const k=groups.reduce((s,g)=>s+g.contacts.length,0), pr=groups.reduce((s,g)=>s+g.properties.length,0), home=groups.filter(g=>g.kind==='Homeowner').length;
+  const ok=await formDialog('Import HousecallPro customers', `<div class="note" style="margin:0 0 8px">${groups.length} clients (${groups.length-home} companies, ${home} homeowners), ${k} contacts, ${pr} properties. People at the same company become contacts under one client. Clients already in the CRM are matched by name and only get what's missing; nothing is overwritten.</div>
+    <div class="note" style="margin:0;max-height:220px;overflow:auto">${groups.slice(0,400).map(g=>`${esc(g.name)} <span style="opacity:.7">· ${g.contacts.length} contact${g.contacts.length===1?'':'s'} · ${g.properties.length} propert${g.properties.length===1?'y':'ies'}${g.po_required?' · PO# required':''}</span>`).join('<br>')}</div>`, 'Import');
+  if(!ok) return;
+  const tot={clients_new:0,clients_updated:0,contacts_new:0,properties_new:0,proposals_linked_to_client:0,proposals_linked_to_property:0};
+  for(let i=0;i<groups.length;i+=40){ const {data,error}=await sb.rpc('import_clients',{payload:{clients:groups.slice(i,i+40)}});
+    if(error){ toast(invMissing(error)?'Run database update 019 in Supabase first.':error.message); return; } for(const x in tot) tot[x]+=Number(data?.[x]||0); }
+  toast(`Imported: ${tot.clients_new} new clients, ${tot.contacts_new} contacts, ${tot.properties_new} properties · ${tot.proposals_linked_to_client} proposals linked`);
+  await loadClients(); await loadProposals();
+}
+// ---------- Clients tab ----------
+function renderClients(){
+  const box=$('#clientsBody'); if(!box) return;
+  if(!CLOK){ box.innerHTML='<div class="card"><div class="note" style="margin:0">Run database update 019 in Supabase to turn on clients.</div></div>'; return; }
+  if(CLSEL){ const c=CL.find(x=>x.id===CLSEL); if(c) return renderClient(c); CLSEL=null; }
+  const q=norm(clQuery), mgr=isManager();
+  const due={}; for(const v of (OPENINV||[])){ due[v.num]=(due[v.num]||0)+invBal(v); }
+  const rows=CL.filter(c=>c.active!==false).map(c=>{ const pp=clientProposals(c); return {c, pp, open:pp.filter(p=>outcome(p)==='Open').length, won:pp.filter(p=>outcome(p)==='Won').length, bal:pp.reduce((s,p)=>s+(due[p.num]||0),0), last:pp.map(p=>p.dateSent||'').sort().pop()||''}; })
+    .filter(x=>!q || [x.c.name,...(x.c.aliases||[]),...contactsOf(x.c.id).map(k=>k.name+' '+(k.email||'')),...propsOf(x.c.id).map(p=>propLabel(p)+' '+(p.address||''))].some(s=>norm(s).includes(q)));
+  box.innerHTML=`<div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <input id="clQ" type="search" placeholder="Search clients, contacts, properties, addresses" value="${esc(clQuery)}" style="flex:1;min-width:220px" aria-label="Search clients">
+      <button class="btn" id="clNew">+ Client</button></div>
+    <div class="card" style="margin-top:12px"><h3>${rows.length} client${rows.length===1?'':'s'}</h3>${CL.length?'':'<div class="note">No clients yet. Owner or admin: Settings → Clients → Import HousecallPro customers.</div>'}
+    <div class="tablewrap"><table><thead><tr><th>Client</th><th class="hide-sm">Contacts</th><th class="hide-sm">Properties</th><th class="r">Open</th><th class="r">Won</th>${mgr?'<th class="r">Owed</th>':''}<th class="hide-sm">Last proposal</th></tr></thead><tbody>
+    ${rows.slice(0,500).map(x=>`<tr data-cl="${esc(x.c.id)}" tabindex="0"><td class="wrap"><b>${esc(x.c.name)}</b>${x.c.kind==='Homeowner'?' <span class="flag">Homeowner</span>':''}${x.c.po_required?' <span class="flag warn">PO#</span>':''}${(x.c.aliases||[]).length?`<div class="note" style="margin:0">${esc(x.c.aliases.slice(0,3).join(' · '))}</div>`:''}</td>
+      <td class="hide-sm r num">${contactsOf(x.c.id).length}</td><td class="hide-sm r num">${propsOf(x.c.id).length}</td><td class="r num">${x.open||''}</td><td class="r num">${x.won||''}</td>${mgr?`<td class="r num">${x.bal>0.004?usd(x.bal):''}</td>`:''}<td class="hide-sm num">${fmtD(x.last)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No match.</td></tr>'}
+    </tbody></table></div></div>`;
+}
+function renderClient(c){
+  const box=$('#clientsBody'), mgr=isManager(), canEd=!!role(), pp=clientProposals(c).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
+  const due={}; for(const v of (OPENINV||[])){ due[v.num]=(due[v.num]||0)+invBal(v); } const owed=pp.reduce((s,p)=>s+(due[p.num]||0),0);
+  const kRow=k=>`<tr data-ck="${esc(k.id||'')}"><td><input data-cf="name" value="${esc(k.name||'')}" placeholder="Name" aria-label="Name"></td><td><input data-cf="role" value="${esc(k.role||'')}" placeholder="Role" aria-label="Role"></td>
+      <td><input data-cf="email" type="email" value="${esc(k.email||'')}" placeholder="Email" aria-label="Email"></td><td><input data-cf="phone" value="${esc(k.phone||'')}" placeholder="Phone" aria-label="Phone"></td>
+      <td style="white-space:nowrap"><label class="note" style="margin:0"><input type="radio" name="ckPrimary" data-cf="is_primary" ${k.is_primary?'checked':''}> main</label> <button type="button" class="btn ghost small" data-ckdel aria-label="Remove contact">✕</button></td></tr>`;
+  const pRow=p=>`<tr data-cp="${esc(p.id||'')}"><td><input data-pf="name" value="${esc(p.name||'')}" placeholder="Building / property name" aria-label="Property name"></td><td><textarea data-pf="address" rows="2" placeholder="Street\nCity, State Zip" aria-label="Address">${esc(p.address||'')}</textarea></td>
+      <td><input data-pf="notes" value="${esc(p.notes||'')}" placeholder="Notes (access, lift, keys…)" aria-label="Property notes"></td><td class="r num">${pp.filter(x=>x.propertyId===p.id||(!x.propertyId && p.addr_key && (akey(x.siteAddress)===p.addr_key||akey(x.property)===p.addr_key))).length||''}</td><td><button type="button" class="btn ghost small" data-cpdel aria-label="Remove property">✕</button></td></tr>`;
+  box.innerHTML=`<div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><button class="btn ghost" id="clBack">‹ All clients</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="clProp">+ Proposal for ${esc(c.name)}</button>${['Owner','Admin'].includes(role())?'<button class="btn ghost" id="clArch">Archive</button>':''}<button class="btn" id="clSave">Save changes</button></div></div>
+    <div class="cards" style="margin-top:12px">
+    <div class="card listedit"><h3>${esc(c.name)}${owed>0.004&&mgr?` <span class="flag warn">${usd(owed)} owed</span>`:''}</h3><div class="grid2">
+      <label class="f">Client name<input id="cl-name" value="${esc(c.name)}"></label>
+      <label class="f">Type<select id="cl-kind"><option ${c.kind!=='Homeowner'?'selected':''}>Business</option><option ${c.kind==='Homeowner'?'selected':''}>Homeowner</option></select></label>
+      <label class="f">Billing (AP) email for invoices<input id="cl-bemail" type="email" value="${esc(c.billing_email||'')}" placeholder="Leave blank to use the main contact"></label>
+      <label class="f">Requires a PO# on invoices<select id="cl-po"><option value="">No</option><option value="true" ${c.po_required?'selected':''}>Yes</option></select></label>
+      <label class="f">Billing address<textarea id="cl-baddr" rows="2">${esc(c.billing_address||'')}</textarea></label>
+      <label class="f">Payment terms (days)<input id="cl-terms" type="number" value="${esc(c.terms_days??'')}" placeholder="${esc(invS('terms'))} (default)"></label>
+      <label class="f full">Also known as <span class="note" style="margin:0;font-weight:400">other names, one per line (building names, old names)</span><textarea id="cl-alias" rows="2">${esc((c.aliases||[]).join('\n'))}</textarea></label>
+      <label class="f full">Notes<textarea id="cl-notes" rows="2">${esc(c.notes||'')}</textarea></label></div>
+      <div class="note">New proposals and invoices for this client fill in from here.</div></div>
+    <div class="card"><h3>Contacts</h3><div class="tablewrap"><table class="qatable"><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th></th></tr></thead><tbody id="clK">${contactsOf(c.id).map(kRow).join('')}</tbody></table></div>
+      <button type="button" class="btn ghost small" id="clKAdd">+ Contact</button></div>
+    <div class="card"><h3>Properties (${propsOf(c.id).length})</h3><div class="tablewrap"><table class="qatable"><thead><tr><th>Name</th><th>Address</th><th>Notes</th><th class="r">Proposals</th><th></th></tr></thead><tbody id="clP">${propsOf(c.id).map(pRow).join('')}</tbody></table></div>
+      <button type="button" class="btn ghost small" id="clPAdd">+ Property</button></div>
+    <div class="card"><h3>Proposals &amp; jobs (${pp.length})</h3><div class="tablewrap"><table><thead><tr><th>#</th><th>Property</th><th>Status</th><th class="r">Amount</th><th class="hide-sm">Date</th>${mgr?'<th class="r">Owed</th>':''}</tr></thead><tbody>
+      ${pp.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="num"><b>${esc(p.num)}</b></td><td class="wrap">${esc(p.property||'')}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="r num">${money(p.amount)}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td>${mgr?`<td class="r num">${due[p.num]>0.004?usd(due[p.num]):''}</td>`:''}</tr>`).join('') || '<tr><td colspan="6" class="empty">No proposals yet.</td></tr>'}
+    </tbody></table></div></div></div>`;
+  box._kRow=kRow; box._pRow=pRow;
+}
+async function saveClient(c){
+  const box=$('#clientsBody'), v=id=>$('#'+id).value.trim();
+  const row={name:v('cl-name'), kind:v('cl-kind'), billing_email:v('cl-bemail')||null, po_required:v('cl-po')==='true', billing_address:v('cl-baddr')||null, terms_days:num(v('cl-terms')), notes:v('cl-notes')||null,
+    aliases:[...new Set(v('cl-alias').split('\n').map(s=>s.trim()).filter(Boolean))]};
+  if(!row.name){ toast('The client needs a name.'); return; }
+  const r=await sb.from('clients').update(row).eq('id',c.id); if(r.error){ toast(/unique|duplicate/i.test(r.error.message)?'Another client already has that name.':r.error.message); return; }
+  for(const tr of box.querySelectorAll('#clK tr')){ const g=f=>tr.querySelector(`[data-cf="${f}"]`); const k={name:g('name').value.trim()||null, role:g('role').value.trim()||null, email:g('email').value.trim()||null, phone:g('phone').value.trim()||null, is_primary:g('is_primary').checked};
+    if(tr.dataset.gone){ if(tr.dataset.ck) await sb.from('client_contacts').update({active:false}).eq('id',tr.dataset.ck); continue; }
+    if(!k.name && !k.email) continue;
+    if(tr.dataset.ck) await sb.from('client_contacts').update(k).eq('id',tr.dataset.ck); else await sb.from('client_contacts').insert({...k, client_id:c.id}); }
+  for(const tr of box.querySelectorAll('#clP tr')){ const g=f=>tr.querySelector(`[data-pf="${f}"]`); const p={name:g('name').value.trim()||null, address:g('address').value.trim()||null, notes:g('notes').value.trim()||null};
+    if(tr.dataset.gone){ if(tr.dataset.cp) await sb.from('properties').update({active:false}).eq('id',tr.dataset.cp); continue; }
+    if(!p.name && !p.address) continue;
+    if(tr.dataset.cp) await sb.from('properties').update(p).eq('id',tr.dataset.cp); else await sb.from('properties').insert({...p, client_id:c.id}); }
+  toast(`${row.name} saved`); await loadClients();
+}
 // ---------- SharePoint: save PDFs straight into the client's folder ----------
 // Needs SP_CLIENT_ID and SP_TENANT_ID in config.js (an Entra "Single-page application" registration; no secret).
 const SPC = { clientId: window.PFBS_CONFIG?.SP_CLIENT_ID || '', tenant: window.PFBS_CONFIG?.SP_TENANT_ID || '',
@@ -2894,6 +3064,9 @@ function renderSettings(){
       <label class="f">"Contact us" address<textarea id="s-invaddr" rows="2" ${ro}>${esc(invS('address'))}</textarea></label>
       <div class="grid2"><label class="f">Phone<input id="s-invphone" value="${esc(invS('phone'))}" ${ro}></label><label class="f">Email<input id="s-invemail" value="${esc(invS('email'))}" ${ro}></label>
       <label class="f">Website<input id="s-invweb" value="${esc(invS('website'))}" ${ro}></label><label class="f">License #<input id="s-invlic" value="${esc(invS('license'))}" ${ro}></label></div></div>
+    ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Clients</h3>
+      <div class="note" style="margin:0 0 8px">Bring in your HousecallPro customers: in HousecallPro go to Customers → Export, then pick that file here. People at the same company become contacts under one client; addresses become properties. Safe to run again: nothing is duplicated or overwritten.</div>
+      <div class="toolbar" style="margin:0"><label class="btn">Import HousecallPro customers…<input type="file" id="clImport" accept=".csv,text/csv" hidden></label><button type="button" class="btn ghost" id="clLink">Link proposals to clients</button></div></div>`:''}
     ${ta('s-svc','Services', lines(S.services), 'One per line.')}
     ${ta('s-freq','Frequencies', lines(S.frequencies), 'Name | visits per year.')}
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
@@ -2955,7 +3128,7 @@ function organizeSettings(){
     ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
     ['Invoicing', ['Invoicing']],
     ['Change log', ['Change log']],
-    ['Data', ['Backup','Clean up old proposals']]];
+    ['Data', ['Clients','Backup','Clean up old proposals']]];
   const save=root.querySelector('#saveS')?.parentElement, frag=document.createDocumentFragment();
   for(const [title, names] of groups){
     const got=names.map(n=> n==='Proposal & links' ? extra : find(n)).filter(Boolean); if(!got.length) continue;
@@ -3030,14 +3203,34 @@ $('#settingsBody').addEventListener('change', async e=>{
 });
 
 // ---------- tabs / views ----------
-function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','comm','settings']) $('#view-'+v).hidden = v!==view; }
+$('#settingsBody').addEventListener('change', async e=>{ if(e.target.id!=='clImport' || !e.target.files[0]) return; const f=e.target.files[0]; e.target.value=''; await importHcp(f); });
+$('#settingsBody').addEventListener('click', async e=>{ if(e.target.id!=='clLink') return; const {data,error}=await sb.rpc('link_clients'); if(error){ toast(invMissing(error)?'Run database update 019 in Supabase first.':error.message); return; }
+  toast(`Linked ${data.proposals_linked_to_client} proposals to clients and ${data.proposals_linked_to_property} to properties`); loadProposals(); });
+$('#clientsBody').addEventListener('input', e=>{ if(e.target.id==='clQ'){ clQuery=e.target.value; const pos=e.target.selectionStart; renderClients(); const q=$('#clQ'); q.focus(); q.setSelectionRange(pos,pos); } });
+$('#clientsBody').addEventListener('click', async e=>{ const t=e.target, box=$('#clientsBody');
+  const row=t.closest('tr[data-cl]'); if(row){ CLSEL=row.dataset.cl; renderClients(); window.scrollTo(0,0); return; }
+  const pr=t.closest('tr[data-id]'); if(pr && !t.closest('input,button,a,textarea,select')){ openDrawer(pr.dataset.id); return; }
+  if(t.id==='clBack'){ CLSEL=null; renderClients(); return; }
+  if(t.id==='clKAdd'){ $('#clK').insertAdjacentHTML('beforeend', box._kRow({})); $('#clK tr:last-child input').focus(); return; }
+  if(t.id==='clPAdd'){ $('#clP').insertAdjacentHTML('beforeend', box._pRow({})); $('#clP tr:last-child input').focus(); return; }
+  if(t.closest('[data-ckdel],[data-cpdel]')){ const tr=t.closest('tr'); tr.dataset.gone='1'; tr.hidden=true; toast('Removed. Click Save changes to keep it that way.'); return; }
+  const c=CL.find(x=>x.id===CLSEL);
+  if(t.id==='clSave' && c){ t.disabled=true; await saveClient(c); t.disabled=false; return; }
+  if(t.id==='clArch' && c){ if(!confirm(`Archive ${c.name}? It disappears from lists and pickers; its proposals and invoices stay.`)) return; const {error}=await sb.from('clients').update({active:false}).eq('id',c.id); if(error) toast(error.message); else { CLSEL=null; toast(`${c.name} archived`); loadClients(); } return; }
+  if(t.id==='clProp' && c){ await openDrawer(null); draft.client=c.name; clientFill('client'); const pc=propsOf(c.id); if(pc.length===1){ draft.property=propLabel(pc[0]); clientFill('property'); } drawDrawer(); return; }
+  if(t.id==='clNew'){ const r=await formDialog('New client', '<label class="f">Client (company, or the homeowner\'s name)<input name="name" required></label><label class="f">Type<select name="kind"><option>Business</option><option>Homeowner</option></select></label>', 'Create');
+    if(!r) return; if(clientOf(r.name)){ toast('That client already exists.'); CLSEL=clientOf(r.name).id; renderClients(); return; }
+    const {data,error}=await sb.from('clients').insert({name:r.name, kind:r.kind}).select().single(); if(error){ toast(invMissing(error)?'Run database update 019 in Supabase first.':error.message); return; }
+    CL.push(data); CLSEL=data.id; renderClients(); }
+});
+function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','comm','clients','settings']) $('#view-'+v).hidden = v!==view; }
 $('#tabs').addEventListener('click', e=>{
   const b=e.target.closest('[data-tab]'); if(!b) return;
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x===b);
   show(b.dataset.tab); renderAll();
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
-function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='settings') renderSettings(); }
+function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='clients') renderClients(); if(c==='settings') renderSettings(); }
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
@@ -3080,7 +3273,7 @@ async function start(session){
   $('#salesTab').textContent = ['BD Rep','Estimator'].includes(m.role) ? 'My Sales' : 'Sales';
   const home = ['BD Rep','Estimator'].includes(m.role) ? 'sales' : m.role==='Admin' ? 'orders' : 'pipeline';
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===home); show(home);
-  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); if(isManager()) loadOpenInvoices();
+  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); if(isManager()) loadOpenInvoices();
   window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })

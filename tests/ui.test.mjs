@@ -108,6 +108,55 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 7. Clients: import HCP customers in Settings, client page, proposals fill from the client and create new ones on save
+{
+  const csv = 'First Name,Last Name,Display Name,Mobile Number,Email,Additional Emails,Company,Role,Tags,Notes,ID,Customer Type,Address_1 Street Line 1,Address_1 Street Line 2,Address_1 City,Address_1 State,Address_1 Postal Code,Address_1 Billing?,Address_1 Notes,Address_2 Street Line 1,Address_2 Street Line 2,Address_2 City,Address_2 State,Address_2 Postal Code,Address_2 Billing?,Address_2 Notes\n'
+    + "Pat,Demo,Demo Tower,5105550101,pat@demo.example,,Demo Realty,Property Manager,'PO# Required',\"Keys at desk, ask for \"\"Sam\"\"\",111,business,1 Billing Way,Ste 5,Oakland,CA,94612,true,,100 Demo Ave,,Walnut Creek,CA,94596,,Lift needed\n"
+    + 'Lee,Demo,Demo Plaza,,lee@demo.example,ap@demo.example,Demo Realty,,,,112,business,200 Demo Blvd,,Oakland,CA,94607,true,,,,,,,,\n'
+    + 'Jo,Home,Jo Home,,jo@home.example,,,,,,113,homeowner,9 Home Ct,,Fremont,CA,94538,true,,,,,,,,\n';
+  fs.writeFileSync(path.join(B, 'customers.csv'), csv);
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('clients: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(() => { window.MOCK_RPC = { import_clients: ({ payload }) => { window.__imp = (window.__imp || []).concat(payload.clients);
+    for (const c of payload.clients) { const id = crypto.randomUUID(); DBX.clients.push({ id, name: c.name, kind: c.kind, aliases: c.aliases, po_required: c.po_required, billing_address: c.billing_address || null, active: true });
+      c.contacts.forEach((k, i) => DBX.client_contacts.push({ id: crypto.randomUUID(), client_id: id, ...k, is_primary: i === 0, active: true }));
+      c.properties.forEach(pp => DBX.properties.push({ id: crypto.randomUUID(), client_id: id, ...pp, addr_key: pp.address.split('\n')[0].toUpperCase(), active: true })); }
+    return { data: { clients_new: payload.clients.length, contacts_new: 3, properties_new: 3, proposals_linked_to_client: 0 }, error: null }; } }; });
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="settings"]', T); await pg.waitForTimeout(400);
+  await pg.setInputFiles('#clImport', path.join(B, 'customers.csv')); await pg.waitForSelector('dialog.ask', T);
+  assert.match(await pg.$eval('dialog.ask', e => e.innerText), /2 clients \(1 companies, 1 homeowners\), 3 contacts, 3 properties/);
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
+  const imp = await pg.evaluate(() => window.__imp); const demo = imp.find(c => c.name === 'Demo Realty');
+  assert.deepEqual([demo.contacts.map(k => k.name), demo.po_required, demo.aliases, demo.billing_address, demo.properties.map(x => x.address)],
+    [['Pat Demo', 'Lee Demo'], true, ['Demo Tower', 'Demo Plaza'], '1 Billing Way Ste 5\nOakland, CA 94612', ['100 Demo Ave\nWalnut Creek, CA 94596', '200 Demo Blvd\nOakland, CA 94607']], 'people at one company → one client; billing office is not a property');
+  assert.equal(demo.notes, 'Keys at desk, ask for "Sam"', 'quoted CSV fields parse');
+  assert.equal(imp.find(c => c.kind === 'Homeowner').name, 'Jo Home');
+  await pg.click('#tabs [data-tab="clients"]', T); await pg.waitForTimeout(300);
+  await pg.fill('#clQ', 'walnut'); await pg.waitForTimeout(200);
+  assert.deepEqual(await pg.$$eval('#clientsBody tr[data-cl] b', e => e.map(x => x.textContent)), ['Demo Realty'], 'search finds by property address');
+  await pg.click('#clientsBody tr[data-cl]', T); await pg.waitForTimeout(300);
+  await pg.fill('#cl-bemail', 'ap@demo.example'); await pg.click('#clPAdd'); await pg.fill('#clP tr:last-child [data-pf="name"]', 'Demo Annex'); await pg.fill('#clP tr:last-child [data-pf="address"]', '300 Demo Way\nOakland, CA');
+  await pg.click('#clSave'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.clients.find(c => c.name === 'Demo Realty').billing_email), 'ap@demo.example');
+  assert.ok(await pg.evaluate(() => DBX.properties.some(p => p.name === 'Demo Annex')), 'property added');
+  await pg.click('#clProp', T); await pg.waitForTimeout(400);
+  assert.equal(await pg.$eval('#f-client', e => e.value), 'Demo Realty');
+  assert.equal(await pg.$eval('#f-contactEmail', e => e.value), 'pat@demo.example'); assert.equal(await pg.$eval('#f-billingEmail', e => e.value), 'ap@demo.example');
+  assert.equal(await pg.$eval('#f-poRequired', e => e.value), 'true');
+  await pg.fill('#f-property', 'Demo Annex'); await pg.dispatchEvent('#f-property', 'change'); await pg.waitForTimeout(200);
+  assert.equal(await pg.$eval('#f-siteAddress', e => e.value), '300 Demo Way\nOakland, CA', 'property fills the site address');
+  await pg.click('#cancelD'); await pg.waitForTimeout(300);
+  await pg.click('#tabs [data-tab="pipeline"]', T); await pg.waitForTimeout(300); await pg.click('#newBtn', T); await pg.waitForTimeout(400);
+  await pg.fill('#f-client', 'Brand New Co'); await pg.dispatchEvent('#f-client', 'change');
+  await pg.fill('#f-property', '55 New St'); await pg.fill('#f-siteAddress', '55 New Street\nSan Jose, CA'); await pg.fill('#f-contactName', 'Nia New'); await pg.fill('#f-contactEmail', 'nia@new.example');
+  for (const k of ['property', 'siteAddress', 'contactName', 'contactEmail']) await pg.dispatchEvent('#f-' + k, 'change');
+  await pg.click('#saveD'); await pg.waitForTimeout(800);
+  const made = await pg.evaluate(() => { const c = DBX.clients.find(x => x.name === 'Brand New Co'); return c && { k: DBX.client_contacts.filter(x => x.client_id === c.id).map(x => x.email), p: DBX.properties.filter(x => x.client_id === c.id).map(x => x.name), linked: DBX.proposals.some(x => x.client_id === c.id) }; });
+  assert.deepEqual(made, { k: ['nia@new.example'], p: ['55 New St'], linked: true }, 'typed once: client, contact and property created and linked');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing passed');

@@ -117,6 +117,16 @@ The old Cloudflare app keeps working until step 3, so nothing breaks while you t
 5. To invoice: Jobs → **Invoice** on a scheduled job (or the job's Job tab → Create invoice) → check the lines → **Save & email**.
    The PDF downloads and Outlook opens to the AP email; attach and send. Payments: Jobs → Open invoices → **Record payment**.
 
+## Clients (update 019)
+
+1. Run `sql/019_clients.sql` in Supabase.
+2. In HousecallPro: Customers → Export (the CSV file).
+3. In the CRM: Settings → **Clients** → **Import HousecallPro customers…** → pick the file → check the preview → **Import**.
+   People at the same company become contacts under one client (spelling variants like "c/o Lincoln Property Company"
+   are merged and kept as "also known as"); addresses become properties; the billing office becomes the billing address.
+   Existing proposals are linked to their client automatically. Safe to run again later: nothing is duplicated or overwritten.
+4. Open the **Clients** tab and spot-check your biggest clients: fix names, set the AP email and "Requires a PO#".
+
 ## SharePoint auto-save
 
 1. entra.microsoft.com → App registrations → **New registration**: name `PFBS Proposal Desk`, accounts in this organization only.
