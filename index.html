@@ -3273,7 +3273,8 @@ function renderSettings(){
       <label class="f">Add a KitTracker login<span style="display:flex;gap:6px"><input id="s-wh" type="email" placeholder="warehouse@pfbuildingservices.com" style="flex:1"><button type="button" class="btn small" id="whAdd">Add</button></span></label>
       <div class="note">The warehouse tablet signs in to the <b>Warehouse</b> tab with this email and its password (create it once in Supabase → Authentication → Add user). It can use the warehouse and read upcoming jobs: no prices, proposals, clients or money. The office team doesn't need to be listed here.</div>
       ${role()==='Owner'?`<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" id="whCopy">Copy data from the old KitTracker</button></div><div id="whCopyMsg" class="note" style="margin:4px 0 0"></div>`:''}</div>`:''}
-    ${ta('s-crew','Crew', crew().map(c=>c.filter((x,i)=>i<2||x).join(' | ')).join('\n'), 'Name | email | es or en (the language of their schedule email). One tech per line. Emails stay in the database, not on any page.')}
+    ${ta('s-crew','Crew', crew().map(c=>[c[0], c[1]||'', c[2]||'en', (c[3]||[]).join(', ')].join(' | ').replace(/( \| )+$/,'')).join('\n'), 'Name | email | es or en (their schedule email language) | capabilities, separated by commas. One tech per line. Emails stay in the database, not on any page.')}
+    ${ta('s-skills','Capabilities', skillList().join('\n'), 'One per line (e.g. Swing Stage). Tag each tech with them in Crew; the visit editor can then show only the techs who can do the job.')}
     ${ta('s-esterms','Spanish words for crew emails', (S.esTerms||[]).join('\n'), 'English | Español, one per line (e.g. "Loading dock | Andén de carga"). The scope of work is translated with these plus the built-in list for techs who get their schedule in Spanish.')}
     ${ta('s-equip','Equipment (schedule)', equipList().join('\n'), 'One per line.')}
     ${ta('s-veh','Vehicles', (S.vehicles||[]).join('\n'), 'One per line, e.g. Truck 1 (white F-250). Leave empty if you don\'t assign vehicles.')}
@@ -3420,7 +3421,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
       reportAppUrl:/hooks\.zapier\.com/i.test($('#s-rpt').value)?'':$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, priceIncrease:(num($('#s-pinc').value)??5)/100, expiryDays:Number($('#s-exp').value)||90,
-      crew:L('s-crew').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, b||'', /^es/i.test(c||'')?'es':'en']; }).filter(c=>c[0]), esTerms:L('s-esterms').filter(l=>l.includes('|')), equipment:L('s-equip'), vehicles:L('s-veh'),
+      crew:L('s-crew').map(l=>{ const [a,b,c,dd]=l.split('|').map(x=>x.trim()); return [a, b||'', /^es/i.test(c||'')?'es':'en', String(dd||'').split(',').map(x=>x.trim()).filter(Boolean)]; }).filter(c=>c[0]), skillOptions:L('s-skills'), esTerms:L('s-esterms').filter(l=>l.includes('|')), equipment:L('s-equip'), vehicles:L('s-veh'),
       invoice:{ terms:Math.max(0,Math.round(num($('#s-invterms').value)??30)), message:$('#s-invmsg').value.trim(), footer:$('#s-invfoot').value.trim(), address:$('#s-invaddr').value.trim(), phone:$('#s-invphone').value.trim(), email:$('#s-invemail').value.trim(), website:$('#s-invweb').value.trim(), license:$('#s-invlic').value.trim() } };
     const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
     if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
@@ -3440,6 +3441,10 @@ const CREW_DEF=[['Rigo Perez','','es'],['Baldemar Cervantes','','es'],['Rolando 
 const WORK_DEF=['Exterior Window Cleaning','Interior Window Cleaning','Interior & Exterior Window Cleaning','Pressure Washing','Ground Pressure Washing','Swing Stage Work','Boom Lift Work','Monthly Window Washing','Solar Panel Cleaning','Janitorial','Gates & Doors'];
 const EQUIP_DEF=['Boom Lift','Scissor Lift','Swing Stage','Pressure Washer','Water Tank'];
 const crew = () => (S.crew&&S.crew.length?S.crew:CREW_DEF).filter(c=>c[0]);
+const SKILL_DEF=['Chair Work','Swing Stage','Solar Panel Cleaning','Lift Cleaning (Boom/Scissor)','Ground Floor Window Washing','Pressure Washing','Interior Cleaning','Janitorial'];
+const skillList = () => S.skillOptions&&S.skillOptions.length?S.skillOptions:SKILL_DEF;
+const skillsOf = n => (crew().find(c=>c[0]===n)||[])[3]||[];
+const EQUIP_SKILL={'Swing Stage':'Swing Stage','Boom Lift':'Lift Cleaning (Boom/Scissor)','Scissor Lift':'Lift Cleaning (Boom/Scissor)','Bosun Chair':'Chair Work'};
 const workTypes = () => S.workTypes&&S.workTypes.length?S.workTypes:WORK_DEF;
 const equipList = () => S.equipment&&S.equipment.length?S.equipment:EQUIP_DEF;
 const I18 = { en:{when:'When',time:'Time',address:'Address',work:'Work',equipment:'Equipment',team:'Team',notes:'Notes',vehicle:'Vehicle',scope:'Scope of work',job:'Job #',weekdays:'weekdays only',questions:'Questions? Just reply to this email.',thanks:'Thanks,',weekOf:'week of',yourSchedule:'Your schedule',noWork:'You have no work scheduled for the week of'},
@@ -3556,10 +3561,12 @@ function visEdit(v, opts={}){
       <label class="f">Work days<input type="number" name="workdays" min="1" value="${wd0}" ${dis}></label><label class="f" style="align-self:end;font-weight:400"><span><input type="checkbox" name="skip_weekends" ${v.skip_weekends?'checked':''} ${dis}> Weekdays only (skip Sat &amp; Sun)</span></label>
       <label class="f">Start time<input type="time" name="start_time" value="${esc(v.start_time||'')}" ${dis}></label><label class="f">End time<input type="time" name="end_time" value="${esc(v.end_time||'')}" ${dis}></label>
     </div>
-    <div class="f"><b>Techs</b>${checks('techs', crew().map(c=>c[0]), v.techs||[])}</div>
+    <div class="f"><b>Techs</b> <select name="capf" style="width:auto;margin-left:8px" aria-label="Show techs who can do"><option value="">All techs</option>${skillList().map(x=>`<option>${esc(x)}</option>`).join('')}</select>
+      <div class="vchecks vtechs">${[...new Set([...crew().map(c=>c[0]), ...(v.techs||[])])].map(t=>`<label data-tech="${esc(t)}"><input type="checkbox" name="techs" value="${esc(t)}" ${(v.techs||[]).includes(t)?'checked':''} ${dis}> ${esc(t)}${skillsOf(t).length?` <span class="note" style="margin:0">(${esc(skillsOf(t).join(', '))})</span>`:''} <span class="vbusy flag warn" hidden>busy</span></label>`).join('')}</div>
+      <div class="note vgap" style="margin:2px 0 0;color:var(--warn)" hidden></div></div>
 
     <div class="f"><b>Equipment</b>${checks('equipment', [...new Set([...equipList(), ...(v.equipment||[])])], v.equipment||[])}</div>
-    <div class="grid2">${(S.vehicles||[]).length?`<label class="f">Vehicle<select name="vehicle" ${dis}><option value="">—</option>${S.vehicles.map(x=>`<option ${x===v.vehicle?'selected':''}>${esc(x)}</option>`).join('')}</select></label>`:''}
+    <div class="grid2">${(S.vehicles||[]).length||v.vehicle?`<label class="f">Vehicle<select name="vehicle" ${dis}><option value="">—</option>${[...new Set([...(S.vehicles||[]), ...(v.vehicle?[v.vehicle]:[])])].map(x=>`<option ${x===v.vehicle?'selected':''}>${esc(x)}</option>`).join('')}</select></label>`:''}
       <label class="f">Status<select name="status" ${dis}>${['Scheduled','Done','Skipped','Cancelled'].map(x=>`<option ${x===v.status?'selected':''}>${x}</option>`).join('')}</select></label></div>
     <label class="f">Notes for the crew <span class="note" style="margin:0;font-weight:400">go in their email</span><textarea name="notes" rows="2" ${dis}>${esc(v.notes||'')}</textarea></label>
     <label class="f">Office notes<textarea name="office_notes" rows="2" ${dis}>${esc(v.office_notes||'')}</textarea></label>
@@ -3584,6 +3591,15 @@ function visEdit(v, opts={}){
   const syncEnd=()=>{ const sd=f('visit_date').value; if(!sd) return; const n=Number(f('workdays').value)||1; f('end_date').value = n>1 ? endFromWorkdays(sd, n, f('skip_weekends').checked) : ''; };
   const syncDays=()=>{ f('workdays').value=workdaysBetween(f('visit_date').value, f('end_date').value, f('skip_weekends').checked); };
   const relabel=()=>{ const ps=f('preset'); if(!ps) return; const cur=ps.value; ps.innerHTML=presetsFor(f('visit_date').value).map(([k,l])=>`<option value="${k}" ${k===cur?'selected':''}>${esc(l)}</option>`).join(''); };
+  const techView=()=>{ const cap=d.querySelector('[name="capf"]')?.value||'', row={visit_date:d.querySelector('[name="visit_date"]').value, end_date:d.querySelector('[name="end_date"]')?.value||null,
+      start_time:d.querySelector('[name="start_time"]').value, end_time:d.querySelector('[name="end_time"]').value, skip_weekends:!!d.querySelector('[name="skip_weekends"]')?.checked, kind:v.kind};
+    for(const l of d.querySelectorAll('.vtechs [data-tech]')){ const t=l.dataset.tech, on=l.querySelector('input').checked;
+      l.hidden=!!cap && !on && !skillsOf(t).includes(cap);
+      l.querySelector('.vbusy').hidden=!row.visit_date || !techConflicts({...row, techs:[t]}, v.id).length; }
+    const picked=[...d.querySelectorAll('[name="techs"]:checked')].map(x=>x.value), need=[...new Set([...d.querySelectorAll('[name="equipment"]:checked')].map(x=>EQUIP_SKILL[x.value]).filter(Boolean))];
+    const gaps=need.filter(k=>picked.length && !picked.some(t=>skillsOf(t).includes(k))), g=d.querySelector('.vgap');
+    if(g){ g.hidden=!gaps.length; g.textContent=gaps.length?`⚠ Nobody picked is tagged for: ${gaps.join(', ')}`:''; } };
+  d.addEventListener('change', techView); d.addEventListener('input', e=>{ if(['start_time','end_time','visit_date'].includes(e.target.name)) techView(); }); setTimeout(techView, 0);
   d.addEventListener('change', e=>{ const n=e.target.name;
     if(n==='preset'){ d.querySelector('.vcustom').hidden=e.target.value!=='custom'; d.querySelector('.vends').hidden=!e.target.value; }
     if(n==='unit') d.querySelector('.vmon').hidden=e.target.value!=='month';
@@ -3668,11 +3684,11 @@ function confirmConflicts(L){ return new Promise(res=>{ const d=document.createE
   d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a) done(a==='ok'); }); d.addEventListener('cancel', e=>{ e.preventDefault(); done(false); }); d.showModal(); }); }
 // ---- TechSched → CRM schedule (update 027): reads TechSched, never changes it; run again to pick up new or changed jobs ----
 const TS_URL='https://firestore.googleapis.com/v1/projects/techsched-c8c09/databases/(default)/documents/jobs', TS_KEY='AIzaSyBNU68bFVjxEY96RmOLaADEH1i8B6uFQiM';
-function tsVal(v){ if(!v) return ''; if('stringValue' in v) return v.stringValue; if('integerValue' in v) return String(v.integerValue); if('booleanValue' in v) return v.booleanValue; if('arrayValue' in v) return (v.arrayValue.values||[]).map(tsVal).filter(x=>x!==''); return ''; }
+function tsVal(v){ if(!v) return ''; if('stringValue' in v) return v.stringValue; if('integerValue' in v) return String(v.integerValue); if('booleanValue' in v) return v.booleanValue; if('arrayValue' in v) return (v.arrayValue.values||[]).map(tsVal).filter(x=>x!==''); if('mapValue' in v) return Object.fromEntries(Object.entries(v.mapValue.fields||{}).map(([k,x])=>[k,tsVal(x)])); return ''; }
 function tsParse(doc){ const f=doc.fields||{}, g=k=>tsVal(f[k]), arr=k=>{ const x=g(k); return Array.isArray(x)?x:(x?[x]:[]); };
   return {id:doc.name.split('/').pop(), date:g('date'), endDate:g('endDate'), start:g('start'), end:g('end'), address:g('address'), client:g('client'), jobNum:g('jobNum'),
     techs:arr('techs'), equipment:arr('equipment'), types:arr('types').length?arr('types'):String(g('type')||'').split(' + ').filter(Boolean), vehicle:g('vehicle'), notes:g('notes'), adminNotes:g('adminNotes'),
-    pickupDate:g('pickupDate'), pickupTime:g('pickupTime'), rentalCo:g('rentalCo'), status:g('jobStatus')||g('status')||'scheduled'}; }
+    pickupDate:g('pickupDate'), pickupTime:g('pickupTime'), rentalCo:g('rentalCo'), map:g('map'), status:g('jobStatus')||g('status')||'scheduled'}; }
 const ABBR={STREET:'ST',AVENUE:'AVE',BOULEVARD:'BLVD',ROAD:'RD',DRIVE:'DR',HIGHWAY:'HWY',PLACE:'PL',LANE:'LN',COURT:'CT',PARKWAY:'PKWY',WAY:'WAY',CIRCLE:'CIR',NORTH:'N',SOUTH:'S',EAST:'E',WEST:'W'};
 const streetKey = a => { const w=String(a||'').split(/[\n,]/)[0].toUpperCase().replace(/[^A-Z0-9 ]/g,' ').split(/\s+/).filter(Boolean).map(x=>ABBR[x]||x); return /^\d/.test(w[0]||'') && w.length>1 ? w.slice(0,3).join(' ') : ''; };
 function tsMatch(j){
@@ -3682,12 +3698,29 @@ function tsMatch(j){
   return [null,''];
 }
 const crewName = t => { const names=crew().map(c=>c[0]), low=String(t).trim().toLowerCase(); return names.find(n=>n.toLowerCase()===low) || (names.filter(n=>n.toLowerCase().split(' ')[0]===low.split(' ')[0]).length===1 ? names.find(n=>n.toLowerCase().split(' ')[0]===low.split(' ')[0]) : String(t).trim()); };
-async function techSchedImport(){
+// TechSched's team: names, emails, capabilities, capability list, vehicles, equipment → merged into Settings (nothing removed)
+async function tsTeam(){
+  try{ const r=await fetch(TS_URL.replace(/\/jobs$/,'/settings/main')+`?key=${TS_KEY}`); if(!r.ok) return null; const f=(await r.json()).fields||{}, g=k=>tsVal(f[k]);
+    const techs=[].concat(g('techs')||[]).map(String).filter(Boolean), emails=g('techEmails')||{}, skills=g('techSkills')||{};
+    const veh=[].concat(g('vehicles')||[]).map(x=>typeof x==='object'?(x.name||x.label||''):x).filter(Boolean);
+    return {techs, emails:typeof emails==='object'?emails:{}, skills:typeof skills==='object'?skills:{}, skillOptions:[].concat(g('skillOptions')||[]).filter(Boolean), vehicles:veh, equipment:[].concat(g('customEquipList')||[]).filter(Boolean)};
+  }catch(_){ return null; } }
+function teamMerge(T){
+  const cur=crew().map(c=>[c[0], c[1]||'', c[2]||'es', [...(c[3]||[])]]), out={added:[], updated:[]};
+  for(const t of T.techs){ const em=String(T.emails[t]||'').trim(), sk=[].concat(T.skills[t]||[]).filter(Boolean);
+    let c=cur.find(x=>x[0].toLowerCase()===t.toLowerCase()) || cur.find(x=>x[0].split(' ')[0].toLowerCase()===t.split(' ')[0].toLowerCase() && (!t.includes(' ') || !x[0].includes(' ')));
+    if(!c){ cur.push([t, em, 'es', sk]); out.added.push(t); continue; }
+    if(t.includes(' ') && !c[0].includes(' ')) c[0]=t;   // "Rolando" in the CRM, "Rolando Olivera" in TechSched: keep the full name
+    const before=JSON.stringify(c); if(!c[1] && em) c[1]=em; c[3]=[...new Set([...(c[3]||[]), ...sk])]; if(JSON.stringify(c)!==before) out.updated.push(c[0]); }
+  out.crew=cur; out.skillOptions=[...new Set([...skillList(), ...T.skillOptions])]; out.vehicles=[...new Set([...(S.vehicles||[]), ...T.vehicles])]; out.equipment=[...new Set([...equipList(), ...T.equipment])];
+  return out; }
+async function techSchedImport(o={}){
   if(!isManager()) return;
   const docs=[]; let tok='';
   try{ for(let i=0;i<20;i++){ const r=await fetch(`${TS_URL}?key=${TS_KEY}&pageSize=300${tok?'&pageToken='+encodeURIComponent(tok):''}`); if(!r.ok) throw new Error('TechSched answered '+r.status); const d=await r.json(); docs.push(...(d.documents||[])); if(!d.nextPageToken) break; tok=d.nextPageToken; } }
   catch(e){ toast('Could not read TechSched: '+e.message); return; }
-  const td=iso(today()), L=docs.map(tsParse).filter(j=>j.date && !/^complete/i.test(j.status) && (j.endDate||j.date)>=td).sort((a,b)=>(a.date+(a.start||'')).localeCompare(b.date+(b.start||'')));
+  const td=iso(today()), L=docs.map(tsParse).filter(j=>j.date && (o.past || (!/^complete/i.test(j.status) && (j.endDate||j.date)>=td))).sort((a,b)=>(a.date+(a.start||'')).localeCompare(b.date+(b.start||'')));
+  const T=await tsTeam(), TM=T&&teamMerge(T);
   const ex=await sb.from('visits').select('id,ext_id,status').not('ext_id','is',null);
   if(ex.error){ toast(invMissing(ex.error)||/ext_id/.test(ex.error.message)?'Run database update 027 in Supabase first.':ex.error.message); return; }
   const had=new Map((ex.data||[]).map(v=>[v.ext_id,v]));
@@ -3695,7 +3728,9 @@ async function techSchedImport(){
   const rows=L.map(j=>{ const [p,how]=tsMatch(j); return {j, p, how, old:had.get('techsched:'+j.id)}; });
   const d=document.createElement('dialog'); d.className='ask inved';
   d.innerHTML=`<h3>Import from TechSched</h3>
-    <div class="note" style="margin:0 0 8px">${L.length} upcoming job${L.length===1?'':'s'} in TechSched. Each one becomes a visit on the CRM schedule, linked to its CRM job when the job # or street address matches (change the link if it's wrong). Already imported jobs are updated with TechSched's latest dates, times and techs. TechSched itself is not changed, so Oscar can keep using it until the switch.</div>
+    ${TM?`<label class="acc" style="margin:0 0 8px;display:block"><input type="checkbox" id="tsTeam" checked> <b>Team:</b> ${TM.added.length?`add ${TM.added.length} tech${TM.added.length===1?'':'s'} (${esc(TM.added.join(', '))})`:'no new techs'}${TM.updated.length?`, update ${TM.updated.length} (emails, capabilities)`:''}; capabilities, vehicles and equipment lists merged into Settings. Nothing is removed.</label>`:''}
+    <label style="display:block;margin:0 0 8px;font-size:13px"><input type="checkbox" id="tsPast" ${o.past?'checked':''}> Also bring past and completed jobs (history; they come in as Done)</label>
+    <div class="note" style="margin:0 0 8px">${L.length} ${o.past?'':'upcoming '}job${L.length===1?'':'s'} in TechSched. Each one becomes a visit on the CRM schedule, linked to its CRM job when the job # or street address matches (change the link if it's wrong). Already imported jobs are updated with TechSched's latest dates, times and techs. TechSched itself is not changed, so Oscar can keep using it until the switch.</div>
     <div class="tablewrap" style="max-height:55vh;overflow:auto"><table><thead><tr><th><input type="checkbox" id="tsAll" checked aria-label="All"></th><th>When</th><th>TechSched job</th><th>CRM job</th></tr></thead><tbody>
     ${rows.map((r,i)=>`<tr><td><input type="checkbox" data-tsi="${i}" ${r.old && r.old.status!=='Scheduled'?'':'checked'}></td><td class="num">${fmtD(r.j.date)}${r.j.endDate&&r.j.endDate>r.j.date?' – '+fmtD(r.j.endDate):''}<div class="note" style="margin:0">${esc(t12(r.j.start))}</div></td>
       <td class="wrap"><b>${esc(r.j.client||'')}</b> ${esc(String(r.j.address||'').split(',')[0])}<div class="note" style="margin:0">${esc(r.j.types.join(', '))}${r.j.techs.length?' · '+esc(r.j.techs.join(', ')):''}${r.old?' · <b>already imported: will update</b>':''}</div></td>
@@ -3703,19 +3738,23 @@ async function techSchedImport(){
     <div class="toolbar"><span style="flex:1"></span><button type="button" class="btn ghost" data-a="x">Cancel</button><button type="button" class="btn" data-a="ok" ${L.length?'':'disabled'}>Import selected</button></div>`;
   document.body.appendChild(d); d.showModal();
   d.querySelector('#tsAll')?.addEventListener('change', e=>{ for(const c of d.querySelectorAll('[data-tsi]')) c.checked=e.target.checked; });
+  d.querySelector('#tsPast')?.addEventListener('change', e=>{ d.close(); d.remove(); techSchedImport({past:e.target.checked}); });
   d.addEventListener('cancel', ()=>d.remove());
   d.addEventListener('click', async e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(!a) return; if(a==='x'){ d.close(); d.remove(); return; }
-    const btn=e.target; btn.disabled=true; let nNew=0, nUpd=0, nErr=0;
+    const btn=e.target; btn.disabled=true; let nNew=0, nUpd=0, nErr=0, team='';
+    if(TM && d.querySelector('#tsTeam')?.checked){ const data={...S, crew:TM.crew, skillOptions:TM.skillOptions, vehicles:TM.vehicles, equipment:TM.equipment};
+      const r=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
+      if(r.error) toast('Team not saved: '+r.error.message); else { Object.assign(S, {crew:TM.crew, skillOptions:TM.skillOptions, vehicles:TM.vehicles, equipment:TM.equipment}); team=` · team: ${TM.added.length} added, ${TM.updated.length} updated`; } }
     for(const c of d.querySelectorAll('[data-tsi]:checked')){ const r=rows[+c.dataset.tsi], j=r.j, num=d.querySelector(`[data-tsp="${c.dataset.tsi}"]`).value||null, p=num&&P.find(x=>x.num===num);
       const n=String(j.jobNum||'').replace(/\D/g,''), rental=[j.rentalCo, j.pickupDate&&('pickup '+fmtD(j.pickupDate)+(j.pickupTime?' '+t12(j.pickupTime):''))].filter(Boolean).join(', ');
       const row={visit_date:j.date, end_date:j.endDate&&j.endDate>j.date?j.endDate:null, start_time:j.start||null, end_time:j.end||null, techs:[...new Set(j.techs.map(crewName))], equipment:j.equipment, vehicle:j.vehicle||null,
-        notes:j.notes||null, office_notes:[j.adminNotes, rental?'Rental: '+rental:'', 'From TechSched'].filter(Boolean).join('\n'), address:j.address||null, client:p?p.client:(j.client||null), title:p?p.property:(String(j.address||'').split(',')[0]||null), work:j.types};
+        notes:j.notes||null, office_notes:[j.adminNotes, rental?'Rental: '+rental:'', j.map?'Map: '+j.map:'', 'From TechSched'].filter(Boolean).join('\n'), address:j.address||null, client:p?p.client:(j.client||null), title:p?p.property:(String(j.address||'').split(',')[0]||null), work:j.types};
       let res;
       if(r.old) res=await sb.from('visits').update(row).eq('id', r.old.id);
-      else { const ins={...row, kind:'job', num, ext_id:'techsched:'+j.id, status:'Scheduled'}; if(n && n.length<=6) ins.job_no=n; res=await sb.from('visits').insert(ins); }
+      else { const ins={...row, kind:'job', num, ext_id:'techsched:'+j.id, status:(/^complete/i.test(j.status) || (j.endDate||j.date)<iso(today()))?'Done':'Scheduled'}; if(n && n.length<=6) ins.job_no=n; res=await sb.from('visits').insert(ins); }
       if(res.error){ nErr++; console.warn(res.error.message); } else if(r.old) nUpd++; else nNew++; }
     d.close(); d.remove();
-    toast(`TechSched: ${nNew} added, ${nUpd} updated${nErr?`, ${nErr} failed`:''}`); await loadSchedule(); if(nNew) loadProposals(); });
+    toast(`TechSched: ${nNew} added, ${nUpd} updated${nErr?`, ${nErr} failed`:''}${team}`); await loadSchedule(); if(nNew) loadProposals(); });
 }
 // ---- Spanish for the scope of work (crew emails): phrases first, then single words; Settings adds more ----
 const ES_TERMS=[['interior & exterior window cleaning','limpieza de ventanas interior y exterior'],['interior and exterior window cleaning','limpieza de ventanas interior y exterior'],

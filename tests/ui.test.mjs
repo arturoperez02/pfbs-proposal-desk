@@ -405,7 +405,11 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const ij = { num: 'PFBS-0999', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Import Co', property: 'Import Plaza', site_address: '44 Import St\nFremont, CA', amount: 900, status: 'Approved', date_resolved: '2026-10-10', hcp_job: '10310', items: [{ type: 'Service', qty: 1, description: 'Wash plaza', amount: 900 }] };
   const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('techsched import: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
-  await pg.route(/firestore\.googleapis\.com/, r => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ documents: docs }) }));
+  const team = { fields: { techs: { arrayValue: { values: [{ stringValue: 'Rigo Perez' }, { stringValue: 'Luis Aldana' }] } },
+    techEmails: { mapValue: { fields: { 'Luis Aldana': { stringValue: 'luis@example.com' } } } },
+    techSkills: { mapValue: { fields: { 'Luis Aldana': { arrayValue: { values: [{ stringValue: 'Swing Stage' }] } } } } },
+    vehicles: { arrayValue: { values: [{ stringValue: 'Truck 9' }] } } } };
+  await pg.route(/firestore\.googleapis\.com/, r => r.fulfill({ contentType: 'application/json', body: JSON.stringify(/settings\/main/.test(r.request().url()) ? team : { documents: docs }) }));
   await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, ij);
   await pg.goto(BASE); await pg.waitForTimeout(800);
   await pg.click('#tabs [data-tab="schedule"]'); await pg.click('#schTs'); await pg.waitForSelector('[data-tsi]', T);
@@ -418,6 +422,16 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.equal(a.num, 'PFBS-0999'); assert.equal(a.job, '10310', 'CRM job #, not the HCP Job ID');
   assert.deepEqual(a.techs, ['Rigo Perez', 'Baldemar Cervantes'], 'tech names matched to the crew list');
   assert.match(a.on, /Sunbelt/, 'rental pickup kept in office notes');
+  const crewNow = await pg.evaluate(() => (DBX.settings[0].data || {}).crew || []);
+  const luis = crewNow.find(c => c[0] === 'Luis Aldana');
+  assert.ok(luis && luis[1] === 'luis@example.com' && luis[3].includes('Swing Stage'), 'TechSched tech added with email and capability');
+  assert.ok(((await pg.evaluate(() => DBX.settings[0].data.vehicles)) || []).includes('Truck 9'), 'vehicles merged');
+  // capability filter in the visit editor
+  await pg.evaluate(() => document.querySelector('[data-vis]')?.click()); await pg.waitForSelector('dialog.inved [name="capf"]', T);
+  await pg.selectOption('dialog.inved [name="capf"]', 'Swing Stage'); await pg.waitForTimeout(100);
+  const shown = await pg.$$eval('dialog.inved .vtechs [data-tech]', L => L.filter(l => !l.hidden).map(l => l.dataset.tech));
+  assert.ok(shown.includes('Luis Aldana') && !shown.includes('Israel Hernandez'), 'only techs who can do it (plus ones already picked): ' + shown.join(','));
+  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
   // run again: no duplicates
   await pg.click('#schTs'); await pg.waitForSelector('[data-tsi]', T); assert.match(await pg.textContent('dialog.inved'), /already imported: will update/);
   await pg.click('dialog.inved [data-a="ok"]'); await pg.waitForTimeout(500);

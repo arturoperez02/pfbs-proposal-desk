@@ -85,6 +85,9 @@ punctuation, LLC/Inc/Partners/Management; proposals fill from the client record 
    scope of work on the visit and in crew emails, sent invoice → visits Done; Schedule tab month view, visit editor, repeat rules, weekly crew emails EN/ES,
    drawer Job tab → Schedule; 027: Schedule → "Import from TechSched" reads TechSched's Firestore (read-only) and copies upcoming jobs
    into visits (`ext_id` = techsched:<id>, linked by job # ≤6 digits or street address, re-run updates; rental pickup goes in office notes);
+   the import also merges TechSched's team (settings/main: techs, emails, capabilities, vehicles, equipment) into Settings and can bring past jobs as Done;
+   crew = [name, email, lang, capabilities[]]; `skillOptions`; visit editor: "who can" filter, busy marks (`techConflicts`), equipment→capability gap note;
+   double booking: warning on save + orange chips (`dblBooked`, night shifts past midnight count);
    visits no longer show Work (scope of work instead; `work` kept for old rows / warehouse); still to do: equipment rental pickup dates as fields).
    Original spec — Schedule (replaces HCP's schedule AND TechSched data entry): visits per job with dates/times + assigned techs,
    month view, recurring rule (every N weeks/months, day # or "first Tuesday", ends never/after N/on date; edit
