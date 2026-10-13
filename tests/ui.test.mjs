@@ -169,7 +169,9 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.fill('#s-crew', 'Rigo Perez | rigo@example.com | es\nBaldemar Cervantes | bal@example.com | es\nAna Tech | ana@example.com | en'); await pg.click('#saveS'); await pg.waitForTimeout(500);
   await pg.click('#tabs [data-tab="orders"]', T); await pg.waitForTimeout(300);
   await pg.click('[data-schnew="PFBS-0980"]', T); await pg.waitForSelector('dialog.inved', T);
-  assert.equal(await pg.$eval('[name="rep_on"]', e => e.value), '1', 'recurring job suggests repeating');
+  assert.equal(await pg.$eval('[name="preset"]', e => e.value), 'custom', 'recurring job suggests a custom repeat');
+  assert.match(await pg.$eval('[name="num"] option:checked', e => e.textContent), /^Demo Towers · 300 Demo Ave — Exterior windows · \$1,200 · not scheduled · PFBS-0980$/, 'job picker shows client, property and scope');
+  assert.match(await pg.$eval('#vScope', e => e.innerText), /Exterior windows/, 'scope of work shown');
   assert.deepEqual([await pg.$eval('[name="every"]', e => e.value), await pg.$eval('[name="unit"]', e => e.value)], ['3', 'month'], 'quarterly → every 3 months');
   await pg.fill('[name="visit_date"]', '2026-11-03'); await pg.selectOption('[name="nth"]', '1'); await pg.selectOption('[name="weekday"]', '2');
   await pg.check('dialog.inved [name="techs"][value="Rigo Perez"]'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(700);
@@ -194,8 +196,12 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   // one-time multi-day job
   await pg.click('#tabs [data-tab="orders"]', T); await pg.waitForTimeout(300);
   await pg.click('[data-schnew="PFBS-0981"]', T); await pg.waitForSelector('dialog.inved', T);
-  assert.equal(await pg.$eval('[name="rep_on"]', e => e.value), '', 'one-time job does not repeat');
-  await pg.fill('[name="visit_date"]', '2026-11-04'); await pg.fill('[name="end_date"]', '2026-11-06'); await pg.check('dialog.inved [name="techs"][value="Ana Tech"]'); await pg.check('dialog.inved [name="equipment"][value="Swing Stage"]');
+  assert.equal(await pg.$eval('[name="preset"]', e => e.value), '', 'one-time job does not repeat');
+  assert.deepEqual(await pg.$$eval('[name="preset"] option', o => o.map(x => x.textContent)).then(x => [x.length, ...x.slice(0, 3), x[6]]), [7, 'Does not repeat', 'Daily', 'Every weekday (Monday to Friday)', 'Custom'], 'HCP-style repeat menu');
+  await pg.fill('[name="visit_date"]', '2026-11-04'); await pg.dispatchEvent('[name="visit_date"]', 'change');
+  await pg.check('[name="skip_weekends"]'); await pg.fill('[name="workdays"]', '10'); await pg.dispatchEvent('[name="workdays"]', 'change');
+  assert.equal(await pg.$eval('[name="end_date"]', e => e.value), '2026-11-17', '10 work days skipping weekends ends on Tuesday the 17th');
+  assert.match(await pg.$eval('[name="preset"] option[value="week"]', e => e.textContent), /Weekly on Wednesday/, 'menu follows the start date'); await pg.check('dialog.inved [name="techs"][value="Ana Tech"]'); await pg.check('dialog.inved [name="equipment"][value="Swing Stage"]');
   await pg.fill('[name="notes"]', 'Check in at security'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(500);
   // weekly crew email
   await pg.click('#tabs [data-tab="schedule"]', T); await pg.waitForTimeout(200); await pg.click('#schWeek'); await pg.waitForSelector('dialog.ask [name="mon"]', T);
@@ -207,7 +213,11 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('dialog.ask [data-l="en"]'); assert.ok((await pg.$eval('#cmBody', e => e.value)).startsWith('Hi Rigo,'), 'switch to English');
   await pg.locator('dialog.ask').last().locator('[data-a="x"]').click(); await pg.click('dialog.ask [data-t="Ana Tech"]'); await pg.waitForTimeout(200);
   const en = await pg.$eval('#cmBody', e => e.value);
-  assert.ok(/Wednesday, November 4, 2026 – Friday, November 6, 2026/.test(en) && /Swing Stage/.test(en) && /Check in at security/.test(en), 'multi-day visit, equipment and crew notes in the email');
+  assert.ok(/Wednesday, November 4, 2026 – Tuesday, November 17, 2026 \(weekdays only\)/.test(en) && /Swing Stage/.test(en) && /Check in at security/.test(en) && /Scope of work: Swing stage glass/.test(en), 'weekday job, equipment, notes and scope in the email');
+  await pg.locator('dialog.ask').last().locator('[data-a="x"]').click(); await pg.locator('dialog.ask').last().locator('[data-a="x"]').click();
+  await pg.click('#schToday'); for (let i = 0; i < 24; i++) { if ((await pg.$eval('#schedBody b', e => e.textContent)).startsWith('November 2026')) break; await pg.click('#schNext'); await pg.waitForTimeout(80); }
+  assert.equal(await pg.$$eval('[data-day="2026-11-07"] .vchip', c => c.filter(x => /Demo Plaza/.test(x.textContent)).length), 0, 'not on Saturday');
+  assert.equal(await pg.$$eval('[data-day="2026-11-09"] .vchip', c => c.filter(x => /Demo Plaza/.test(x.textContent)).length), 1, 'back on Monday');
   await pg.screenshot({ path: path.join(B, 'schedule.png') });
   await pg.close();
 }

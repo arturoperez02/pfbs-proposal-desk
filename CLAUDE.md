@@ -74,11 +74,13 @@ npm test                                                      # database + brows
 Done: service reports (`reports.html`, 017; switch the HCP "Job finished" Zap to `zap_report_job`), invoicing (018),
 clients & properties (019: Clients tab; HCP customer import groups people by company with `coKey`, which ignores c/o,
 punctuation, LLC/Inc/Partners/Management; proposals fill from the client record and create client/contact/property on save).
-1. ~~Clients & properties~~ (done; possible next: a "merge two clients" button): `clients` (company, billing address, AP email, PO required), contacts, properties (one
+1. ~~Clients & properties~~ (done; 022: each property has its own contact (`properties.contact_id`), filled on proposals; possible next: a "merge two clients" button): `clients` (company, billing address, AP email, PO required), contacts, properties (one
    client can have 40+). Import from HousecallPro's customer CSV inside the app (Settings), never into this repo:
    202 customers, people and companies mixed, merge by company; "Billing?" flag marks the billing address;
    tags used: "PO# Required", "Invoice to AP". Proposals pick client + property; contacts/billing fill in.
-2. ~~Schedule~~ (done, update 020: Schedule tab month view, visit editor, repeat rules, weekly crew emails EN/ES,
+2. ~~Schedule~~ (done, updates 020 + 022: job # per visit (`visits.job_no`; HCP job # until `set_next_job_no` turns on CRM
+   numbering), weekday-only visits, HCP-style repeat menu (daily / every weekday / weekly / monthly nth / yearly / custom),
+   scope of work on the visit and in crew emails, sent invoice → visits Done; Schedule tab month view, visit editor, repeat rules, weekly crew emails EN/ES,
    drawer Job tab → Schedule; still to do: import TechSched's existing future jobs, equipment rental pickup dates).
    Original spec — Schedule (replaces HCP's schedule AND TechSched data entry): visits per job with dates/times + assigned techs,
    month view, recurring rule (every N weeks/months, day # or "first Tuesday", ends never/after N/on date; edit
