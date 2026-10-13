@@ -614,6 +614,14 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('#crewCard', T);
   assert.ok(await pg.evaluate(() => !!document.querySelector('.savebar #saveS') && !!document.querySelector('.setnav a')), 'Save is always in reach and sections have jump links');
   assert.equal(await pg.$$eval('#crewCard tr[data-crew="0"] [data-cap]', L => L.map(x => x.checked).join()), 'true,false', 'a checkbox per capability');
+  assert.match(await pg.textContent('#crewCard tr[data-crew="0"] .capdd summary'), /Swing Stage/, 'capabilities sit in a dropdown that shows what is ticked');
+  assert.equal(await pg.$eval('#crewCard tr[data-crew="2"]', e => e.hidden), true, 'inactive techs hidden by default');
+  await pg.fill('#crewQ', 'bald'); assert.deepEqual(await pg.$$eval('#crewCard tr[data-crew]', L => L.filter(x => !x.hidden).map(x => x.dataset.crew)), ['1'], 'search finds a tech');
+  await pg.fill('#crewQ', ''); await pg.selectOption('#crewCapF', 'Swing Stage'); assert.deepEqual(await pg.$$eval('#crewCard tr[data-crew]', L => L.filter(x => !x.hidden).map(x => x.dataset.crew)), ['0'], 'filter by capability');
+  await pg.selectOption('#crewCapF', '');
+  await pg.click('#crewCard tr[data-crew="1"] .capdd summary'); await pg.check('#crewCard tr[data-crew="1"] [data-cap="Pressure Washing"]');
+  assert.match(await pg.textContent('#crewCard tr[data-crew="1"] .capdd summary'), /Pressure Washing/, 'summary updates when ticked');
+  await pg.uncheck('#crewCard tr[data-crew="1"] [data-cap="Pressure Washing"]');
   assert.ok(await pg.evaluate(() => [...document.querySelectorAll('#crewCard [data-crewadd]')].map(x => x.dataset.crewadd).join() === 'Rigoberto,Juan Nuevo'), 'names on the schedule but not in the crew are offered');
   await pg.evaluate(() => { const R = document.querySelector('#crewCard tr[data-crew="0"]'); R.querySelector('[data-cf="aka"]').value = 'Rigoberto'; R.querySelector('[data-cap="Pressure Washing"]').checked = true; });
   await pg.click('#crewCard [data-crewa="cap"]'); await pg.fill('dialog [name="k"]', 'Rope Access'); await pg.click('dialog .btn:not(.ghost)'); await pg.waitForTimeout(150);
