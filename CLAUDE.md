@@ -83,7 +83,9 @@ punctuation, LLC/Inc/Partners/Management; proposals fill from the client record 
    numbering; 023: the job # is given at approval (`proposals.hcp_job` = the job #), first visit uses it, later recurring
    visits get their own; UI calls it "Job #"), weekday-only visits, HCP-style repeat menu (daily / every weekday / weekly / monthly nth / yearly / custom),
    scope of work on the visit and in crew emails, sent invoice → visits Done; Schedule tab month view, visit editor, repeat rules, weekly crew emails EN/ES,
-   drawer Job tab → Schedule; still to do: import TechSched's existing future jobs, equipment rental pickup dates).
+   drawer Job tab → Schedule; 027: Schedule → "Import from TechSched" reads TechSched's Firestore (read-only) and copies upcoming jobs
+   into visits (`ext_id` = techsched:<id>, linked by job # ≤6 digits or street address, re-run updates; rental pickup goes in office notes);
+   visits no longer show Work (scope of work instead; `work` kept for old rows / warehouse); still to do: equipment rental pickup dates as fields).
    Original spec — Schedule (replaces HCP's schedule AND TechSched data entry): visits per job with dates/times + assigned techs,
    month view, recurring rule (every N weeks/months, day # or "first Tuesday", ends never/after N/on date; edit
    "only this visit" vs "this and future"; rule prefilled from the proposal frequency; generate ~12 months ahead).

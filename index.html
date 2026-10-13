@@ -3526,7 +3526,7 @@ function renderSchedule(){
   box.innerHTML=`<div class="toolbar" style="flex-wrap:wrap;gap:8px;justify-content:space-between">
       <div style="display:flex;gap:6px;align-items:center"><button class="btn ghost small" id="schPrev" aria-label="Previous month">‹</button><b style="min-width:150px;text-align:center">${first.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</b><button class="btn ghost small" id="schNext" aria-label="Next month">›</button><button class="btn ghost small" id="schToday">Today</button></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="schTech" aria-label="Show tech"><option value="">All techs</option>${crew().map(c=>`<option ${schTech===c[0]?'selected':''}>${esc(c[0])}</option>`).join('')}</select>
-      <button class="btn ghost small" id="schWeek">Crew emails</button>${mgr?'<button class="btn ghost small" id="schEvent">+ Event</button>':''}</div></div>
+      <button class="btn ghost small" id="schWeek">Crew emails</button>${mgr?'<button class="btn ghost small" id="schEvent">+ Event</button><button class="btn ghost small" id="schTs">Import from TechSched</button>':''}</div></div>
     ${noCrew?`<div class="lockline" style="margin:8px 0">${noCrew} visit${noCrew===1?'':'s'} in the next 2 weeks ${noCrew===1?'has':'have'} no techs assigned.</div>`:''}
     <div class="sgrid">${WDAY.map(w=>`<div class="shead">${w.slice(0,3)}</div>`).join('')}${cells}</div>
     <div class="note">Click a visit to change it, or an empty spot on a day to schedule a job there. Grey = done; red outline = no techs yet.</div>`;
@@ -3636,6 +3636,57 @@ async function endSeriesFrom(ser, date){
   await sb.from('visit_series').update({ends:{type:'on', date:addDays(date,-1)}, active:false}).eq('id',ser.id);
   const {data}=await sb.from('visits').select('id,status,occ_date,visit_date').eq('series_id',ser.id); const gone=(data||[]).filter(x=>(x.occ_date||x.visit_date)>=date && x.status!=='Done').map(x=>x.id);
   for(let i=0;i<gone.length;i+=100) await sb.from('visits').delete().in('id',gone.slice(i,i+100));
+}
+// ---- TechSched → CRM schedule (update 027): reads TechSched, never changes it; run again to pick up new or changed jobs ----
+const TS_URL='https://firestore.googleapis.com/v1/projects/techsched-c8c09/databases/(default)/documents/jobs', TS_KEY='AIzaSyBNU68bFVjxEY96RmOLaADEH1i8B6uFQiM';
+function tsVal(v){ if(!v) return ''; if('stringValue' in v) return v.stringValue; if('integerValue' in v) return String(v.integerValue); if('booleanValue' in v) return v.booleanValue; if('arrayValue' in v) return (v.arrayValue.values||[]).map(tsVal).filter(x=>x!==''); return ''; }
+function tsParse(doc){ const f=doc.fields||{}, g=k=>tsVal(f[k]), arr=k=>{ const x=g(k); return Array.isArray(x)?x:(x?[x]:[]); };
+  return {id:doc.name.split('/').pop(), date:g('date'), endDate:g('endDate'), start:g('start'), end:g('end'), address:g('address'), client:g('client'), jobNum:g('jobNum'),
+    techs:arr('techs'), equipment:arr('equipment'), types:arr('types').length?arr('types'):String(g('type')||'').split(' + ').filter(Boolean), vehicle:g('vehicle'), notes:g('notes'), adminNotes:g('adminNotes'),
+    pickupDate:g('pickupDate'), pickupTime:g('pickupTime'), rentalCo:g('rentalCo'), status:g('jobStatus')||g('status')||'scheduled'}; }
+const ABBR={STREET:'ST',AVENUE:'AVE',BOULEVARD:'BLVD',ROAD:'RD',DRIVE:'DR',HIGHWAY:'HWY',PLACE:'PL',LANE:'LN',COURT:'CT',PARKWAY:'PKWY',WAY:'WAY',CIRCLE:'CIR',NORTH:'N',SOUTH:'S',EAST:'E',WEST:'W'};
+const streetKey = a => { const w=String(a||'').split(/[\n,]/)[0].toUpperCase().replace(/[^A-Z0-9 ]/g,' ').split(/\s+/).filter(Boolean).map(x=>ABBR[x]||x); return /^\d/.test(w[0]||'') && w.length>1 ? w.slice(0,3).join(' ') : ''; };
+function tsMatch(j){
+  const won=P.filter(p=>WON.includes(p.status) && !p.cancelledOn), n=String(j.jobNum||'').replace(/\D/g,'');
+  if(n && n.length<=6){ const p=won.find(p=>String(p.hcpJob||'')===n) || (VIS.find(v=>v.job_no===n && v.num) ? P.find(p=>p.num===VIS.find(v=>v.job_no===n && v.num).num) : null); if(p) return [p,'job #']; }
+  const k=streetKey(j.address); if(k){ const L=won.filter(p=>streetKey(p.siteAddress)===k || streetKey(p.property)===k).sort((a,b)=>(['Approved','Scheduled'].includes(a.status)?0:1)-(['Approved','Scheduled'].includes(b.status)?0:1) || String(b.num).localeCompare(String(a.num))); if(L.length) return [L[0],'address']; }
+  return [null,''];
+}
+const crewName = t => { const names=crew().map(c=>c[0]), low=String(t).trim().toLowerCase(); return names.find(n=>n.toLowerCase()===low) || (names.filter(n=>n.toLowerCase().split(' ')[0]===low.split(' ')[0]).length===1 ? names.find(n=>n.toLowerCase().split(' ')[0]===low.split(' ')[0]) : String(t).trim()); };
+async function techSchedImport(){
+  if(!isManager()) return;
+  const docs=[]; let tok='';
+  try{ for(let i=0;i<20;i++){ const r=await fetch(`${TS_URL}?key=${TS_KEY}&pageSize=300${tok?'&pageToken='+encodeURIComponent(tok):''}`); if(!r.ok) throw new Error('TechSched answered '+r.status); const d=await r.json(); docs.push(...(d.documents||[])); if(!d.nextPageToken) break; tok=d.nextPageToken; } }
+  catch(e){ toast('Could not read TechSched: '+e.message); return; }
+  const td=iso(today()), L=docs.map(tsParse).filter(j=>j.date && !/^complete/i.test(j.status) && (j.endDate||j.date)>=td).sort((a,b)=>(a.date+(a.start||'')).localeCompare(b.date+(b.start||'')));
+  const ex=await sb.from('visits').select('id,ext_id,status').not('ext_id','is',null);
+  if(ex.error){ toast(invMissing(ex.error)||/ext_id/.test(ex.error.message)?'Run database update 027 in Supabase first.':ex.error.message); return; }
+  const had=new Map((ex.data||[]).map(v=>[v.ext_id,v]));
+  const open=P.filter(p=>WON.includes(p.status) && !p.cancelledOn).sort((a,b)=>String(a.client).localeCompare(String(b.client)));
+  const rows=L.map(j=>{ const [p,how]=tsMatch(j); return {j, p, how, old:had.get('techsched:'+j.id)}; });
+  const d=document.createElement('dialog'); d.className='ask inved';
+  d.innerHTML=`<h3>Import from TechSched</h3>
+    <div class="note" style="margin:0 0 8px">${L.length} upcoming job${L.length===1?'':'s'} in TechSched. Each one becomes a visit on the CRM schedule, linked to its CRM job when the job # or street address matches (change the link if it's wrong). Already imported jobs are updated with TechSched's latest dates, times and techs. TechSched itself is not changed, so Oscar can keep using it until the switch.</div>
+    <div class="tablewrap" style="max-height:55vh;overflow:auto"><table><thead><tr><th><input type="checkbox" id="tsAll" checked aria-label="All"></th><th>When</th><th>TechSched job</th><th>CRM job</th></tr></thead><tbody>
+    ${rows.map((r,i)=>`<tr><td><input type="checkbox" data-tsi="${i}" ${r.old && r.old.status!=='Scheduled'?'':'checked'}></td><td class="num">${fmtD(r.j.date)}${r.j.endDate&&r.j.endDate>r.j.date?' – '+fmtD(r.j.endDate):''}<div class="note" style="margin:0">${esc(t12(r.j.start))}</div></td>
+      <td class="wrap"><b>${esc(r.j.client||'')}</b> ${esc(String(r.j.address||'').split(',')[0])}<div class="note" style="margin:0">${esc(r.j.types.join(', '))}${r.j.techs.length?' · '+esc(r.j.techs.join(', ')):''}${r.old?' · <b>already imported: will update</b>':''}</div></td>
+      <td><select data-tsp="${i}" style="max-width:260px"><option value="">— not linked (own visit) —</option>${open.map(p=>`<option value="${esc(p.num)}" ${r.p&&r.p.num===p.num?'selected':''}>${esc(jobLabel(p))}</option>`).join('')}</select>${r.how?`<div class="note" style="margin:0">matched by ${r.how}</div>`:''}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No upcoming jobs in TechSched.</td></tr>'}</tbody></table></div>
+    <div class="toolbar"><span style="flex:1"></span><button type="button" class="btn ghost" data-a="x">Cancel</button><button type="button" class="btn" data-a="ok" ${L.length?'':'disabled'}>Import selected</button></div>`;
+  document.body.appendChild(d); d.showModal();
+  d.querySelector('#tsAll')?.addEventListener('change', e=>{ for(const c of d.querySelectorAll('[data-tsi]')) c.checked=e.target.checked; });
+  d.addEventListener('cancel', ()=>d.remove());
+  d.addEventListener('click', async e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(!a) return; if(a==='x'){ d.close(); d.remove(); return; }
+    const btn=e.target; btn.disabled=true; let nNew=0, nUpd=0, nErr=0;
+    for(const c of d.querySelectorAll('[data-tsi]:checked')){ const r=rows[+c.dataset.tsi], j=r.j, num=d.querySelector(`[data-tsp="${c.dataset.tsi}"]`).value||null, p=num&&P.find(x=>x.num===num);
+      const n=String(j.jobNum||'').replace(/\D/g,''), rental=[j.rentalCo, j.pickupDate&&('pickup '+fmtD(j.pickupDate)+(j.pickupTime?' '+t12(j.pickupTime):''))].filter(Boolean).join(', ');
+      const row={visit_date:j.date, end_date:j.endDate&&j.endDate>j.date?j.endDate:null, start_time:j.start||null, end_time:j.end||null, techs:[...new Set(j.techs.map(crewName))], equipment:j.equipment, vehicle:j.vehicle||null,
+        notes:j.notes||null, office_notes:[j.adminNotes, rental?'Rental: '+rental:'', 'From TechSched'].filter(Boolean).join('\n'), address:j.address||null, client:p?p.client:(j.client||null), title:p?p.property:(String(j.address||'').split(',')[0]||null), work:j.types};
+      let res;
+      if(r.old) res=await sb.from('visits').update(row).eq('id', r.old.id);
+      else { const ins={...row, kind:'job', num, ext_id:'techsched:'+j.id, status:'Scheduled'}; if(n && n.length<=6) ins.job_no=n; res=await sb.from('visits').insert(ins); }
+      if(res.error){ nErr++; console.warn(res.error.message); } else if(r.old) nUpd++; else nNew++; }
+    d.close(); d.remove();
+    toast(`TechSched: ${nNew} added, ${nUpd} updated${nErr?`, ${nErr} failed`:''}`); await loadSchedule(); if(nNew) loadProposals(); });
 }
 // ---- Spanish for the scope of work (crew emails): phrases first, then single words; Settings adds more ----
 const ES_TERMS=[['interior & exterior window cleaning','limpieza de ventanas interior y exterior'],['interior and exterior window cleaning','limpieza de ventanas interior y exterior'],
@@ -3799,6 +3850,7 @@ $('#schedBody').addEventListener('click', e=>{ const t=e.target;
   if(t.id==='schPrev'||t.id==='schNext'){ schMonth=new Date(schMonth.getFullYear(), schMonth.getMonth()+(t.id==='schNext'?1:-1), 1); renderSchedule(); return; }
   if(t.id==='schToday'){ schMonth=null; renderSchedule(); return; }
   if(t.id==='schWeek'){ weekEmails(); return; }
+  if(t.id==='schTs'){ techSchedImport(); return; }
   if(t.id==='schEvent'){ const v=visitDraft(null, iso(today())); visEdit(v); return; }
   const c=t.closest('[data-vis]'); if(c){ const v=VIS.find(x=>x.id===c.dataset.vis); if(v) visEdit(v); return; }
   const dl=t.closest('[data-daylist]'); if(dl){ const ds=dl.dataset.daylist, L=VIS.filter(v=>v.status!=='Cancelled' && visOn(v,ds) && (!schTech||(v.techs||[]).includes(schTech)));

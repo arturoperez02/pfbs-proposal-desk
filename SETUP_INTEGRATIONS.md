@@ -183,3 +183,13 @@ scanner and labels; the CRM database and sign-in. The old KitTracker keeps worki
 
 The tablet login can use the warehouse and read upcoming jobs. It cannot see prices, proposals, clients or money.
 To cut a device off, remove its email in Settings → Warehouse.
+
+
+## Bring TechSched's jobs into the CRM schedule (update 027)
+
+1. Supabase (CRM project) → SQL Editor → run `sql/027_techsched_import.sql`.
+2. CRM → **Schedule → Import from TechSched**. It lists TechSched's upcoming jobs (not completed) and links each one to
+   its CRM job by job # or street address. Fix any link in the list, untick anything you don't want, then **Import selected**.
+3. Run it again whenever Oscar adds or changes jobs in TechSched: new ones are added, imported ones are updated, nothing
+   is duplicated. TechSched is only read, never changed.
+4. When Oscar schedules in the CRM only, stop using TechSched; the crew emails come from Schedule → Crew emails.
