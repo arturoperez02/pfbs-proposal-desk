@@ -165,16 +165,21 @@ After that, every proposal, estimate and change order PDF downloads and also sav
 `WC 10-9-2026 Metro Center Senior - PFBS-0801.pdf`. Other files in the folder (OPOS, photos, contracts) are untouched.
 
 
-## KitTracker reads the CRM schedule (update 025)
+## Warehouse (KitTracker) inside the CRM (updates 025 + 026)
 
-The warehouse packs kits from the CRM schedule instead of retyping jobs. TechSched keeps working the whole time.
+KitTracker now lives in the CRM: **Warehouse** in the menu (apps.pfbservices.com/warehouse.html). Same screens, PIN,
+scanner and labels; the CRM database and sign-in. The old KitTracker keeps working until you switch.
 
-1. Supabase (the **CRM** project, not KitTracker's) → SQL Editor → run `sql/025_warehouse_feed.sql`.
-2. Supabase (CRM project) → **Authentication → Users → Add user → Create new user**. Email: the warehouse login
+1. Supabase (the **CRM** project) → SQL Editor → run `sql/025_warehouse_feed.sql`, then `sql/026_warehouse.sql`.
+2. Supabase (CRM project) → **Authentication → Users → Add user → Create new user**: the warehouse tablet's email
    (for example `warehouse@pfbuildingservices.com`), a password, tick **Auto confirm user**. Do not add it to the CRM team.
 3. CRM → **Settings → Warehouse (KitTracker)** → type that email → **Add**.
-4. KitTracker → New Job → **📋 Import from CRM Schedule** → sign in once with that email and password.
-   After that, tap a job: job #, date, site, client, techs, vehicle, template, scope and equipment fill in.
+4. Same card → **Copy data from the old KitTracker** → sign in with the old KitTracker tablet login. It copies inventory,
+   templates, vehicles, keys, repairs, packed jobs and settings (including the PIN). Safe to run again on switch day.
+5. On the warehouse tablet: open apps.pfbservices.com/warehouse.html → sign in with the tablet email and password → add it
+   to the home screen. The office team just clicks **Warehouse** in the CRM (already signed in).
+6. New Job → **📋 Import from CRM Schedule**: tap a scheduled job and the kit fills in. Once packed, the job in the CRM
+   shows "Kit packed / picked up / returned".
 
-That login can only read the next two weeks of scheduled jobs. It cannot see prices, proposals, clients or money.
-To cut a device off, remove the email in Settings → Warehouse.
+The tablet login can use the warehouse and read upcoming jobs. It cannot see prices, proposals, clients or money.
+To cut a device off, remove its email in Settings → Warehouse.

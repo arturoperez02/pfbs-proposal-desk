@@ -357,6 +357,38 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 16. Warehouse tab: same sign-in, CRM schedule import, packed kit shows on the CRM job
+{
+  const today = new Date().toISOString().slice(0, 10);
+  const vis = { id: 'v-wh-1', job_no: '10305', num: 'PFBS-0998', visit_date: today, client: 'Kit Co', property: '3 Kit Ave', address: '3 Kit Ave, Fremont', techs: ['Rigo', 'Israel'], work: ['Pressure Washing'], equipment: ['Boom Lift'], vehicle: 'Truck 2', notes: '', scope: ['Wash plaza'] };
+  const pg = await b.newPage({ viewport: { width: 1100, height: 900 } }); pg.on('pageerror', e => errs.push('warehouse page: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(v => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [v], error: null }) }; }, vis);
+  await pg.goto(BASE + 'warehouse.html'); await pg.waitForTimeout(900);
+  assert.equal(await pg.$eval('#device-auth-screen', e => e.style.display), 'none', 'signed-in CRM user goes straight in');
+  await pg.evaluate(() => openCrmImport()); await pg.waitForSelector('.sched-job-card', T);
+  await pg.click('.sched-job-card');
+  assert.equal(await pg.$eval('#co-jobnum', e => e.value), '10305'); assert.equal(await pg.$eval('#co-jobnum', e => e.dataset.visit), 'v-wh-1', 'remembers the CRM visit');
+  assert.equal(await pg.$eval('#co-names', e => e.value), 'Rigo, Israel');
+  await pg.close();
+  const p2 = await b.newPage({ viewport: { width: 1100, height: 900 } }); p2.on('pageerror', e => errs.push('warehouse denied: ' + e.message));
+  await p2.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await p2.addInitScript(() => { window.MOCK_RPC = { can_warehouse: () => ({ data: false, error: null }) }; });
+  await p2.goto(BASE + 'warehouse.html?u=nobody@x.com'); await p2.waitForTimeout(700);
+  assert.match(await p2.textContent('#da-err'), /not set up for the warehouse/, 'other logins are refused');
+  await p2.close();
+  // the CRM job shows the kit
+  const kj = { num: 'PFBS-0998', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Kit Co', property: '3 Kit Ave', amount: 800, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10305', items: [{ type: 'Service', qty: 1, description: 'Wash plaza', amount: 800 }] };
+  const p3 = await b.newPage({ viewport: { width: 1300, height: 950 } }); p3.on('pageerror', e => errs.push('kit on job: ' + e.message));
+  await p3.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await p3.addInitScript(x => { window.MOCK_EXTRA = [x]; window.MOCK_KITS = [{ id: 'k1', hcp_job_number: '10305', status: 'packed', packed_at: '2026-10-12T15:00:00Z', tech_names: 'Rigo, Israel' }]; sessionStorage.clear(); }, kj);
+  await p3.goto(BASE); await p3.waitForTimeout(900);
+  assert.ok(await p3.$('#whTab:not([hidden])'), 'Warehouse tab in the CRM menu');
+  await p3.click('[data-hopen="PFBS-0998"]'); await p3.waitForSelector('.jflow', T);
+  assert.match(await p3.textContent('#jfBox'), /Kit packed/, 'kit status on the job');
+  await p3.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

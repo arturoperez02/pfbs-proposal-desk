@@ -240,3 +240,18 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.deepEqual(x.scope, ['Exterior windows', 'Gutter'], 'scope = first option + accepted add-ons, first line only');
   console.log('db: warehouse feed passed');
 }
+// ---------- the warehouse inside the CRM (update 026) ----------
+{
+  const as = e => `reset role; select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-0000000000ab","email":"${e}"}',false); set role authenticated;`;
+  await db.exec(as('warehouse@example.com'));
+  await db.exec(`insert into wh_jobs(hcp_job_number, status) values ('10305','packed')`);
+  assert.equal((await db.query(`select count(*)::int n from wh_jobs`)).rows[0].n, 1, 'tablet login can pack');
+  assert.equal(await db.query(`select count(*)::int n from proposals`).then(r => r.rows[0].n, () => 0), 0, 'tablet login still sees no proposals');
+  await db.exec(as('stranger@example.com'));
+  assert.equal((await db.query(`select count(*)::int n from wh_jobs`)).rows[0].n, 0, 'stranger sees nothing');
+  await assert.rejects(db.query(`insert into wh_jobs(status) values ('packed')`), /row-level security/, 'stranger cannot write');
+  await db.exec(as('aperez@pfbuildingservices.com'));
+  assert.equal((await db.query(`select count(*)::int n from wh_jobs`)).rows[0].n, 1, 'owner sees the warehouse');
+  await db.exec('reset role');
+  console.log('db: warehouse tables passed');
+}

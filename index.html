@@ -45,6 +45,7 @@ nav.tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
 nav.tabs button{background:none;border:0;color:#C8CDE0;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:600}
 nav.tabs button[aria-selected="true"]{background:#C9A227;color:#1F2A5C}
 nav.tabs button:focus-visible{outline:2px solid #C9A227;outline-offset:2px}
+nav.tabs a.tablink{color:#C8CDE0;padding:8px 12px;border-radius:6px;font-weight:600;text-decoration:none} nav.tabs a.tablink:hover{color:#fff}
 main{max-width:1240px;margin:0 auto;padding:20px 16px 48px}
 .testband{background:var(--gold-soft);border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px;font-size:13px;color:var(--ink);margin-bottom:16px}
 h2{font-family:var(--display);font-size:26px;margin:0;letter-spacing:.02em;text-wrap:balance}
@@ -266,6 +267,7 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="sales" aria-selected="false" id="salesTab" hidden>My Sales</button>
     <button role="tab" data-tab="orders" aria-selected="false" id="ordersTab" hidden>Jobs</button>
     <button role="tab" data-tab="schedule" aria-selected="false" id="schedTab">Schedule</button>
+    <a href="warehouse.html" class="tablink" id="whTab" hidden>Warehouse</a>
     <button role="tab" data-tab="money" aria-selected="false" id="moneyTab" hidden>Money</button>
     <button role="tab" data-tab="comm" aria-selected="false" id="commTab" hidden>Commission</button>
     <button role="tab" data-tab="clients" aria-selected="false" id="clientsTab">Clients</button>
@@ -1166,6 +1168,35 @@ $('#drawer').addEventListener('click', async e=>{ const t=e.target.closest('butt
   if(t.dataset.ptdel!=null){ if(!t.dataset.armed){ t.dataset.armed='1'; t.textContent='Confirm remove'; return; } const x=draft.parts.splice(+t.dataset.ptdel,1)[0]; if(await saveParts(`${isRent(x)?'Rental':'Parts'}: removed ${x.desc}`)){ refreshParts(); refreshRentals(); } }
 });
 
+// ---------- warehouse kits (update 026): packed / picked up / returned, matched by visit or job # ----------
+let KITS=[];
+async function loadKits(){ if(!['Owner','Admin','Senior Estimator','Estimator'].includes(role())) return;
+  const {data,error}=await sb.from('wh_jobs').select('id,hcp_job_number,visit_id,status,packed_at,picked_up_at,returned_at,scheduled_date,tech_names').order('created_at',{ascending:false}).limit(500);
+  KITS=error?[]:(data||[]); if(draft && document.getElementById('jfBox')) $('#jfBox').innerHTML=jobFlowHTML(draft); }
+const KIT_LABEL={pending:'Kit not packed',packed:'Kit packed',picked_up:'Kit picked up',returned:'Kit returned',completed:'Kit returned'};
+function kitLine(p){
+  const vids=new Set(VIS.filter(v=>v.num===p.num).map(v=>v.id)), nos=new Set([p.hcpJob, ...VIS.filter(v=>v.num===p.num).map(v=>v.job_no)].filter(Boolean).map(String));
+  const L=KITS.filter(k=>(k.visit_id && vids.has(k.visit_id)) || (k.hcp_job_number && nos.has(String(k.hcp_job_number).replace(/^#/,''))));
+  if(!L.length) return '';
+  const k=L[0], when=k.returned_at||k.picked_up_at||k.packed_at;
+  return `<div class="gpline" style="margin:-4px 0 10px">🧰 <b>${esc(KIT_LABEL[k.status]||k.status)}</b>${when?' '+fmtD(when):''}${k.tech_names?' · '+esc(k.tech_names):''}${L.length>1?` · ${L.length} kits`:''} · <a href="warehouse.html" target="_blank" rel="noopener">Warehouse</a></div>`;
+}
+// one-time copy: old KitTracker project → the CRM's wh_ tables (rows keep their ids, so running it twice is safe)
+const OLD_KT={url:'https://eyiuyqrjoamhvpzqggqs.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aXV5cXJqb2FtaHZwenFnZ3FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODgyMzMsImV4cCI6MjA5NTA2NDIzM30.712zY8myAmb9BFGgGsvXBtPFMTx0mEy88xCGKTau9jI'};
+const WH_TABLES=[['app_settings','key'],['categories'],['inventory_items'],['assets'],['inspections'],['templates'],['template_items'],['vehicles'],['inventory_locations'],['inventory_location_stock','inventory_item_id,location_id'],['jobs'],['job_items'],['key_registry'],['client_keys'],['repair_tickets'],['reorder_queue'],['di_pairs'],['di_readings'],['grab_requests'],['template_requests']];
+async function copyOldKitTracker(){
+  const r=await formDialog('Copy data from the old KitTracker', '<label class="f">KitTracker sign-in email<input name="email" type="email" required></label><label class="f">Password<input name="pw" type="password" required></label><div class="note" style="margin:0">The login the warehouse tablet uses in the old KitTracker. Everything is copied into the Warehouse tab; the old KitTracker is not changed. Safe to run again (it updates rows already copied).</div>', 'Copy');
+  if(!r) return; const msg=$('#whCopyMsg'), out=[];
+  const old=window.supabase.createClient(OLD_KT.url, OLD_KT.key, {auth:{storageKey:'pfbs-old-kt', persistSession:false}});
+  const li=await old.auth.signInWithPassword({email:r.email, password:r.pw}); if(li.error){ toast('Old KitTracker sign-in failed: '+li.error.message); return; }
+  for(const [t,key] of WH_TABLES){ msg.textContent=`Copying ${t}…`; let n=0, from=0;
+    for(;;){ const {data,error}=await old.from(t).select('*').range(from, from+499); if(error){ out.push(`${t}: skipped (${error.message})`); break; }
+      if(!data.length) break; const w=await sb.from('wh_'+t).upsert(data, {onConflict:key||'id'}); if(w.error){ out.push(`${t}: ${w.error.message}`); break; }
+      n+=data.length; if(data.length<500) break; from+=500; }
+    if(n) out.push(`${t}: ${n}`); }
+  await old.auth.signOut();
+  msg.innerHTML='Done. '+esc(out.join(' · ')||'The old KitTracker had no data.'); toast('Warehouse data copied'); loadKits();
+}
 // ---------- the job: where it stands (HCP-style Schedule → Done → Invoice → Paid) ----------
 const jobVisits = p => VIS.filter(v=>v.num===p.num && v.kind==='job' && v.status!=='Cancelled').sort((a,b)=>String(a.visit_date).localeCompare(String(b.visit_date)));
 const jobNoOf = p => p.hcpJob || (VIS.find(v=>v.num===p.num && v.job_no)||{}).job_no || '';
@@ -1198,7 +1229,7 @@ function jobFlowHTML(p){
   }
   if(m && !['Paid'].includes(S0)) b.push(`<button type="button" class="btn ghost small" id="jfHold">${p.onHoldSince?'Take off hold':'Put on hold'}</button>`);
   return `${p.onHoldSince?`<div class="holdline"><b>On hold</b> since ${fmtD(p.onHoldSince)}${p.onHoldReason?': '+esc(p.onHoldReason):''}</div>`:''}
-    <div class="jflow">${steps.join('')}</div>${b.length?`<div class="jnext">${b.join('')}</div>`:''}`;
+    <div class="jflow">${steps.join('')}</div>${kitLine(p)}${b.length?`<div class="jnext">${b.join('')}</div>`:''}`;
 }
 async function toggleHold(){
   if(!draft || !isManager()) return; const p=draft, on=!p.onHoldSince;
@@ -3240,7 +3271,8 @@ function renderSettings(){
       <div class="note">Until this is set, each visit uses the HCP job # typed on the job. On switch-over day, set it to HousecallPro's last job # + 1: from then on every visit gets the next number, like HCP.</div></div>`:''}
     ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Warehouse (KitTracker)</h3><div id="whList" class="note" style="margin:0 0 6px">Loading…</div>
       <label class="f">Add a KitTracker login<span style="display:flex;gap:6px"><input id="s-wh" type="email" placeholder="warehouse@pfbuildingservices.com" style="flex:1"><button type="button" class="btn small" id="whAdd">Add</button></span></label>
-      <div class="note">KitTracker's "Import from CRM Schedule" signs in with this email (create it once in Supabase → Authentication → Add user, with a password). It can only read upcoming scheduled jobs: no prices, clients list or money.</div></div>`:''}
+      <div class="note">The warehouse tablet signs in to the <b>Warehouse</b> tab with this email and its password (create it once in Supabase → Authentication → Add user). It can use the warehouse and read upcoming jobs: no prices, proposals, clients or money. The office team doesn't need to be listed here.</div>
+      ${role()==='Owner'?`<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" id="whCopy">Copy data from the old KitTracker</button></div><div id="whCopyMsg" class="note" style="margin:4px 0 0"></div>`:''}</div>`:''}
     ${ta('s-crew','Crew', crew().map(c=>c.filter((x,i)=>i<2||x).join(' | ')).join('\n'), 'Name | email | es or en (the language of their schedule email). One tech per line. Emails stay in the database, not on any page.')}
     ${ta('s-work','Work types (schedule)', workTypes().join('\n'), 'One per line. Ticked on each visit and listed in the crew email.')}
     ${ta('s-equip','Equipment (schedule)', equipList().join('\n'), 'One per line.')}
@@ -3303,6 +3335,7 @@ function renderSettings(){
       const {error}=await sb.from('warehouse_logins').delete().eq('email',d.dataset.whdel); if(error){ toast(error.message); return; }
       whLoad(); };
   }
+  if($('#whCopy')) $('#whCopy').onclick=()=>copyOldKitTracker();
   if($('#invNoSave')){
     sb.rpc('next_invoice_no').then(({data,error})=>{ const i=$('#s-invno'); if(!i) return; if(error){ i.placeholder='Run database update 018 first'; i.disabled=true; $('#invNoSave').disabled=true; } else i.value=data??''; });
     $('#invNoSave').onclick=async ()=>{ const n=Math.round(num($('#s-invno').value)||0); if(!n){ toast('Type a number.'); return; }
@@ -3810,11 +3843,12 @@ async function start(session){
   if(m.role==='Accountant'){ for(const t of ['home','pipeline','leads','sales','orders','schedule','settings']) { const b=document.querySelector(`#tabs [data-tab="${t}"]`); if(b) b.hidden=true; } }
   $('#salesTab').textContent = ['BD Rep','Estimator'].includes(m.role) ? 'My Sales' : 'Sales';
   $('#homeTab').hidden = !['Owner','Admin','Senior Estimator'].includes(m.role);
+  $('#whTab').hidden = !['Owner','Admin','Senior Estimator','Estimator'].includes(m.role);
   const home = m.role==='Accountant' ? 'money' : ['BD Rep','Estimator'].includes(m.role) ? 'sales' : 'home';
   let last=''; try{ last=sessionStorage.getItem('pfbs.tab')||''; }catch(_){}
   const lb=last && document.querySelector(`#tabs [data-tab="${last}"]`); const startTab = lb && !lb.hidden ? last : home;   // a refresh keeps you where you were
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===startTab); show(startTab);
-  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); sb.rpc('crm_job_numbers').then(r=>{ JOBNO_ON=!r.error && r.data===true; }); if(isManager()) loadOpenInvoices();
+  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); loadKits(); sb.rpc('crm_job_numbers').then(r=>{ JOBNO_ON=!r.error && r.data===true; }); if(isManager()) loadOpenInvoices();
   window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })

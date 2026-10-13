@@ -19,7 +19,8 @@ janitorial and gates & doors company in the Bay Area. Owner: Arturo (aperez@pfbu
 ## Files
 | File | What |
 |---|---|
-| `index.html` | The whole CRM: one file, vanilla JS, no build step. Tabs: Home (managers' landing page: KPIs, jobs board Unscheduled / Scheduled / To invoice / Invoice sent / On hold, this week, recent activity), Pipeline, Leads, Sales, Jobs, Schedule, Money, Commission, Clients, Settings. A won job's drawer opens with "Job #… · Job for <client>" and an Approved → Scheduled → Done → Invoiced → Paid bar with the next-step button (`jobFlowHTML`, `jobState`). |
+| `index.html` | The whole CRM: one file, vanilla JS, no build step. Tabs (+ a Warehouse link to `warehouse.html`): Home (managers' landing page: KPIs, jobs board Unscheduled / Scheduled / To invoice / Invoice sent / On hold, this week, recent activity), Pipeline, Leads, Sales, Jobs, Schedule, Money, Commission, Clients, Settings. A won job's drawer opens with "Job #… · Job for <client>" and an Approved → Scheduled → Done → Invoiced → Paid bar with the next-step button (`jobFlowHTML`, `jobState`). |
+| `warehouse.html` | Warehouse (was KitTracker, moved in by update 026): same screens, CRM database (`wh_` tables) and CRM sign-in; tablet logins in `warehouse_logins`; "Import from CRM Schedule" fills a kit from a visit and saves `visit_id`. Edit this file directly; the old `pfbs-kittracker` repo stays up until the switch. |
 | `reports.html` | Service reports (moved from the old Cloudflare app). Same screens; data layer is Supabase. Edit this file directly. |
 | `hub.html` | "Apps" launcher page for the team. |
 | `auth.html` | Microsoft sign-in return page (SharePoint, once Entra is set up). |
@@ -94,9 +95,10 @@ punctuation, LLC/Inc/Partners/Management; proposals fill from the client record 
    → tailor the CSV columns); Home tab done 10/12. Original spec — **Home + accountant dashboard**: open / past due / paid, A/R aging, deposits, export, her own login; import the
    open HCP invoices (65, ~$162k on 10/12). Waiting on her answers (software, what she pulls, what she wants).
 4. **Warehouse**: KitTracker (separate Supabase project, repo `pfbs-kittracker`); kit lists from line items.
-   Step 1 done (025): KitTracker "Import from CRM Schedule" calls `warehouse_jobs(days)` on this project with a
-   warehouse login listed in `warehouse_logins` (Settings → Warehouse; not a team member, so every other table stays closed).
-   The TechSched import stays until Oscar schedules only in the CRM. Next: KitTracker job status (packed / picked up / returned) back on the CRM visit.
+   Done 10/12 (025 + 026): Warehouse tab = `warehouse.html` on the CRM database; `can_warehouse()` = Owner/Admin/Senior
+   Estimator/Estimator or a `warehouse_logins` email (tablet; not a team member, so every other table stays closed).
+   The job drawer shows the kit status (`kitLine`, matched by visit_id or job #). One-time copy of the old KitTracker data:
+   Settings → Warehouse → "Copy data from the old KitTracker". TechSched import stays until Oscar schedules only in the CRM.
 5. **Leave HCP**: import history from its exports, run both for 1–2 billing cycles, cancel.
 HCP facts: Oscar creates each job in HCP and retypes it in TechSched; HCP job statuses are not kept up (738 "Scheduled",
 29 "Completed"), so "done" = invoiced and "paid" = payment recorded in the CRM. Invoice numbers continue after HCP's last.
