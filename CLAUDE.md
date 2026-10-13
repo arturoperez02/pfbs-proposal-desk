@@ -36,7 +36,7 @@ Hosting: GitHub Pages from `main` (custom domain via `CNAME`). Pushing to `main`
 - Others: `team_members` (roles: Owner, Admin, Senior Estimator, Estimator, BD Rep), `settings` (one row, `data` jsonb),
   `proposal_activity`, `proposal_history`, `prospects`, `commission_payouts`, `admin_log`, `deleted_proposals`,
   `service_reports`, `private_settings`, `integration_keys`, `invoices`, `invoice_payments`, `clients`, `client_contacts`,
-  `properties` (proposals have `client_id` / `property_id`; the text client/property fields stay for display and old data).
+  `properties`, `visits`, `visit_series` (proposals have `client_id` / `property_id`; the text client/property fields stay for display and old data).
 - Security is row level security plus `security definer` functions. `is_manager()` = Owner, Admin, Senior Estimator.
 - Zapier calls `rpc/<function>` with the anon key + a `token` checked by `zap_check()`. Single-jsonb functions need the
   header `Prefer: params=single-object`.
@@ -77,7 +77,9 @@ punctuation, LLC/Inc/Partners/Management; proposals fill from the client record 
    client can have 40+). Import from HousecallPro's customer CSV inside the app (Settings), never into this repo:
    202 customers, people and companies mixed, merge by company; "Billing?" flag marks the billing address;
    tags used: "PO# Required", "Invoice to AP". Proposals pick client + property; contacts/billing fill in.
-2. **Schedule** (replaces HCP's schedule AND TechSched data entry): visits per job with dates/times + assigned techs,
+2. ~~Schedule~~ (done, update 020: Schedule tab month view, visit editor, repeat rules, weekly crew emails EN/ES,
+   drawer Job tab → Schedule; still to do: import TechSched's existing future jobs, equipment rental pickup dates).
+   Original spec — Schedule (replaces HCP's schedule AND TechSched data entry): visits per job with dates/times + assigned techs,
    month view, recurring rule (every N weeks/months, day # or "first Tuesday", ends never/after N/on date; edit
    "only this visit" vs "this and future"; rule prefilled from the proposal frequency; generate ~12 months ahead).
    Schedule asked at Approved. Crews never use an app: keep TechSched's weekly crew emails (per tech, EN/ES,

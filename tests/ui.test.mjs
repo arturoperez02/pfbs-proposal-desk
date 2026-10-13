@@ -157,6 +157,61 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 8. Schedule: recurring job from its frequency, "only this" vs "this and future", one-time multi-day, crew emails
+{
+  const rj = { num: 'PFBS-0980', date_sent: '2026-09-01', sent_by: 'Arturo', client: 'Demo Towers', property: '300 Demo Ave', site_address: '300 Demo Ave\nOakland, CA 94612', amount: 1200, status: 'Approved', service: 'Window Cleaning',
+    items: [{ type: 'Service', qty: 1, frequency: 'Quarterly', description: 'Exterior windows', amount: 1200 }] };
+  const oj = { num: 'PFBS-0981', date_sent: '2026-09-01', sent_by: 'Arturo', client: 'Demo Plaza', property: '400 Demo Blvd', site_address: '400 Demo Blvd\nOakland, CA', amount: 9000, status: 'Approved', items: [{ type: 'Service', qty: 1, description: 'Swing stage glass', amount: 9000 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('schedule: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort()); await pg.route(/outlook\.office\.com/, r => r.fulfill({ body: 'ok' }));
+  await pg.addInitScript(x => { window.MOCK_EXTRA = x; }, [rj, oj]); await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="settings"]', T); await pg.waitForTimeout(300);
+  await pg.fill('#s-crew', 'Rigo Perez | rigo@example.com | es\nBaldemar Cervantes | bal@example.com | es\nAna Tech | ana@example.com | en'); await pg.click('#saveS'); await pg.waitForTimeout(500);
+  await pg.click('#tabs [data-tab="orders"]', T); await pg.waitForTimeout(300);
+  await pg.click('[data-schnew="PFBS-0980"]', T); await pg.waitForSelector('dialog.inved', T);
+  assert.equal(await pg.$eval('[name="rep_on"]', e => e.value), '1', 'recurring job suggests repeating');
+  assert.deepEqual([await pg.$eval('[name="every"]', e => e.value), await pg.$eval('[name="unit"]', e => e.value)], ['3', 'month'], 'quarterly → every 3 months');
+  await pg.fill('[name="visit_date"]', '2026-11-03'); await pg.selectOption('[name="nth"]', '1'); await pg.selectOption('[name="weekday"]', '2');
+  await pg.check('dialog.inved [name="techs"][value="Rigo Perez"]'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(700);
+  let dates = await pg.evaluate(() => DBX.visits.filter(v => v.num === 'PFBS-0980').map(v => v.visit_date).sort());
+  assert.deepEqual(dates.slice(0, 4), ['2026-11-03', '2027-02-02', '2027-05-04', '2027-08-03'], 'first Tuesday every 3 months');
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-0980').status), 'Scheduled');
+  // only this visit
+  await pg.click('#tabs [data-tab="schedule"]', T); await pg.waitForTimeout(300);
+  for (let i = 0; i < 4; i++) { if ((await pg.$eval('#schedBody b', e => e.textContent)).startsWith('February 2027')) break; await pg.click('#schNext'); await pg.waitForTimeout(100); }
+  await pg.click('.vchip:has-text("Demo Towers")', T); await pg.waitForSelector('dialog.inved', T);
+  await pg.fill('[name="start_time"]', '06:00'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForSelector('[name="sc"]', T); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(500);
+  let v = await pg.evaluate(() => DBX.visits.filter(v => v.num === 'PFBS-0980').sort((a, b) => a.visit_date.localeCompare(b.visit_date)).map(v => [v.visit_date, v.start_time, v.detached || false, (v.techs || []).join('+')]));
+  assert.deepEqual(v.slice(0, 3), [['2026-11-03', '08:00', false, 'Rigo Perez'], ['2027-02-02', '06:00', true, 'Rigo Perez'], ['2027-05-04', '08:00', false, 'Rigo Perez']], 'only this visit changed');
+  // this and all future visits
+  for (let i = 0; i < 4; i++) { if ((await pg.$eval('#schedBody b', e => e.textContent)).startsWith('May 2027')) break; await pg.click('#schNext'); await pg.waitForTimeout(100); }
+  await pg.click('.vchip:has-text("Demo Towers")', T); await pg.waitForSelector('dialog.inved', T);
+  await pg.check('dialog.inved [name="techs"][value="Baldemar Cervantes"]'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForSelector('[name="sc"]', T);
+  await pg.check('[name="sc"][value="future"]'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(700);
+  v = await pg.evaluate(() => DBX.visits.filter(v => v.num === 'PFBS-0980').sort((a, b) => a.visit_date.localeCompare(b.visit_date)).map(v => [v.visit_date, (v.techs || []).join('+')]));
+  assert.deepEqual(v.slice(0, 4), [['2026-11-03', 'Rigo Perez'], ['2027-02-02', 'Rigo Perez'], ['2027-05-04', 'Rigo Perez+Baldemar Cervantes'], ['2027-08-03', 'Rigo Perez+Baldemar Cervantes']], 'future visits changed, past ones kept');
+  assert.equal(await pg.evaluate(() => DBX.visit_series.length), 2, 'old series ended, new one started');
+  // one-time multi-day job
+  await pg.click('#tabs [data-tab="orders"]', T); await pg.waitForTimeout(300);
+  await pg.click('[data-schnew="PFBS-0981"]', T); await pg.waitForSelector('dialog.inved', T);
+  assert.equal(await pg.$eval('[name="rep_on"]', e => e.value), '', 'one-time job does not repeat');
+  await pg.fill('[name="visit_date"]', '2026-11-04'); await pg.fill('[name="end_date"]', '2026-11-06'); await pg.check('dialog.inved [name="techs"][value="Ana Tech"]'); await pg.check('dialog.inved [name="equipment"][value="Swing Stage"]');
+  await pg.fill('[name="notes"]', 'Check in at security'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(500);
+  // weekly crew email
+  await pg.click('#tabs [data-tab="schedule"]', T); await pg.waitForTimeout(200); await pg.click('#schWeek'); await pg.waitForSelector('dialog.ask [name="mon"]', T);
+  await pg.fill('dialog.ask [name="mon"]', '2026-11-02'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(300);
+  await pg.click('dialog.ask [data-t="Rigo Perez"]'); await pg.waitForSelector('#cmBody', T);
+  const es = await pg.$eval('#cmBody', e => e.value);
+  assert.ok(es.startsWith('Hola Rigo,') && /martes, 3 de noviembre de 2026/.test(es) && /300 Demo Ave, Oakland, CA 94612/.test(es) && /Equipo|Trabajo|Limpieza/.test(es), 'Spanish weekly email for Rigo');
+  assert.equal(await pg.$eval('#cmTo', e => e.value), 'rigo@example.com');
+  await pg.click('dialog.ask [data-l="en"]'); assert.ok((await pg.$eval('#cmBody', e => e.value)).startsWith('Hi Rigo,'), 'switch to English');
+  await pg.locator('dialog.ask').last().locator('[data-a="x"]').click(); await pg.click('dialog.ask [data-t="Ana Tech"]'); await pg.waitForTimeout(200);
+  const en = await pg.$eval('#cmBody', e => e.value);
+  assert.ok(/Wednesday, November 4, 2026 – Friday, November 6, 2026/.test(en) && /Swing Stage/.test(en) && /Check in at security/.test(en), 'multi-day visit, equipment and crew notes in the email');
+  await pg.screenshot({ path: path.join(B, 'schedule.png') });
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing passed');

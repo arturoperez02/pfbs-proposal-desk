@@ -68,7 +68,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 #drawer .dtabs button{border:0;background:none;padding:10px 16px;font-weight:600;color:var(--muted,#666);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
 #drawer .dtabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 h3.setsec{margin:28px 0 10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#666)} h3.setsec:first-child{margin-top:4px}
-dialog.ask.inved{max-width:760px} .inved:not(.linepo) .invrow [data-f="po"]{display:none} .inved.linepo .invrow{grid-template-columns:1fr 130px 110px auto} .invrow{display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid var(--line)} .invrow textarea{grid-column:1/-1;min-height:34px;font-size:13px} .invhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:10px 0 6px;font-size:13px;color:var(--mut,#666)} .flag.ok{background:#e3f4e8;color:#1e6b3a}
+dialog.ask.inved{max-width:760px} #schTech{width:auto;min-width:140px} .sgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)} .shead{padding:6px;font-size:12px;font-weight:700;color:var(--mut,#666);border-bottom:1px solid var(--line);text-align:center} .scell{min-height:104px;padding:4px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);cursor:pointer;min-width:0} .scell.out{background:var(--bg);opacity:.75} .scell.today .sday{background:var(--navy,#1F2A6B);color:#fff;border-radius:10px;padding:0 6px;display:inline-block} .sday{font-size:12px;font-weight:700;margin-bottom:2px} .vchip{display:block;width:100%;text-align:left;font-size:11.5px;line-height:1.25;margin:0 0 2px;padding:2px 4px;border:1px solid transparent;border-radius:4px;background:#1F2A6B;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer} .vchip.ev{background:#e4e8f5;color:#1F2A6B} .vchip.done{background:#8a8f99} .vchip.skip{background:#c9ccd3;color:#333;text-decoration:line-through} .vchip.nocrew{border-color:#d33;box-shadow:inset 3px 0 0 #d33} .vmore{font-size:11px;border:0;background:none;color:var(--navy,#1F2A6B);cursor:pointer;padding:0} .vchecks{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0 8px;font-weight:400} .vchecks label{font-size:13px} .vmon label,.vends label{display:inline-flex;align-items:center;gap:4px;margin:4px 10px 4px 0;font-size:13px} @media (max-width:700px){ .scell{min-height:64px} .vchip{font-size:10px} } .inved:not(.linepo) .invrow [data-f="po"]{display:none} .inved.linepo .invrow{grid-template-columns:1fr 130px 110px auto} .invrow{display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid var(--line)} .invrow textarea{grid-column:1/-1;min-height:34px;font-size:13px} .invhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:10px 0 6px;font-size:13px;color:var(--mut,#666)} .flag.ok{background:#e3f4e8;color:#1e6b3a}
 dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px} tr.voided td{color:var(--muted,#888)}
 .btn.small{padding:5px 10px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -259,6 +259,7 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="leads" aria-selected="false">Leads</button>
     <button role="tab" data-tab="sales" aria-selected="false" id="salesTab" hidden>My Sales</button>
     <button role="tab" data-tab="orders" aria-selected="false" id="ordersTab" hidden>Jobs</button>
+    <button role="tab" data-tab="schedule" aria-selected="false" id="schedTab">Schedule</button>
     <button role="tab" data-tab="comm" aria-selected="false" id="commTab" hidden>Commission</button>
     <button role="tab" data-tab="clients" aria-selected="false" id="clientsTab">Clients</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
@@ -337,6 +338,12 @@ td input,td select{padding:5px 8px}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select id="commPerson" hidden aria-label="Person"></select><button class="btn ghost" id="commCsv">Export CSV</button><button class="btn" id="commPay" hidden>Record payout</button></div>
     </div>
     <div id="commBody"></div>
+  </section>
+
+  <section id="view-schedule" hidden>
+    <h2>Schedule</h2>
+    <div class="sub" style="margin-bottom:12px">Every visit with its techs. Schedule once here; the crew emails come from the same schedule.</div>
+    <div id="schedBody"></div>
   </section>
 
   <section id="view-clients" hidden>
@@ -814,6 +821,7 @@ function drawDrawer(){
     ${outcome(p)==='Won' && !isNew ? `<fieldset><legend>Invoices</legend>
       <div class="grid2" style="margin-bottom:8px">${field('PO # / customer reference'+(p.poRequired===true||p.poRequired==='true'?' (required)':''),'poNumber')}</div>
       <div id="invBox">${invoicesHTML(p)}</div></fieldset>` : ''}
+    ${outcome(p)==='Won' && !isNew ? `<fieldset><legend>Schedule</legend><div id="visBox">${visitsHTML(p)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Payment &amp; commission</legend><div class="grid2">
       ${field(isRecurring(p)?'First HCP job #':'HCP job #','hcpJob')}
       ${field('Date paid','datePaid','date')}
@@ -938,6 +946,8 @@ $('#drawer').addEventListener('change', e=>{ if(e.target.id!=='budChk' || !draft
 $('#drawer').addEventListener('click', e=>{ const m=e.target.closest('[data-stmore]'); if(m){ const r=m.nextElementSibling; r.hidden=!r.hidden; m.textContent=r.hidden?'More ▾':'Less ▴'; } });
 $('#drawer').addEventListener('click', e=>{ if(!draft) return; const t=e.target;
   if(t.closest('#invNew')){ invOpenNew(draft); return; }
+  if(t.closest('#visNew')){ visNewFor(draft); return; }
+  const vo=t.closest('[data-visopen]'); if(vo){ e.preventDefault(); const v=VIS.find(x=>x.id===vo.dataset.visopen); if(v) visEdit(v); return; }
   const o=t.closest('[data-inv]'); if(o){ invOpen(draft, o.dataset.inv); return; }
   const py=t.closest('[data-invpay]'); if(py){ const v=(INV[draft.num]||[]).find(x=>x.id===py.dataset.invpay); if(v) invPay(v).then(ok=>{ if(ok) invRefresh(v.num); }); } });
 $('#drawer').addEventListener('click', e=>{ const dt=e.target.closest('[data-dtab]'); if(!dt) return; DTAB=dt.dataset.dtab;
@@ -1164,7 +1174,7 @@ function renderJobs(){
   $('#jobsBody').innerHTML = `<div class="cards">
   <div class="card"><h3>Approved &amp; scheduled (${up.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>Job</th><th>Status</th><th class="hide-sm">Approved</th><th class="hide-sm">Estimator</th><th class="r">Amount</th><th>Needs</th></tr></thead><tbody>
-    ${up.length?up.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm num">${fmtD(p.dateResolved)}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${money(wonAmt(p))}</td><td>${needs(p)}${p.status==='Scheduled'&&isManager()&&OPENINV?`<div style="margin-top:4px"><button type="button" class="btn small" data-invnew="${esc(p.num)}">Invoice</button></div>`:''}</td></tr>`).join('')
+    ${up.length?up.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm num">${fmtD(p.dateResolved)}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${money(wonAmt(p))}</td><td>${needs(p)}${p.status==='Scheduled'&&isManager()&&OPENINV?`<div style="margin-top:4px"><button type="button" class="btn small" data-invnew="${esc(p.num)}">Invoice</button></div>`:''}${p.status==='Approved'&&isManager()&&VISOK?`<div style="margin-top:4px"><button type="button" class="btn small" data-schnew="${esc(p.num)}">Schedule</button></div>`:''}</td></tr>`).join('')
       : '<tr><td colspan="6" class="empty">No approved or scheduled jobs right now.</td></tr>'}</tbody></table></div>
     <div class="note">Change the status to Scheduled once the job is on the calendar, and to Invoiced when it's done.</div></div>
   <div class="card"><h3>Log actual hours (${hrs.length})</h3>
@@ -1202,6 +1212,7 @@ function renderJobs(){
   </div>`;
 }
 $('#jobsBody').addEventListener('click', async e=>{
+  const sn=e.target.closest('[data-schnew]'); if(sn){ const p=P.find(x=>x.num===sn.dataset.schnew); if(p) visNewFor(p); return; }
   const ni=e.target.closest('[data-invnew]'); if(ni){ await openDrawer(ni.dataset.invnew); await loadInvoices(ni.dataset.invnew); if(draft) invOpenNew(draft); return; }
   const op=e.target.closest('[data-oipay]'); if(op){ const v=(OPENINV||[]).find(x=>x.id===op.dataset.oipay); if(v && await invPay(v)) invRefresh(v.num); return; }
   const o=e.target.closest('[data-open]'); if(o){ e.preventDefault(); openDrawer(o.dataset.open); return; }
@@ -3067,6 +3078,10 @@ function renderSettings(){
     ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Clients</h3>
       <div class="note" style="margin:0 0 8px">Bring in your HousecallPro customers: in HousecallPro go to Customers → Export, then pick that file here. People at the same company become contacts under one client; addresses become properties. Safe to run again: nothing is duplicated or overwritten.</div>
       <div class="toolbar" style="margin:0"><label class="btn">Import HousecallPro customers…<input type="file" id="clImport" accept=".csv,text/csv" hidden></label><button type="button" class="btn ghost" id="clLink">Link proposals to clients</button></div></div>`:''}
+    ${ta('s-crew','Crew', crew().map(c=>c.filter((x,i)=>i<2||x).join(' | ')).join('\n'), 'Name | email | es or en (the language of their schedule email). One tech per line. Emails stay in the database, not on any page.')}
+    ${ta('s-work','Work types (schedule)', workTypes().join('\n'), 'One per line. Ticked on each visit and listed in the crew email.')}
+    ${ta('s-equip','Equipment (schedule)', equipList().join('\n'), 'One per line.')}
+    ${ta('s-veh','Vehicles', (S.vehicles||[]).join('\n'), 'One per line, e.g. Truck 1 (white F-250). Leave empty if you don\'t assign vehicles.')}
     ${ta('s-svc','Services', lines(S.services), 'One per line.')}
     ${ta('s-freq','Frequencies', lines(S.frequencies), 'Name | visits per year.')}
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
@@ -3127,6 +3142,7 @@ function organizeSettings(){
     ['Lists', ['Services','Frequencies','Lead sources','Lost reasons','Add-on suggestions','BD email templates']],
     ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
     ['Invoicing', ['Invoicing']],
+    ['Schedule', ['Crew','Work types (schedule)','Equipment (schedule)','Vehicles']],
     ['Change log', ['Change log']],
     ['Data', ['Clients','Backup','Clean up old proposals']]];
   const save=root.querySelector('#saveS')?.parentElement, frag=document.createDocumentFragment();
@@ -3190,6 +3206,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
       reportAppUrl:/hooks\.zapier\.com/i.test($('#s-rpt').value)?'':$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, priceIncrease:(num($('#s-pinc').value)??5)/100, expiryDays:Number($('#s-exp').value)||90,
+      crew:L('s-crew').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, b||'', /^es/i.test(c||'')?'es':'en']; }).filter(c=>c[0]), workTypes:L('s-work'), equipment:L('s-equip'), vehicles:L('s-veh'),
       invoice:{ terms:Math.max(0,Math.round(num($('#s-invterms').value)??30)), message:$('#s-invmsg').value.trim(), footer:$('#s-invfoot').value.trim(), address:$('#s-invaddr').value.trim(), phone:$('#s-invphone').value.trim(), email:$('#s-invemail').value.trim(), website:$('#s-invweb').value.trim(), license:$('#s-invlic').value.trim() } };
     const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
     if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
@@ -3203,6 +3220,232 @@ $('#settingsBody').addEventListener('change', async e=>{
 });
 
 // ---------- tabs / views ----------
+// ---------- schedule (update 020): visits + recurring series; crew emails like TechSched ----------
+let VIS=[], SER=[], VISOK=true, schMonth=null, schTech='';
+const CREW_DEF=[['Rigo Perez','','es'],['Baldemar Cervantes','','es'],['Rolando Olivera','','es'],['Israel Hernandez','','es']];
+const WORK_DEF=['Exterior Window Cleaning','Interior Window Cleaning','Interior & Exterior Window Cleaning','Pressure Washing','Ground Pressure Washing','Swing Stage Work','Boom Lift Work','Monthly Window Washing','Solar Panel Cleaning','Janitorial','Gates & Doors'];
+const EQUIP_DEF=['Boom Lift','Scissor Lift','Swing Stage','Pressure Washer','Water Tank'];
+const crew = () => (S.crew&&S.crew.length?S.crew:CREW_DEF).filter(c=>c[0]);
+const workTypes = () => S.workTypes&&S.workTypes.length?S.workTypes:WORK_DEF;
+const equipList = () => S.equipment&&S.equipment.length?S.equipment:EQUIP_DEF;
+const I18 = { en:{when:'When',time:'Time',address:'Address',work:'Work',equipment:'Equipment',team:'Team',notes:'Notes',vehicle:'Vehicle',questions:'Questions? Just reply to this email.',thanks:'Thanks,',weekOf:'week of',yourSchedule:'Your schedule',noWork:'You have no work scheduled for the week of'},
+  es:{when:'Fecha',time:'Hora',address:'Dirección',work:'Trabajo',equipment:'Equipo',team:'Técnicos asignados',notes:'Notas',vehicle:'Vehículo',questions:'¿Preguntas? Solo responda a este correo.',thanks:'Gracias,',weekOf:'semana del',yourSchedule:'Tu horario',noWork:'No tienes trabajo asignado para la semana del'} };
+const WORK_ES={'Exterior Window Cleaning':'Limpieza de ventanas (exterior)','Interior Window Cleaning':'Limpieza de ventanas (interior)','Interior & Exterior Window Cleaning':'Limpieza de ventanas (interior y exterior)','Pressure Washing':'Lavado a presión','Ground Pressure Washing':'Lavado a presión (planta baja)','Swing Stage Work':'Trabajo en andamio colgante (swing stage)','Boom Lift Work':'Trabajo con grúa elevadora (boom lift)','Bosun Chair':'Silla de contramaestre (bosun chair)','Monthly Window Washing':'Limpieza de ventanas mensual','Solar Panel Cleaning':'Limpieza de paneles solares','Janitorial':'Limpieza (janitorial)','Gates & Doors':'Puertas y portones'};
+const EQUIP_ES={'Boom Lift':'Grúa elevadora (boom lift)','Scissor Lift':'Elevador de tijera','Swing Stage':'Andamio colgante (swing stage)','Pressure Washer':'Hidrolavadora','Water Tank':'Tanque de agua'};
+const t12 = (t,lang) => { if(!t) return ''; const [h,m]=String(t).split(':').map(Number); const s=`${(h%12)||12}:${String(m||0).padStart(2,'0')} ${h<12?'AM':'PM'}`; return lang==='es'?s.replace('AM','a.m.').replace('PM','p.m.'):s; };
+const dLong = (d,lang) => parse(d).toLocaleDateString(lang==='es'?'es-MX':'en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+const addDays = (d,n) => { const x=parse(d); x.setDate(x.getDate()+n); return iso(x); };
+const visEnd = v => v.end_date && v.end_date>v.visit_date ? v.end_date : v.visit_date;
+const visJob = v => v.num ? P.find(p=>p.num===v.num) : null;
+const visLabel = v => { const p=visJob(v); return v.kind==='event' ? (v.title||'Event') : [p?.client||v.client, p?.property||v.title].filter(Boolean).join(' · ') || v.num || 'Job'; };
+async function loadSchedule(){
+  const from=iso(new Date(today().getFullYear(), today().getMonth()-6, 1));
+  const [a,b]=await Promise.all([sb.from('visits').select('*').gte('visit_date',from).order('visit_date'), sb.from('visit_series').select('*').eq('active',true)]);
+  if(a.error){ VISOK=!invMissing(a.error); VIS=[]; SER=[]; } else { VISOK=true; VIS=a.data||[]; SER=b.data||[]; }
+  if(current()==='schedule') renderSchedule();
+  if(draft && document.getElementById('visBox')) $('#visBox').innerHTML=visitsHTML(draft);
+  if(VISOK && isManager()) topUpSeries();
+}
+// ---- repeat rules ----
+function nthWeekday(y,m,nth,wd){ if(nth===-1){ const d=new Date(y,m+1,0); while(d.getDay()!==wd) d.setDate(d.getDate()-1); return d; }
+  const d=new Date(y,m,1); while(d.getDay()!==wd) d.setDate(d.getDate()+1); d.setDate(d.getDate()+7*(nth-1)); return d.getMonth()===((m%12)+12)%12 ? d : null; }
+function occurrences(s, upto){
+  const r=s.rule||{}, start=parse(s.starts), end=s.ends||{type:'never'}, out=[], lim=parse(upto), every=Math.max(1,Number(r.every)||1);
+  const stop=d=> (end.type==='on' && end.date && d>parse(end.date)) || (end.type==='after' && out.length>=(Number(end.count)||1));
+  if(r.unit==='week'){ for(let d=new Date(start); d<=lim && !stop(d); d.setDate(d.getDate()+7*every)) out.push(iso(d)); return out; }
+  for(let k=0; k<1200; k+=every){ const y=start.getFullYear(), m=start.getMonth()+k;
+    let d = r.mode==='nth' ? nthWeekday(y, m, Number(r.nth)||1, Number(r.weekday)||0) : new Date(y, m, Math.min(Number(r.day)||start.getDate(), new Date(y,m+1,0).getDate()));
+    if(!d) continue; if(d>lim || stop(d)) break; if(d>=start) out.push(iso(d)); }
+  return out;
+}
+const NTH=['','First','Second','Third','Fourth','Fifth'], WDAY=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function ruleText(s){ const r=s.rule||{}, e=s.ends||{}; const every=Number(r.every)||1, unit=r.unit==='week'?'week':'month';
+  const base = every===1 ? `Every ${unit}` : `Every ${every} ${unit}s`; const on = unit==='week' ? ` on ${WDAY[parse(s.starts).getDay()]}` : r.mode==='nth' ? ` on the ${(r.nth==-1?'last':NTH[r.nth]||'first').toLowerCase()} ${WDAY[r.weekday]}` : ` on day ${r.day}`;
+  return base+on+(e.type==='after'?`, ${e.count} times`:e.type==='on'&&e.date?`, until ${fmtD(e.date)}`:''); }
+function ruleFromJob(p, date){ const d=parse(date), vpy=Math.max(...countedItems(p).map(i=>visitsOf(i.frequency)), visits(p)||1);
+  const map={52:['week',1],26:['week',2],24:['week',2],12:['month',1],6:['month',2],4:['month',3],3:['month',4],2:['month',6],1:['month',12]};
+  const [unit,every]=map[vpy]||['month',1]; return {every, unit, mode:'nth', nth:Math.min(5,Math.ceil(d.getDate()/7)), weekday:d.getDay(), day:d.getDate()}; }
+function visFromTemplate(s, date){ const t=s.template||{}, days=Math.max(0,Number(t.days)||0);
+  return {num:s.num, series_id:s.id, occ_date:date, kind:'job', visit_date:date, end_date:days?addDays(date,days):null, start_time:t.start_time||null, end_time:t.end_time||null,
+    techs:t.techs||[], work:t.work||[], equipment:t.equipment||[], vehicle:t.vehicle||null, notes:t.notes||null, office_notes:t.office_notes||null, address:t.address||null, client:t.client||null, title:t.title||null}; }
+async function genSeries(s, from){
+  const horizon=iso(new Date(today().getFullYear()+1, today().getMonth(), today().getDate()));
+  const {data}=await sb.from('visits').select('occ_date').eq('series_id',s.id); const have=new Set((data||[]).map(x=>x.occ_date)), skip=new Set(s.exceptions||[]);
+  const rows=occurrences(s, horizon).filter(d=>(!from||d>=from) && !have.has(d) && !skip.has(d)).map(d=>visFromTemplate(s,d));
+  for(let i=0;i<rows.length;i+=200){ const r=await sb.from('visits').insert(rows.slice(i,i+200)); if(r.error){ toast(r.error.message); return 0; } }
+  return rows.length;
+}
+async function topUpSeries(){ let k=''; try{ k=localStorage.getItem('pfbs.topup')||''; }catch(_){} if(k===iso(today())) return;
+  let n=0; for(const s of SER) n+=await genSeries(s); try{ localStorage.setItem('pfbs.topup', iso(today())); }catch(_){} if(n){ const a=await sb.from('visits').select('*').gte('visit_date',iso(new Date(today().getFullYear(), today().getMonth()-6, 1))).order('visit_date'); if(!a.error) VIS=a.data||[]; if(current()==='schedule') renderSchedule(); } }
+// ---- month view ----
+function renderSchedule(){
+  const box=$('#schedBody'); if(!box) return;
+  if(!VISOK){ box.innerHTML='<div class="card"><div class="note" style="margin:0">Run database update 020 in Supabase to turn on the schedule.</div></div>'; return; }
+  if(!schMonth) schMonth=new Date(today().getFullYear(), today().getMonth(), 1);
+  const y=schMonth.getFullYear(), m=schMonth.getMonth(), first=new Date(y,m,1), start=new Date(first); start.setDate(1-first.getDay());
+  const last=new Date(y,m+1,0), endG=new Date(last); endG.setDate(last.getDate()+(6-last.getDay())); const td=iso(today()), mgr=isManager();
+  const L=VIS.filter(v=>v.status!=='Cancelled' && (!schTech || (v.techs||[]).includes(schTech)));
+  let cells=''; for(let d=new Date(start); d<=endG; d.setDate(d.getDate()+1)){ const ds=iso(d), on=L.filter(v=>v.visit_date<=ds && visEnd(v)>=ds).sort((a,b)=>String(a.start_time||'').localeCompare(String(b.start_time||'')));
+    cells+=`<div class="scell ${d.getMonth()!==m?'out':''} ${ds===td?'today':''}" data-day="${ds}"><div class="sday">${d.getDate()}</div>${on.slice(0,5).map(v=>`<button type="button" class="vchip ${v.kind==='event'?'ev':''} ${v.status==='Done'?'done':''} ${v.status==='Skipped'?'skip':''} ${!(v.techs||[]).length&&v.kind==='job'?'nocrew':''}" data-vis="${esc(v.id)}" title="${esc(visLabel(v)+((v.techs||[]).length?' — '+v.techs.join(', '):''))}">${v.start_time&&v.visit_date===ds?`<b>${esc(t12(v.start_time).replace(':00','').replace(' ',''))}</b> `:''}${esc(visLabel(v))}</button>`).join('')}${on.length>5?`<button type="button" class="vmore" data-daylist="${ds}">+${on.length-5} more</button>`:''}</div>`; }
+  const noCrew=VIS.filter(v=>v.kind==='job' && v.status==='Scheduled' && !(v.techs||[]).length && v.visit_date>=td && v.visit_date<=addDays(td,14)).length;
+  box.innerHTML=`<div class="toolbar" style="flex-wrap:wrap;gap:8px;justify-content:space-between">
+      <div style="display:flex;gap:6px;align-items:center"><button class="btn ghost small" id="schPrev" aria-label="Previous month">‹</button><b style="min-width:150px;text-align:center">${first.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</b><button class="btn ghost small" id="schNext" aria-label="Next month">›</button><button class="btn ghost small" id="schToday">Today</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="schTech" aria-label="Show tech"><option value="">All techs</option>${crew().map(c=>`<option ${schTech===c[0]?'selected':''}>${esc(c[0])}</option>`).join('')}</select>
+      <button class="btn ghost small" id="schWeek">Crew emails</button>${mgr?'<button class="btn ghost small" id="schEvent">+ Event</button>':''}</div></div>
+    ${noCrew?`<div class="lockline" style="margin:8px 0">${noCrew} visit${noCrew===1?'':'s'} in the next 2 weeks ${noCrew===1?'has':'have'} no techs assigned.</div>`:''}
+    <div class="sgrid">${WDAY.map(w=>`<div class="shead">${w.slice(0,3)}</div>`).join('')}${cells}</div>
+    <div class="note">Click a visit to change it, or an empty spot on a day to schedule a job there. Grey = done; red outline = no techs yet.</div>`;
+}
+// ---- the visit editor ----
+function visitDraft(p, date){ const svc=String(p?.service||''); const w=workTypes().filter(x=>svc && (x.toLowerCase().includes(svc.toLowerCase().split(' ')[0])));
+  return {id:null, num:p?p.num:null, kind:p?'job':'event', visit_date:date||iso(today()), end_date:null, start_time:'08:00', end_time:'16:30', techs:[], work:w.slice(0,1), equipment:[], vehicle:null, notes:'', office_notes:'', status:'Scheduled',
+    address:p?(p.siteAddress||p.property||''):'', client:p?p.client:'', title:p?p.property:'', series_id:null}; }
+function jobOptions(sel){ const L=P.filter(p=>['Approved','Scheduled','Invoiced','Paid'].includes(p.status)).sort((a,b)=>(a.status==='Approved'?0:1)-(b.status==='Approved'?0:1)||String(b.num).localeCompare(String(a.num))).slice(0,400);
+  return L.map(p=>`<option value="${esc(p.num)}" ${p.num===sel?'selected':''}>${esc(p.num)} · ${esc(p.client||'')}${p.property?' · '+esc(p.property):''}${p.status==='Approved'?' (not scheduled)':''}</option>`).join(''); }
+function visEdit(v, opts={}){
+  const mgr=isManager(), dis=mgr?'':'disabled', ser=v.series_id?SER.find(s=>s.id===v.series_id):null, p=visJob(v);
+  const rep=opts.repeat || (ser ? {...ser.rule, ends:ser.ends} : null);
+  const r0=rep || ruleFromJob(p||{items:[]}, v.visit_date), e0=(rep&&rep.ends)||{type:'never'};
+  const d=document.createElement('dialog'); d.className='ask inved';
+  const checks=(name, list, sel)=>`<div class="vchecks">${list.map(x=>`<label><input type="checkbox" name="${name}" value="${esc(x)}" ${sel.includes(x)?'checked':''} ${dis}> ${esc(x)}</label>`).join('')}</div>`;
+  d.innerHTML=`<h3>${v.id?'Visit':'Schedule'}${p?' · '+esc(p.num):v.kind==='event'?' · event':''}${ser?` <span class="flag">${esc(ruleText(ser))}</span>`:''}</h3>
+    ${v.kind==='event'?`<label class="f">What<input name="title" value="${esc(v.title||'')}" placeholder="e.g. Site walk, lift delivery" ${dis}></label>`
+      :`<label class="f">Job<select name="num" ${dis||(v.id?'disabled':'')}><option value="">Pick a job…</option>${jobOptions(v.num)}</select></label>`}
+    <div class="grid2">
+      <label class="f">Start date<input type="date" name="visit_date" value="${esc(v.visit_date)}" ${dis}></label><label class="f">End date <span class="note" style="margin:0;font-weight:400">multi-day</span><input type="date" name="end_date" value="${esc(v.end_date||'')}" ${dis}></label>
+      <label class="f">Start time<input type="time" name="start_time" value="${esc(v.start_time||'')}" ${dis}></label><label class="f">End time<input type="time" name="end_time" value="${esc(v.end_time||'')}" ${dis}></label>
+    </div>
+    <div class="f"><b>Techs</b>${checks('techs', crew().map(c=>c[0]), v.techs||[])}</div>
+    ${v.kind==='event'?'':`<div class="f"><b>Work</b>${checks('work', [...new Set([...workTypes(), ...(v.work||[])])], v.work||[])}</div>`}
+    <div class="f"><b>Equipment</b>${checks('equipment', [...new Set([...equipList(), ...(v.equipment||[])])], v.equipment||[])}</div>
+    <div class="grid2">${(S.vehicles||[]).length?`<label class="f">Vehicle<select name="vehicle" ${dis}><option value="">—</option>${S.vehicles.map(x=>`<option ${x===v.vehicle?'selected':''}>${esc(x)}</option>`).join('')}</select></label>`:''}
+      <label class="f">Status<select name="status" ${dis}>${['Scheduled','Done','Skipped','Cancelled'].map(x=>`<option ${x===v.status?'selected':''}>${x}</option>`).join('')}</select></label></div>
+    <label class="f">Notes for the crew <span class="note" style="margin:0;font-weight:400">go in their email</span><textarea name="notes" rows="2" ${dis}>${esc(v.notes||'')}</textarea></label>
+    <label class="f">Office notes<textarea name="office_notes" rows="2" ${dis}>${esc(v.office_notes||'')}</textarea></label>
+    ${v.kind==='job' && mgr && (!v.id || ser) ? `<fieldset><legend>Repeats</legend>
+      <label class="f"><select name="rep_on"><option value="">Does not repeat</option><option value="1" ${rep||opts.suggestRepeat?'selected':''}>Repeats</option></select></label>
+      <div class="vrep" ${rep||opts.suggestRepeat?'':'hidden'}><div class="grid2"><label class="f">Every<input type="number" name="every" min="1" value="${esc(r0.every||1)}"></label>
+        <label class="f">&nbsp;<select name="unit"><option value="week" ${r0.unit==='week'?'selected':''}>week(s)</option><option value="month" ${r0.unit!=='week'?'selected':''}>month(s)</option></select></label></div>
+        <div class="vmon"><label><input type="radio" name="mode" value="nth" ${r0.mode!=='day'?'checked':''}> On the <select name="nth">${[1,2,3,4,-1].map(n=>`<option value="${n}" ${Number(r0.nth)===n?'selected':''}>${n===-1?'last':NTH[n].toLowerCase()}</option>`).join('')}</select>
+          <select name="weekday">${WDAY.map((w,i)=>`<option value="${i}" ${Number(r0.weekday)===i?'selected':''}>${w}</option>`).join('')}</select></label>
+          <label><input type="radio" name="mode" value="day" ${r0.mode==='day'?'checked':''}> On day <input type="number" name="day" min="1" max="31" value="${esc(r0.day||parse(v.visit_date).getDate())}" style="width:70px"></label></div>
+        <div class="vends"><b>Ends</b> <label><input type="radio" name="ends" value="never" ${e0.type==='never'||!e0.type?'checked':''}> Never</label>
+          <label><input type="radio" name="ends" value="after" ${e0.type==='after'?'checked':''}> After <input type="number" name="count" min="1" value="${esc(e0.count||12)}" style="width:70px"> visits</label>
+          <label><input type="radio" name="ends" value="on" ${e0.type==='on'?'checked':''}> On <input type="date" name="end_on" value="${esc(e0.date||'')}"></label></div>
+        <div class="note">Visits are created about 12 months ahead and keep rolling forward.</div></div></fieldset>`:''}
+    <div class="toolbar" style="flex-wrap:wrap">
+      <button type="button" class="btn ghost" data-a="x">Close</button>${v.id&&mgr?'<button type="button" class="btn ghost" data-a="del">Delete</button>':''}<span style="flex:1"></span>
+      ${v.id&&(v.techs||[]).length?'<button type="button" class="btn ghost" data-a="mail">Email crew</button>':''}
+      ${v.id&&p&&mgr?'<button type="button" class="btn ghost" data-a="inv">Invoice this visit</button><a class="btn ghost" href="reports.html?num='+encodeURIComponent(p.num)+'" target="_blank" rel="noopener">Service report</a>':''}
+      ${mgr?'<button type="button" class="btn" data-a="save">Save</button>':''}</div>`;
+  document.body.appendChild(d); const close=()=>{ d.close(); d.remove(); };
+  const f=n=>d.querySelector(`[name="${n}"]`); const all=n=>[...d.querySelectorAll(`[name="${n}"]:checked`)].map(x=>x.value);
+  d.addEventListener('change', e=>{ if(e.target.name==='rep_on') d.querySelector('.vrep').hidden=!e.target.value; if(e.target.name==='unit') d.querySelector('.vmon').hidden=e.target.value==='week';
+    if(e.target.name==='num' && !v.id){ const j=P.find(x=>x.num===e.target.value); if(j){ const dd=visitDraft(j, f('visit_date').value); Object.assign(v,{num:j.num, address:dd.address, client:dd.client, title:dd.title});
+      for(const c of d.querySelectorAll('[name="work"]')) c.checked=dd.work.includes(c.value); if(isRecurring(j)){ const r=ruleFromJob(j, f('visit_date').value); f('rep_on').value='1'; d.querySelector('.vrep').hidden=false; f('every').value=r.every; f('unit').value=r.unit; } } } });
+  if(d.querySelector('.vmon')) d.querySelector('.vmon').hidden=r0.unit==='week';
+  const collect=()=>{ const row={visit_date:f('visit_date').value, end_date:f('end_date').value||null, start_time:f('start_time').value||null, end_time:f('end_time').value||null, techs:all('techs'), equipment:all('equipment'),
+      notes:f('notes').value.trim()||null, office_notes:f('office_notes').value.trim()||null, status:f('status').value, vehicle:f('vehicle')?.value||null};
+    if(v.kind==='event'){ row.title=f('title').value.trim(); row.kind='event'; } else { row.work=all('work'); row.num=v.id?v.num:(f('num').value||null); const j=row.num&&P.find(x=>x.num===row.num); row.client=j?j.client:v.client; row.title=j?j.property:v.title; row.address=j?(j.siteAddress||j.property):v.address; }
+    if(row.end_date && row.end_date<=row.visit_date) row.end_date=null; return row; };
+  const repeatOf=()=>{ if(!f('rep_on') || !f('rep_on').value) return null; const mode=d.querySelector('[name="mode"]:checked')?.value||'nth', ends=d.querySelector('[name="ends"]:checked')?.value||'never';
+    return {rule:{every:Math.max(1,Number(f('every').value)||1), unit:f('unit').value, mode, nth:Number(f('nth').value), weekday:Number(f('weekday').value), day:Number(f('day').value)||parse(f('visit_date').value).getDate()},
+            ends: ends==='after'?{type:'after',count:Math.max(1,Number(f('count').value)||1)}:ends==='on'&&f('end_on').value?{type:'on',date:f('end_on').value}:{type:'never'}}; };
+  d.addEventListener('cancel', e=>{ e.preventDefault(); close(); });
+  d.addEventListener('click', async e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(!a) return; if(a==='x') return close();
+    const b=e.target.closest('button'); b.disabled=true;
+    try{
+      if(a==='mail'){ close(); visMail(v); return; }
+      if(a==='inv'){ close(); const j=visJob(v); if(!INV[j.num]) await loadInvoices(j.num); const iv=invBlank(j); iv.service_date=v.visit_date; invEdit(j, iv); return; }
+      if(a==='del'){ let scope='one'; if(ser){ scope=await askScope('Delete'); if(!scope) return; }
+        if(scope==='one'){ const r=await sb.from('visits').delete().eq('id',v.id); if(r.error) return toast(r.error.message); if(ser && v.occ_date) await sb.from('visit_series').update({exceptions:[...(ser.exceptions||[]), v.occ_date]}).eq('id',ser.id); }
+        else await endSeriesFrom(ser, v.occ_date||v.visit_date);
+        toast('Deleted'); close(); await loadSchedule(); return; }
+      if(a==='save'){
+        const row=collect(); if(v.kind==='job' && !row.num){ toast('Pick the job.'); return; } if(v.kind==='event' && !row.title){ toast('Say what the event is.'); return; } if(!row.visit_date){ toast('Pick a date.'); return; }
+        const repeat=repeatOf();
+        if(!v.id && !repeat){ const r=await sb.from('visits').insert(row); if(r.error) return toast(invMissing(r.error)?'Run database update 020 in Supabase first.':r.error.message); toast('Scheduled'); }
+        else if(!v.id && repeat){ await newSeries(row, repeat); }
+        else if(!ser){ const r=await sb.from('visits').update(row).eq('id',v.id); if(r.error) return toast(r.error.message); toast('Saved'); }
+        else { const scope=await askScope('Change'); if(!scope) return;
+          if(scope==='one'){ const r=await sb.from('visits').update({...row, detached:true}).eq('id',v.id); if(r.error) return toast(r.error.message); toast('This visit changed'); }
+          else { await endSeriesFrom(ser, v.occ_date||v.visit_date); if(repeat) await newSeries(row, repeat); else { await sb.from('visits').insert(row); } } }
+        close(); await loadSchedule(); if(row.num) loadProposals(); }
+    } finally { b.disabled=false; }
+  });
+  d.showModal();
+}
+function askScope(verb){ return new Promise(res=>{ const d=document.createElement('dialog'); d.className='ask';
+  d.innerHTML=`<h3>${verb} recurring job</h3><div class="note" style="margin:0 0 8px">Which visits?</div><label class="f" style="font-weight:400"><input type="radio" name="sc" value="one" checked> Only this visit</label><label class="f" style="font-weight:400"><input type="radio" name="sc" value="future"> This and all future visits</label>
+    <div class="toolbar"><button type="button" class="btn ghost" data-a="x">Cancel</button><button type="button" class="btn" data-a="ok">${verb==='Delete'?'Delete':'Save'}</button></div>`;
+  document.body.appendChild(d); const done=x=>{ d.close(); d.remove(); res(x); };
+  d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='x') done(null); if(a==='ok') done(d.querySelector('[name="sc"]:checked').value); }); d.addEventListener('cancel', e=>{ e.preventDefault(); done(null); }); d.showModal(); }); }
+async function newSeries(row, repeat){
+  const t={days:row.end_date?Math.round((parse(row.end_date)-parse(row.visit_date))/864e5):0, start_time:row.start_time, end_time:row.end_time, techs:row.techs, work:row.work||[], equipment:row.equipment, vehicle:row.vehicle, notes:row.notes, office_notes:row.office_notes, address:row.address, client:row.client, title:row.title};
+  const r=await sb.from('visit_series').insert({num:row.num, rule:repeat.rule, starts:row.visit_date, ends:repeat.ends, template:t}).select().single();
+  if(r.error){ toast(invMissing(r.error)?'Run database update 020 in Supabase first.':r.error.message); return; }
+  const n=await genSeries(r.data); toast(`Scheduled ${n} visit${n===1?'':'s'}: ${ruleText(r.data)}`);
+}
+// "this and all future": the old series stops the day before; its future visits that are not done go away
+async function endSeriesFrom(ser, date){
+  await sb.from('visit_series').update({ends:{type:'on', date:addDays(date,-1)}, active:false}).eq('id',ser.id);
+  const {data}=await sb.from('visits').select('id,status,occ_date,visit_date').eq('series_id',ser.id); const gone=(data||[]).filter(x=>(x.occ_date||x.visit_date)>=date && x.status!=='Done').map(x=>x.id);
+  for(let i=0;i<gone.length;i+=100) await sb.from('visits').delete().in('id',gone.slice(i,i+100));
+}
+// ---- crew emails (same wording as TechSched) ----
+const crewOf = n => crew().find(c=>c[0]===n) || [n,'','en'];
+function visMailText(v, tech, lang){ const t=I18[lang], dts=dLong(v.visit_date,lang)+(v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang):'');
+  const team=(v.techs||[]).filter(x=>x!==tech), addr=String(v.address||'').replace(/\n/g,', ');
+  const L=[`${t.when}: ${dts}`, `${t.time}: ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)}`, `${t.address}: ${addr}`];
+  if(team.length) L.push(`${t.team}: ${team.join(', ')}`); if((v.work||[]).length) L.push(`${t.work}: ${v.work.map(x=>lang==='es'?(WORK_ES[x]||x):x).join(', ')}`);
+  if((v.equipment||[]).length) L.push(`${t.equipment}: ${v.equipment.map(x=>lang==='es'?(EQUIP_ES[x]||x):x).join(', ')}`); if(v.vehicle) L.push(`${t.vehicle}: ${v.vehicle}`); if(v.notes) L.push(`${t.notes}: ${v.notes}`);
+  L.push('', t.questions, '', t.thanks, 'PFBS');
+  return {subject:(lang==='es'?'Detalles del trabajo':'Job details')+` — ${addr.split(',')[0]} — ${fmtD(v.visit_date)}`, body:L.join('\n')}; }
+function weekText(tech, monday, lang){ const t=I18[lang], sun=addDays(monday,6), first=tech.split(' ')[0];
+  const L=VIS.filter(v=>v.status==='Scheduled' && (v.techs||[]).includes(tech) && v.visit_date<=sun && visEnd(v)>=monday).sort((a,b)=>(a.visit_date+(a.start_time||'')).localeCompare(b.visit_date+(b.start_time||'')));
+  if(!L.length) return {subject:`${t.yourSchedule} — ${first} — ${t.weekOf} ${fmtD(monday)}`, body:[`${lang==='es'?'Hola':'Hi'} ${first},`,'',`${t.noWork} ${dLong(monday,lang)}.`,'',t.questions,'',t.thanks,'PFBS'].join('\n'), n:0};
+  const out=[`${lang==='es'?'Hola':'Hi'} ${first},`, '', `${t.yourSchedule}, ${t.weekOf} ${dLong(monday,lang)}:`, ''];
+  for(const v of L){ const team=(v.techs||[]).filter(x=>x!==tech), addr=String(v.address||'').replace(/\n/g,', ');
+    out.push(`${dLong(v.visit_date,lang)}${v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang):''}`, `  ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)} — ${v.kind==='event'?(v.title||''):addr}`);
+    if(team.length) out.push(`  ${t.team}: ${team.join(', ')}`); if((v.work||[]).length) out.push(`  ${t.work}: ${v.work.map(x=>lang==='es'?(WORK_ES[x]||x):x).join(', ')}`);
+    if((v.equipment||[]).length) out.push(`  ${t.equipment}: ${v.equipment.map(x=>lang==='es'?(EQUIP_ES[x]||x):x).join(', ')}`); if(v.vehicle) out.push(`  ${t.vehicle}: ${v.vehicle}`); if(v.notes) out.push(`  ${t.notes}: ${v.notes}`); out.push(''); }
+  out.push(t.questions, '', t.thanks, 'PFBS');
+  return {subject:`${t.yourSchedule} — ${first} — ${t.weekOf} ${fmtD(monday)}`, body:out.join('\n'), n:L.length}; }
+function mailBox(title, to, txt, relang){ const d=document.createElement('dialog'); d.className='ask';
+  const draw=(lang,x)=>{ d.innerHTML=`<h3>${esc(title)}</h3>${relang?`<div class="toolbar" style="margin:0 0 6px"><button type="button" class="btn small ${lang==='en'?'':'ghost'}" data-l="en">English</button><button type="button" class="btn small ${lang==='es'?'':'ghost'}" data-l="es">Español</button></div>`:''}
+    <label class="f">To<input id="cmTo" value="${esc(to)}" placeholder="${to?'':'No email on file: add it in Settings → Crew'}"></label><label class="f">Subject<input id="cmSubj" value="${esc(x.subject)}"></label><label class="f">Message<textarea id="cmBody" rows="12">${esc(x.body)}</textarea></label>
+    <div class="note">Review before sending; nothing is emailed automatically.</div>
+    <div class="toolbar"><button type="button" class="btn ghost" data-a="x">Close</button><span style="flex:1"></span><button type="button" class="btn ghost" data-a="copy">Copy</button><button type="button" class="btn ghost" data-a="mailto">Mail app</button><button type="button" class="btn" data-a="owa">Open in Outlook</button></div>`; };
+  draw(txt.lang, txt); document.body.appendChild(d); const close=()=>{ d.close(); d.remove(); };
+  d.addEventListener('cancel', e=>{ e.preventDefault(); close(); });
+  d.addEventListener('click', async e=>{ const l=e.target.closest('[data-l]')?.dataset.l; if(l && relang){ draw(l, relang(l)); return; }
+    const a=e.target.closest('[data-a]')?.dataset.a; if(!a) return; if(a==='x') return close(); const to2=$('#cmTo').value.trim(), s=$('#cmSubj').value, m=$('#cmBody').value, enc=encodeURIComponent;
+    if(a==='copy'){ try{ await navigator.clipboard.writeText(`To: ${to2}\nSubject: ${s}\n\n${m}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } return; }
+    if(a==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to2)}&subject=${enc(s)}&body=${enc(m)}`,'_blank','noopener'); else location.href=`mailto:${enc(to2)}?subject=${enc(s)}&body=${enc(m)}`; });
+  d.showModal(); }
+function visMail(v){ const techs=v.techs||[]; if(!techs.length){ toast('No techs on this visit yet.'); return; }
+  const pick=async ()=>{ if(techs.length===1) return techs[0]; const r=await formDialog('Email about this visit', `<label class="f">Who<select name="who"><option value="ALL">Everyone on it (${techs.length})</option>${techs.map(t=>`<option>${esc(t)}</option>`).join('')}</select></label>`, 'Next'); return r&&r.who; };
+  pick().then(who=>{ if(!who) return; const one=who!=='ALL', lang=one?crewOf(who)[2]||'en':'en', to=(one?[who]:techs).map(t=>crewOf(t)[1]).filter(Boolean).join(', ');
+    mailBox(`Email — ${one?who:'All techs'}`, to, {...visMailText(v, one?who:null, lang), lang}, l=>({...visMailText(v, one?who:null, l), lang:l})); }); }
+async function weekEmails(){
+  const td=today(), mon=new Date(td); mon.setDate(td.getDate()-((td.getDay()+6)%7)+(td.getDay()>=5||td.getDay()===0?7:0));
+  const r=await formDialog('Crew emails for a week', `<label class="f">Week starting (Monday)<input type="date" name="mon" value="${iso(mon)}" required></label>`, 'Show crew');
+  if(!r) return; const m=parse(r.mon); m.setDate(m.getDate()-((m.getDay()+6)%7)); const monday=iso(m);
+  const d=document.createElement('dialog'); d.className='ask';
+  d.innerHTML=`<h3>Week of ${fmtD(monday)}</h3><div class="note" style="margin:0 0 8px">One email per tech, in their language (set in Settings → Crew).</div>
+    ${crew().map(c=>{ const x=weekText(c[0],monday,c[2]||'en'); return `<div class="toolbar" style="margin:4px 0;justify-content:space-between"><span>${esc(c[0])} <span class="note" style="margin:0">${x.n?x.n+' visit'+(x.n===1?'':'s'):'no work'}${c[1]?'':' · no email'}</span></span><button type="button" class="btn small ${x.n?'':'ghost'}" data-t="${esc(c[0])}">Draft</button></div>`; }).join('')}
+    <div class="toolbar"><span style="flex:1"></span><button type="button" class="btn ghost" data-a="x">Close</button></div>`;
+  document.body.appendChild(d); d.addEventListener('click', e=>{ if(e.target.closest('[data-a="x"]')){ d.close(); d.remove(); return; } const t=e.target.closest('[data-t]')?.dataset.t; if(!t) return; const c=crewOf(t);
+    mailBox(`Week of ${fmtD(monday)} — ${t}`, c[1]||'', {...weekText(t,monday,c[2]||'en'), lang:c[2]||'en'}, l=>({...weekText(t,monday,l), lang:l})); }); d.addEventListener('cancel', e=>{ e.preventDefault(); d.close(); d.remove(); }); d.showModal(); }
+// ---- the job's own schedule (drawer → Job tab) ----
+function visitsHTML(p){ if(!VISOK) return '<div class="note" style="margin:0">Run database update 020 in Supabase to turn on the schedule.</div>';
+  const L=VIS.filter(v=>v.num===p.num).sort((a,b)=>a.visit_date.localeCompare(b.visit_date)), td=iso(today()), up=L.filter(v=>visEnd(v)>=td), past=L.filter(v=>visEnd(v)<td);
+  const ser=SER.filter(s=>s.num===p.num), row=v=>`<tr><td class="num"><a href="#" data-visopen="${esc(v.id)}">${fmtD(v.visit_date)}${v.end_date&&v.end_date!==v.visit_date?'–'+fmtD(v.end_date):''}</a></td><td>${esc(t12(v.start_time))}</td><td class="wrap">${esc((v.techs||[]).join(', ')||'—')}</td><td>${esc(v.status)}</td></tr>`;
+  return `${ser.map(s=>`<div class="gpline">Repeats: <b>${esc(ruleText(s))}</b></div>`).join('')}
+    ${up.length?`<div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>Techs</th><th>Status</th></tr></thead><tbody>${up.slice(0,6).map(row).join('')}</tbody></table></div>${up.length>6?`<div class="note">+${up.length-6} more on the Schedule</div>`:''}`:'<div class="note" style="margin:0 0 6px">Nothing scheduled ahead.</div>'}
+    ${past.length?`<div class="note">${past.length} past visit${past.length===1?'':'s'}; last ${fmtD(past[past.length-1].visit_date)}.</div>`:''}
+    ${isManager()?`<div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn small" id="visNew">${L.length?'Add a visit':'Schedule'}</button></div>`:''}`; }
+function visNewFor(p){ if(!VISOK){ toast('Run database update 020 in Supabase first.'); return; } const v=visitDraft(p, iso(today())); visEdit(v, {suggestRepeat:isRecurring(p) && !SER.some(s=>s.num===p.num)}); }
 $('#settingsBody').addEventListener('change', async e=>{ if(e.target.id!=='clImport' || !e.target.files[0]) return; const f=e.target.files[0]; e.target.value=''; await importHcp(f); });
 $('#settingsBody').addEventListener('click', async e=>{ if(e.target.id!=='clLink') return; const {data,error}=await sb.rpc('link_clients'); if(error){ toast(invMissing(error)?'Run database update 019 in Supabase first.':error.message); return; }
   toast(`Linked ${data.proposals_linked_to_client} proposals to clients and ${data.proposals_linked_to_property} to properties`); loadProposals(); });
@@ -3223,14 +3466,26 @@ $('#clientsBody').addEventListener('click', async e=>{ const t=e.target, box=$('
     const {data,error}=await sb.from('clients').insert({name:r.name, kind:r.kind}).select().single(); if(error){ toast(invMissing(error)?'Run database update 019 in Supabase first.':error.message); return; }
     CL.push(data); CLSEL=data.id; renderClients(); }
 });
-function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','comm','clients','settings']) $('#view-'+v).hidden = v!==view; }
+$('#schedBody').addEventListener('change', e=>{ if(e.target.id==='schTech'){ schTech=e.target.value; renderSchedule(); } });
+$('#schedBody').addEventListener('click', e=>{ const t=e.target;
+  if(t.id==='schPrev'||t.id==='schNext'){ schMonth=new Date(schMonth.getFullYear(), schMonth.getMonth()+(t.id==='schNext'?1:-1), 1); renderSchedule(); return; }
+  if(t.id==='schToday'){ schMonth=null; renderSchedule(); return; }
+  if(t.id==='schWeek'){ weekEmails(); return; }
+  if(t.id==='schEvent'){ const v=visitDraft(null, iso(today())); visEdit(v); return; }
+  const c=t.closest('[data-vis]'); if(c){ const v=VIS.find(x=>x.id===c.dataset.vis); if(v) visEdit(v); return; }
+  const dl=t.closest('[data-daylist]'); if(dl){ const ds=dl.dataset.daylist, L=VIS.filter(v=>v.status!=='Cancelled' && v.visit_date<=ds && visEnd(v)>=ds && (!schTech||(v.techs||[]).includes(schTech)));
+    const d=document.createElement('dialog'); d.className='ask'; d.innerHTML=`<h3>${dLong(ds,'en')}</h3>${L.map(v=>`<div><button type="button" class="vchip" data-vis="${esc(v.id)}" style="width:100%">${esc(t12(v.start_time))} ${esc(visLabel(v))}${(v.techs||[]).length?' — '+esc(v.techs.join(', ')):''}</button></div>`).join('')}<div class="toolbar"><span style="flex:1"></span><button type="button" class="btn ghost" data-a="x">Close</button></div>`;
+    document.body.appendChild(d); d.addEventListener('click', ev=>{ const x=ev.target.closest('[data-vis]'); if(x){ d.close(); d.remove(); const v=VIS.find(y=>y.id===x.dataset.vis); if(v) visEdit(v); } if(ev.target.closest('[data-a="x"]')){ d.close(); d.remove(); } }); d.showModal(); return; }
+  const cell=t.closest('[data-day]'); if(cell && isManager()){ const v=visitDraft(null, cell.dataset.day); v.kind='job'; v.title=''; visEdit(v); }
+});
+function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','schedule','comm','clients','settings']) $('#view-'+v).hidden = v!==view; }
 $('#tabs').addEventListener('click', e=>{
   const b=e.target.closest('[data-tab]'); if(!b) return;
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x===b);
   show(b.dataset.tab); renderAll();
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
-function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='clients') renderClients(); if(c==='settings') renderSettings(); }
+function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='clients') renderClients(); if(c==='schedule') renderSchedule(); if(c==='settings') renderSettings(); }
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
@@ -3273,7 +3528,7 @@ async function start(session){
   $('#salesTab').textContent = ['BD Rep','Estimator'].includes(m.role) ? 'My Sales' : 'Sales';
   const home = ['BD Rep','Estimator'].includes(m.role) ? 'sales' : m.role==='Admin' ? 'orders' : 'pipeline';
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===home); show(home);
-  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); if(isManager()) loadOpenInvoices();
+  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); if(isManager()) loadOpenInvoices();
   window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })

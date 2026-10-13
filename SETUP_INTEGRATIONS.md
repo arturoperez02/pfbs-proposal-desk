@@ -127,6 +127,18 @@ The old Cloudflare app keeps working until step 3, so nothing breaks while you t
    Existing proposals are linked to their client automatically. Safe to run again later: nothing is duplicated or overwritten.
 4. Open the **Clients** tab and spot-check your biggest clients: fix names, set the AP email and "Requires a PO#".
 
+## Schedule (update 020)
+
+1. Run `sql/020_schedule.sql` in Supabase.
+2. Settings → **Crew**: one tech per line, `Name | email | es` (or `en`): the language of their schedule email.
+   Also check Work types, Equipment and Vehicles.
+3. Approved jobs show a **Schedule** button on the Jobs tab (also: the job → Job tab → Schedule). Recurring jobs start
+   with a repeat rule from the proposal (Quarterly = every 3 months; change it to "first Tuesday" or "day 15").
+   Visits are created about 12 months ahead and keep rolling forward. Changing a recurring visit asks
+   "Only this visit" or "This and all future visits", like HousecallPro.
+4. Every week: Schedule → **Crew emails** → pick the week → **Draft** for each tech (English or Spanish) → Outlook.
+5. Keep TechSched and HCP's schedule running side by side for a week or two, then stop entering jobs there.
+
 ## SharePoint auto-save
 
 1. entra.microsoft.com → App registrations → **New registration**: name `PFBS Proposal Desk`, accounts in this organization only.
