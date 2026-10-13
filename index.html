@@ -3893,9 +3893,25 @@ const daysLate = v => { const d=invDue(v); return d ? Math.round((today()-parse(
 const invName = v => v.bill_to?.name || (P.find(p=>p.num===v.num)||{}).client || '—';
 let mFind='';
 const invWhat = v => { const it=(v.items||[])[0]||{}, d=String(it.description||''); if(/^(Balance carried over|HousecallPro invoice #)/.test(d)) return ''; const place=String(it.notes||'').split(' · ')[0]; return [d.split('\n')[0], v.source==='hcp'&&!/^HousecallPro/.test(place)?place:''].filter(Boolean).join(' · ').slice(0,90); };
-function findInvHTML(){ const q=norm(mFind); if(!q) return '<div class="note" style="margin:0">Type an invoice #, client or job # to look up any invoice, paid ones from HousecallPro included.</div>';
-  const L=MINV.filter(v=>[v.inv_no, invName(v), v.job_no, v.num, v.po_number].some(x=>norm(x).includes(q))).sort((a,b)=>Number(b.inv_no)-Number(a.inv_no)).slice(0,40);
-  return L.length?`<div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Client</th><th>Job</th><th>Date</th><th class="r">Amount</th><th>Status</th><th></th></tr></thead><tbody>${L.map(v=>{ const [lab,cls]=invLabel(v); return `<tr data-mrow="${esc(v.id)}" style="cursor:pointer"><td class="num"><b>#${esc(v.inv_no)}</b>${v.source==='hcp'?'<div class="note" style="margin:0">from HCP</div>':''}</td><td class="wrap">${esc(invName(v))}${invWhat(v)?`<div class="note" style="margin:0">${esc(invWhat(v))}</div>`:''}</td><td class="num">${esc(v.job_no||v.num||'')}</td><td class="num">${fmtD(v.invoice_date)}</td><td class="r num">${num(v.total)?usd(v.total):'—'}</td><td><span class="flag ${cls}">${esc(lab)}</span></td><td><button type="button" class="btn ghost small" data-mopen="${esc(v.id)}">Open</button></td></tr>`; }).join('')}</tbody></table></div>`:'<div class="note" style="margin:0">No invoice matches.</div>'; }
+let mFilt='Open';
+function invListHTML(){
+  const q=norm(mFind), td=iso(today());
+  const F={'Open':v=>v.status==='Sent'&&invBal(v)>0.004, 'Overdue':v=>v.status==='Sent'&&invBal(v)>0.004&&daysLate(v)>0, 'Reminder due':v=>remDue(v)!=null, 'Paid':v=>v.status==='Paid', 'All':v=>v.status!=='Draft'||true};
+  const hit=v=>!q || [v.inv_no, invName(v), v.job_no, v.num, v.po_number, invWhat(v)].some(x=>norm(x).includes(q));
+  const L=MINV.filter(v=>F[mFilt](v) && hit(v)).sort((a,b)=>mFilt==='Paid'||mFilt==='All'?Number(b.inv_no)-Number(a.inv_no):String(invDue(a)).localeCompare(String(invDue(b))));
+  const chips=Object.keys(F).map(k=>`<button type="button" class="chip" data-mf="${k}" aria-pressed="${k===mFilt}">${k} <span class="c">${MINV.filter(v=>F[k](v)&&hit(v)).length}</span></button>`).join('');
+  const bal=L.reduce((s,v)=>s+(v.status==='Sent'?invBal(v):0),0);
+  return `<div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0 0 8px"><h3 style="margin:0">Invoices</h3><input id="mFind" type="search" placeholder="Search invoice #, client, job # or what it was for" value="${esc(mFind)}" style="max-width:340px"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px">${chips}${q?` <button type="button" class="btn ghost small" data-mclear>Clear search</button>`:''}</div>
+    <div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Client · what it was for</th><th class="hide-sm">Job</th><th>Due</th><th class="r">Balance</th><th></th></tr></thead><tbody>
+    ${L.slice(0,300).map(v=>{ const d=daysLate(v), [lab,cls]=invLabel(v), rd=remDue(v);
+      return `<tr data-mrow="${esc(v.id)}" style="cursor:pointer" title="Open invoice #${esc(v.inv_no)}"><td class="num"><b>#${esc(v.inv_no)}</b><div><span class="flag ${cls}">${esc(lab)}</span></div>${v.source==='hcp'?'<div class="note" style="margin:0">from HCP</div>':''}</td>
+      <td class="wrap">${esc(invName(v))}${invWhat(v)?`<div class="note" style="margin:0">${esc(invWhat(v))}</div>`:''}</td><td class="hide-sm num">${esc(v.job_no||v.num||'')}</td>
+      <td class="num">${fmtD(invDue(v))}${v.status==='Sent'&&d>0?`<div class="${d>30?'down':''}" style="font-size:12px">${d}d late</div>`:''}</td>
+      <td class="r num">${v.status==='Sent'?usd(invBal(v)):usd(v.total)}${v.status==='Sent'&&num(v.paid)>0?`<div class="note" style="margin:0">of ${usd(v.total)}</div>`:''}</td>
+      <td style="white-space:nowrap">${canMoney()&&rd!=null?`<button type="button" class="btn small" data-mrem="${esc(v.id)}" data-day="${rd}">Reminder</button> `:''}${canMoney()&&v.status==='Sent'?`<button type="button" class="btn ghost small" data-mpay="${esc(v.id)}">Payment</button>`:''}</td></tr>`; }).join('') || `<tr><td colspan="6" class="empty">No invoices here.</td></tr>`}
+    </tbody></table></div>
+    <div class="note">${L.length>300?`Showing 300 of ${L.length}. Search to narrow it down. `:''}${mFilt==='Open'||mFilt==='Overdue'||mFilt==='Reminder due'?`${usd(bal)} on this list. `:''}Click an invoice to open it. Reminders: ${remDays().map(x=>x<0?`${-x} days before`:x===0?'on the due date':`${x} days late`).join(', ')} (Settings → Invoicing).</div>`; }
 function renderMoney(){
   const box=$('#moneyBody'); if(!box) return;
   if(!MOK){ box.innerHTML='<div class="card"><div class="note" style="margin:0">Run database updates 018 and 021 in Supabase to turn this on.</div></div>'; return; }
@@ -3913,19 +3929,10 @@ function renderMoney(){
       <div class="kpi"><div class="l">Not deposited yet</div><div class="v">${usd(undepAmt)}</div><div class="note" style="margin:2px 0 0">${undep.length} check${undep.length===1?'':'s'}/payment${undep.length===1?'':'s'}</div></div></div>
     <div class="cards" style="margin-top:12px">
     <div class="card"><h3>Who owes what (aging)</h3><div class="tablewrap"><table><thead><tr><th>Client</th>${B.map(b=>`<th class="r">${b}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>
-      ${rowsC.map(([n,a,t])=>`<tr><td class="wrap">${esc(n)}</td>${a.map((x,i)=>`<td class="r num ${i>=3&&x?'down':''}">${x?usd(x):''}</td>`).join('')}<td class="r num"><b>${usd(t)}</b></td></tr>`).join('') || `<tr><td colspan="7" class="empty">Nothing owed.</td></tr>`}
+      ${rowsC.map(([n,a,t])=>`<tr data-mcl="${esc(n)}" style="cursor:pointer" title="Show ${esc(n)}'s invoices"><td class="wrap">${esc(n)}</td>${a.map((x,i)=>`<td class="r num ${i>=3&&x?'down':''}">${x?usd(x):''}</td>`).join('')}<td class="r num"><b>${usd(t)}</b></td></tr>`).join('') || `<tr><td colspan="7" class="empty">Nothing owed.</td></tr>`}
       ${rowsC.length?`<tr><td><b>Total</b></td>${colT.map(x=>`<td class="r num"><b>${x?usd(x):''}</b></td>`).join('')}<td class="r num"><b>${usd(tot)}</b></td></tr>`:''}</tbody></table></div>
-      <div class="note">Days past each invoice's due date. Click a client's invoices below to record a payment.</div></div>
-    ${(()=>{ const R=MINV.map(v=>({v, day:remDue(v)})).filter(x=>x.day!=null).sort((a,b)=>daysLate(b.v)-daysLate(a.v));
-      return `<div class="card"><h3>Payment reminders to send (${R.length})</h3>${R.length?`<div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Client</th><th>Due</th><th class="r">Balance</th><th>Reminder</th><th></th></tr></thead><tbody>${R.map(({v,day})=>{ const late=daysLate(v); return `<tr data-mrow="${esc(v.id)}" style="cursor:pointer"><td class="num"><b>#${esc(v.inv_no)}</b></td><td class="wrap">${esc(invName(v))}</td><td class="num">${fmtD(invDue(v))}</td><td class="r num">${usd(invBal(v))}</td>
-        <td><span class="flag ${late>0?'bad':'warn'}">${late<0?`due in ${-late}d`:late===0?'due today':`${late}d late`}</span>${(v.reminders||[]).length?`<div class="note" style="margin:0">${v.reminders.length} sent, last ${fmtD(v.reminders[v.reminders.length-1].at)}</div>`:''}</td>
-        <td>${canMoney()?`<button type="button" class="btn small" data-mrem="${esc(v.id)}" data-day="${day}">Email reminder</button>`:''}</td></tr>`; }).join('')}</tbody></table></div>`:'<div class="note" style="margin:0">No reminders due today.</div>'}
-        <div class="note">Schedule: ${remDays().map(d=>d<0?`${-d} days before`:d===0?'on the due date':`${d} days late`).join(', ')} (Settings → Invoicing). Each one shows once; sending marks it done.</div></div>`; })()}
-    <div class="card"><h3>Find an invoice</h3><input id="mFind" type="search" placeholder="Invoice #, client or job #" value="${esc(mFind)}" style="margin:0 0 8px"><div id="mFindL">${findInvHTML()}</div></div>
-    <div class="card"><h3>Open invoices (${open.length})</h3><div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Client</th><th class="hide-sm">Job</th><th>Due</th><th class="r">Late</th><th class="r">Balance</th><th></th></tr></thead><tbody>
-      ${open.sort((a,b)=>String(invDue(a)).localeCompare(String(invDue(b)))).map(v=>{ const d=daysLate(v); return `<tr data-mrow="${esc(v.id)}" style="cursor:pointer" title="Open invoice #${esc(v.inv_no)}"><td class="num"><b>#${esc(v.inv_no)}</b>${v.source==='hcp'?'<div class="note" style="margin:0">from HCP</div>':''}</td><td class="wrap">${esc(invName(v))}${invWhat(v)?`<div class="note" style="margin:0">${esc(invWhat(v))}</div>`:''}</td><td class="hide-sm num">${esc(v.job_no||v.num||'')}</td><td class="num">${fmtD(invDue(v))}</td>
-        <td class="r num ${d>30?'down':''}">${d>0?d+'d':''}</td><td class="r num">${usd(invBal(v))}${num(v.paid)>0?`<div class="note" style="margin:0">of ${usd(v.total)}</div>`:''}</td><td style="white-space:nowrap"><button type="button" class="btn ghost small" data-mopen="${esc(v.id)}">Open</button> <button type="button" class="btn small" data-mpay="${esc(v.id)}">Payment</button></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">No open invoices.</td></tr>'}
-    </tbody></table></div></div>
+      <div class="note">Days past each invoice's due date. Click a client to see their invoices below.</div></div>
+    <div class="card" id="mInv">${invListHTML()}</div>
     <div class="card"><div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0 0 8px"><h3 style="margin:0">Payments received</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="month" id="mMonth" value="${esc(mMonth)}" aria-label="Month"><button type="button" class="btn ghost small" id="mCsvPay">Payments CSV</button><button type="button" class="btn ghost small" id="mCsvInv">Invoices CSV</button></div></div>
       <div class="tablewrap"><table class="qatable"><thead><tr><th>Received</th><th>Invoice</th><th>Client</th><th>How</th><th class="r">Amount</th><th>Deposited</th></tr></thead><tbody>
@@ -4009,9 +4016,12 @@ $('#schedBody').addEventListener('click', e=>{ const t=e.target;
     document.body.appendChild(d); d.addEventListener('click', ev=>{ const x=ev.target.closest('[data-vis]'); if(x){ d.close(); d.remove(); const v=VIS.find(y=>y.id===x.dataset.vis); if(v) visEdit(v); } if(ev.target.closest('[data-a="x"]')){ d.close(); d.remove(); } }); d.showModal(); return; }
   const cell=t.closest('[data-day]'); if(cell && isManager()){ const v=visitDraft(null, cell.dataset.day); v.kind='job'; v.title=''; visEdit(v); }
 });
-$('#moneyBody').addEventListener('input', e=>{ if(e.target.id==='mFind'){ mFind=e.target.value; $('#mFindL').innerHTML=findInvHTML(); } });
+$('#moneyBody').addEventListener('input', e=>{ if(e.target.id==='mFind'){ mFind=e.target.value; const pos=e.target.selectionStart; $('#mInv').innerHTML=invListHTML(); const q=$('#mFind'); q.focus(); q.setSelectionRange(pos,pos); } });
 $('#moneyBody').addEventListener('change', e=>{ if(e.target.id==='mMonth'){ mMonth=e.target.value||iso(today()).slice(0,7); renderMoney(); } });
 $('#moneyBody').addEventListener('click', async e=>{ const t=e.target;
+  const mf=t.closest('[data-mf]'); if(mf){ mFilt=mf.dataset.mf; $('#mInv').innerHTML=invListHTML(); return; }
+  if(t.closest('[data-mclear]')){ mFind=''; $('#mInv').innerHTML=invListHTML(); return; }
+  const mc=t.closest('tr[data-mcl]'); if(mc){ mFind=mc.dataset.mcl; mFilt='Open'; $('#mInv').innerHTML=invListHTML(); $('#mInv').scrollIntoView({behavior:'smooth'}); return; }
   const mr=t.closest('tr[data-mrow]'); if(mr && !t.closest('button,input,a,select')){ const v=MINV.find(x=>x.id===mr.dataset.mrow); if(v){ const pays=MPAY.filter(x=>x.invoice_id===v.id); invEdit(moneyPseudo(v), {...v, payments:pays}); } return; }
   const rb=t.closest('[data-mrem]'); if(rb){ const v=MINV.find(x=>x.id===rb.dataset.mrem); if(v) await remindBox(v, Number(rb.dataset.day)); return; }
   const pb=t.closest('[data-mpay]'); if(pb){ const v=MINV.find(x=>x.id===pb.dataset.mpay); if(v && await invPay(v)){ await loadMoney(); loadOpenInvoices(); if(isManager()) loadProposals(); } return; }

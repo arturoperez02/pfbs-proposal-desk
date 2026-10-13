@@ -504,6 +504,12 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('dialog.ask [data-a="owa"]'); await pg.waitForTimeout(300);
   assert.deepEqual(await pg.evaluate(() => DBX.invoices.find(v => v.id === 'r1').reminders.map(r => r.day)), [7], 'reminder recorded');
   assert.equal(await pg.evaluate(() => !!document.querySelector('[data-mrem="r1"]')), false, 'and it leaves the list (earlier steps are not offered again)');
+  // each invoice once, clickable; filters
+  assert.equal(await pg.evaluate(() => document.querySelectorAll('tr[data-mrow="r1"]').length), 1, 'each invoice listed once');
+  await pg.click('tr[data-mrow="r1"] td.wrap'); await pg.waitForSelector('dialog.inved', T);
+  assert.match(await pg.textContent('dialog.inved'), /1600/, 'clicking an invoice opens it');
+  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
+  await pg.click('[data-mf="Overdue"]'); assert.equal(await pg.evaluate(() => [...document.querySelectorAll('tr[data-mrow]')].map(r => r.dataset.mrow).join()), 'r1', 'overdue filter');
   await pg.close();
 }
 
