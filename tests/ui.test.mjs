@@ -640,6 +640,34 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 26. Pricing: rentals, materials and tax are costs (only their markup is profit) on every sheet, solar included; client address drop-down on proposals
+{
+  const est = { sheet: 'SP', units: [{ desc: 'Solar panels', qty: 1386, rate: 1 }], labor: [{ role: 'Expert', hours: 16, rate: 0, wage: 32 }], materials: [{ desc: 'Resin', unit: 80, qty: 1, markup: 0.8 }], taxRate: 0.1075,
+    rentals: [{ desc: '40 boom lift', unit: 1920.05, qty: 1, markup: 0.15 }], equipment: [], misc: [] };
+  const pr = { num: 'PFBS-1010', date_sent: '2026-10-10', sent_by: 'Arturo', client: 'Addr Test Co', client_id: 'c-ad', property: 'Old', status: 'Sent', items: [{ type: 'Base', qty: 1, description: 'Solar panel cleaning', amount: null, estimate: est }] };
+  const c = { id: 'c-ad', name: 'Addr Test Co', kind: 'Business', aliases: [], active: true };
+  const props = [{ id: 'pa1', client_id: 'c-ad', name: 'Addr Test Co', address: '3536 Mendo Ave\nSanta Rosa, CA', active: true }, { id: 'pa2', client_id: 'c-ad', name: 'Addr Test Co', address: '39141 Civic Dr\nFremont, CA', active: true, contact_id: 'k-ad' }];
+  const k = { id: 'k-ad', client_id: 'c-ad', name: 'Terry Site', email: 'terry@site.example', active: true };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('pricing: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(([x, c, pp, k]) => { window.MOCK_EXTRA = [x]; window.MOCK_CLIENTS = [c]; window.MOCK_PROPS = pp; window.MOCK_CONTACTS = [k]; window.MOCK_SETTINGS = { est: Object.assign({}, { burden: 0 }) }; }, [pr, c, props, k]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => document.querySelector('[data-f="all"], [data-filter="all"]')?.click());
+  await pg.click('tr[data-id="PFBS-1010"]'); await pg.waitForSelector('#f-propPick', T);
+  assert.deepEqual(await pg.$$eval('#f-propPick option', L => L.map(o => o.textContent)), ['— Choose an address —', '3536 Mendo Ave, Santa Rosa, CA', '39141 Civic Dr, Fremont, CA', 'New address (type it below)'], 'the client\'s addresses in a drop-down');
+  await pg.selectOption('#f-propPick', 'pa2'); await pg.waitForTimeout(100);
+  assert.equal(await pg.$eval('#f-siteAddress', e => e.value), '39141 Civic Dr\nFremont, CA'); assert.equal(await pg.$eval('#f-contactName', e => e.value), 'Terry Site', 'the site contact comes with the address');
+  await pg.click('[data-est="0"]'); await pg.waitForSelector('#estTot', T);
+  assert.equal(await pg.textContent('#estTitle'), 'Pricing');
+  const tot = await pg.textContent('#estTot');
+  assert.ok(!/price − wages/.test(tot) && /Gross profit margin/.test(tot), 'solar margin counts every cost');
+  assert.match(tot, /rentals\/subs markup \$288\.01/, 'only the lift markup is profit');
+  assert.match(tot, /materials markup \$64\.00/, 'only the material markup is profit');
+  const nums = await pg.$$eval('#estTot dl.key dd', L => L.map(x => Number(x.textContent.replace(/[$,]/g, ''))));
+  assert.ok(Math.abs(nums[0] - nums[1] - nums[2]) < 0.01 && Math.abs(nums[1] - (512 + 80 + 8.6 + 1920.05)) < 0.02, 'job cost = wages + materials + tax + rental: ' + nums.join(','));
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

@@ -504,7 +504,7 @@ function guessService(d){ for(const [svc,re] of SVC_WORDS) if(re.test(d||'')) re
 // Bid sheets: numbers copied from the Excel workbooks (WC, SP, PW, G&D). Shared numbers (tax, markups) come from Settings.
 const SHEETS = {
   WC: {label:'Window cleaning (WC)'},
-  SP: {label:'Solar panel cleaning (SP)', unit:{desc:'Solar panels', per:'panel', rates:[3,4,5,10,12,15], single:true, tiers:true}, laborOnlyMargin:true, wages:{expert:32,apprentice:25},
+  SP: {label:'Solar panel cleaning (SP)', unit:{desc:'Solar panels', per:'panel', rates:[3,4,5,10,12,15], single:true, tiers:true}, wages:{expert:32,apprentice:25},
        materials:[['Tucker pole resin',77],['Rubber and soap',5]], equipment:[['3400 pressure washer',10],['Solar cleaning brush',35]],
        misc:[['Shipping',0,0,0.15],['Gas',35,0,0],['Other costs',10,0,0]]},
   PW: {label:'Pressure washing (PW)', unit:{desc:'Pressure washing', per:'sq ft', rates:[0.10,0.12,0.15,0.25,0.30]}, wages:{expert:32,apprentice:32},
@@ -574,11 +574,11 @@ function estCalc(e){
 }
 function crewText(c){ const k=c.crew; if(!k.techs) return ''; const d=fmtH(k.days);
   return `${k.techs} tech${k.techs===1?'':'s'} × ${k.even?fmtH(k.maxHrs)+' hrs':'up to '+fmtH(k.maxHrs)+' hrs'} = ${d} day${k.days===1?'':'s'} on site (${fmtH(k.techDays)} tech-day${k.techDays===1?'':'s'}, ${k.hpd}-hr days)`; }
-// Solar (SP sheet): margin = price − wages, like the Excel PROFIT cell. Other sheets: price − all job costs.
+// Every sheet: margin = price − all job costs (wages + burden, materials + tax, rentals/subs, equipment, misc). Only the markup on pass-through costs is profit.
 const laborOnly = e => !!SHEETS[e?.sheet]?.laborOnlyMargin;
 const marginCost = (e,c) => laborOnly(e) ? c.laborCost : c.cost;
 function estSummary(it){ const c=estCalc(it.estimate), amt=num(it.amount); const lo=laborOnly(it.estimate), g=(amt!=null?amt:c.total)-marginCost(it.estimate,c);
-  return `<span class="estsum">${c.crew.techs?`<span class="crew">Crew: ${crewText(c)}</span><br>`:''}Estimate <b>${usd(c.total)}</b> · ${lo?'wages':'cost'} ${money(lo?c.laborCost:c.cost)} · ${lo?'profit (labor only)':'GP'} <b>${money(g)}</b>${(amt??c.total)?` <span class="note" style="margin:0">${pct(g/(amt??c.total))}</span>`:''}${amt!=null&&Math.abs(amt-c.total)>=1?` <span class="note" style="margin:0">(line price ${money(amt)})</span>`:''}</span>`; }
+  return `<span class="estsum">${c.crew.techs?`<span class="crew">Crew: ${crewText(c)}</span><br>`:''}Price <b>${usd(c.total)}</b> · ${lo?'wages':'cost'} ${money(lo?c.laborCost:c.cost)} · ${lo?'profit (labor only)':'GP'} <b>${money(g)}</b>${(amt??c.total)?` <span class="note" style="margin:0">${pct(g/(amt??c.total))}</span>`:''}${amt!=null&&Math.abs(amt-c.total)>=1?` <span class="note" style="margin:0">(line price ${money(amt)})</span>`:''}</span>`; }
 function estimateTotals(p){ // GP + pass-through from estimates, per visit, for counted lines
   const L=countedItems(p); if(!L.length || !L.every(i=>i.estimate)) return null;
   let gp=0, pass=0; for(const i of L){ const c=estCalc(i.estimate); gp += (num(i.amount)??c.total) - c.cost; pass += c.pass; }
@@ -589,7 +589,7 @@ function gpBoxHTML(p, ed){
   return `<div class="grid2">
     <label class="f">Est. gross profit ($)<input id="f-gp" data-k="gp" type="number" step="any" value="${esc(p.gp??'')}" ${dis} placeholder="price − all job costs"></label>
     <label class="f">Pass-through costs ($)<input id="f-passThrough" data-k="passThrough" type="number" step="any" value="${esc(p.passThrough??'')}" ${dis} placeholder="rentals + subs, as billed"></label></div>
-    <div class="note" style="margin:4px 0 0">${auto ? 'Calculated from the line estimates.' : 'Build an estimate on each line and these fill in automatically. Otherwise enter them from your bid sheet.'}</div>`;
+    <div class="note" style="margin:4px 0 0">${auto ? 'Calculated from each line\'s pricing.' : 'Price each line (Price it) and these fill in automatically. Otherwise enter them from your bid sheet.'}</div>`;
 }
 function syncFromItems(p){
   for(const i of (p.items||[])) i.service = i.description ? guessService(i.description) : '';
@@ -770,13 +770,13 @@ function itemsHTML(p, ed, accEd=ed){
   const rows = items.map((it,i)=>`<div class="item ${it.type==='Add-on'?'addon':''}" data-i="${i}">
     <div class="itop"><span class="ibadge">${it.type==='Add-on'?'Add-on':'Service'}</span>
       ${it.type==='Add-on'?`<label class="acc"><input type="checkbox" data-it="accepted" ${it.accepted?'checked':''} ${adis}> Client accepted</label>`:`<input class="grp" data-it="group" value="${esc(it.group||'')}" placeholder="Option label (optional)" aria-label="Option label" ${dis}>`}
-      ${ed?`<button type="button" class="btn ghost small" data-dup="${i}" title="Copy this line, estimate included">Duplicate</button>${it.type!=='Add-on'&&it.group?`<button type="button" class="btn ghost small" data-dupopt="${i}" title="Copy this line into a new option">Copy as new option</button>`:''}<button type="button" class="btn ghost small" data-del="${i}" aria-label="Remove line">Remove</button>`:''}</div>
+      ${ed?`<button type="button" class="btn ghost small" data-dup="${i}" title="Copy this line, pricing included">Duplicate</button>${it.type!=='Add-on'&&it.group?`<button type="button" class="btn ghost small" data-dupopt="${i}" title="Copy this line into a new option">Copy as new option</button>`:''}<button type="button" class="btn ghost small" data-del="${i}" aria-label="Remove line">Remove</button>`:''}</div>
     <div class="igrid">
       <label class="f full">Description<input data-it="description" list="descList" value="${esc(it.description||'')}" placeholder="e.g. Perimeter exterior window &amp; screen washing" ${dis}></label>
       <label class="f">Qty / visits<input type="number" step="any" inputmode="decimal" data-it="qty" value="${esc(it.qty??1)}" ${dis}></label>
       <label class="f">Frequency<select data-it="frequency" ${dis}>${frqOpts(it.frequency)}</select></label>
       <label class="f">Amount per visit ($)<input type="number" step="any" inputmode="decimal" data-it="amount" value="${esc(it.amount??'')}" ${dis}></label>
-      ${it.type!=='Add-on' || true ? `<div class="full estrow">${it.estimate ? estSummary(it) : '<span class="note" style="margin:0">No estimate yet</span>'}${(ed || it.estimate)?`<button type="button" class="btn ghost small" data-est="${i}">${it.estimate?(ed?'Open estimate':'View estimate'):'Build estimate'}</button>`:''}</div>`:''}
+      ${it.type!=='Add-on' || true ? `<div class="full estrow">${it.estimate ? estSummary(it) : '<span class="note" style="margin:0">Not priced yet</span>'}${(ed || it.estimate)?`<button type="button" class="btn ghost small" data-est="${i}">${it.estimate?(ed?'Open pricing':'View pricing'):'Price it'}</button>`:''}</div>`:''}
       <label class="f full">Note (optional)<input data-it="note" value="${esc(it.note||'')}" placeholder="e.g. Lift is required. Price includes lift rental." ${dis}></label>
     </div></div>`).join('');
   const ch=chosenOptions(p), won=outcome(p)==='Won';
@@ -804,7 +804,7 @@ function drawDrawer(){
   const locked=isLocked(), edScope=ed && !locked, won=outcome(p)==='Won', tab = won ? DTAB : 'prop';
   const review = p.status==='Needs Review' && !isNew ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>Waiting on review.</b> The senior estimator checks price and scope, then approves to send or sends it back with a reason.</div>
     ${canReview()?`<textarea id="revNote" rows="2" placeholder="Review note (required to send back)" style="flex-basis:100%"></textarea><div class="toolbar" style="margin:0"><button class="btn small" id="approveSend">Approve &amp; mark Sent</button><button class="btn ghost small" id="sendBack">Send back to estimator</button></div>`:''}</div>`
-    : (p.status==='Lead' && !isNew) ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>New lead${p.bdRep?' from '+esc(p.bdRep):''}.</b> ${p.sentBy?'Assigned to '+esc(p.sentBy)+'.':'Assign an estimator.'}${p.leadAt?' Logged '+fmtD(p.leadAt)+'.':''}</div>${(isManager()||(role()==='Estimator'&&p.sentBy===me.name))?'<button class="btn small" id="startEst">Start estimate</button>':''}</div>` : '';
+    : (p.status==='Lead' && !isNew) ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>New lead${p.bdRep?' from '+esc(p.bdRep):''}.</b> ${p.sentBy?'Assigned to '+esc(p.sentBy)+'.':'Assign an estimator.'}${p.leadAt?' Logged '+fmtD(p.leadAt)+'.':''}</div>${(isManager()||(role()==='Estimator'&&p.sentBy===me.name))?'<button class="btn small" id="startEst">Start pricing</button>':''}</div>` : '';
   $('#drawer').innerHTML = `
   <div class="dhead"><div class="t">${!isNew && p.hcpJob && outcome(p)==='Won' ? `<div class="jobno">Job #${esc(p.hcpJob)}</div>` : ''}<b id="dTitle" class="num">${isNew?'New proposal':esc(p.num)}</b><div class="sub">${isNew?(newLead?'New lead · the PFBS number is assigned when you save.':'The PFBS number is assigned when you save.'):(outcome(p)==='Won'?'Job for ':'')+esc(p.client||'')+(p.property?' · '+esc(p.property):'')}</div></div>
     <button class="btn ghost small" id="closeD">Close</button></div>
@@ -850,9 +850,9 @@ function drawDrawer(){
       ${field('Billing (AP) email for invoices','billingEmail','email','','placeholder="Leave blank to use the contact email"')}
       <label class="f">Client requires a PO# on invoices<select data-k="poRequired" id="f-poRequired" ${dis}><option value="">No</option><option value="true" ${p.poRequired===true||p.poRequired==='true'?'selected':''}>Yes</option></select></label>
       <label class="f">Billing address<textarea data-k="billAddress" id="f-billAddress" rows="2" ${dis}>${esc(p.billAddress??'')}</textarea></label>
-      <label class="f">Job site address<textarea data-k="siteAddress" id="f-siteAddress" rows="2" ${dis}>${esc(p.siteAddress??'')}</textarea></label>
+      <div class="f">${propPickHTML(dis)}<label class="f" style="margin:0">Job site address<textarea data-k="siteAddress" id="f-siteAddress" rows="2" ${dis}>${esc(p.siteAddress??'')}</textarea></label></div>
     </div></fieldset>
-    ${p.status==='Lead' ? `<fieldset><legend>What the client needs</legend><div class="note" style="margin:0">Describe the request in Notes below. Pricing starts when the estimator clicks <b>Start estimate</b>.</div></fieldset>` : ''}
+    ${p.status==='Lead' ? `<fieldset><legend>What the client needs</legend><div class="note" style="margin:0">Describe the request in Notes below. Pricing starts when the estimator clicks <b>Start pricing</b>.</div></fieldset>` : ''}
     <fieldset ${p.status==='Lead'?'hidden':''}><legend>Scope &amp; pricing</legend>
       ${locked?`<div class="lockline">Sent ${p.quotedAt?fmtD(p.quotedAt):(p.dateSent?fmtD(p.dateSent):'')}: price and scope are locked. Use <b>Create revision</b> to change them. Client-accepted add-ons can still be ticked.</div>`:''}
       ${ownerOverride()?'<div class="lockline owner">Sent proposal: locked for everyone else. Your changes are allowed and logged.</div>':''}
@@ -914,7 +914,7 @@ function drawDrawer(){
   </div>
   <div class="dfoot"><span class="msg" id="dmsg">${ed?'':'View only'}</span>
     <button class="btn ghost" id="cancelD">Cancel</button>
-    ${isNew?'':`<button class="btn ghost" id="estPdfD">Estimate PDF</button><button class="btn ghost" id="pdfD">Download PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
+    ${isNew?'':`<button class="btn ghost" id="estPdfD">Pricing PDF</button><button class="btn ghost" id="pdfD">Download PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
     <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save changes'}</button></div>`;
 }
 const incPct = () => S.priceIncrease ?? 0.05;
@@ -970,7 +970,7 @@ function missingForSend(p){ const m=[];
   if(!(p.contactEmail||'').trim()) m.push('contact email');
   if(!(p.property||'').trim()) m.push('property name');
   if(!(num(p.amount)>0)) m.push('a priced line');
-  if(num(p.gp)==null && !estimateTotals(p)) m.push('an estimate (or Est. gross profit)');
+  if(num(p.gp)==null && !estimateTotals(p)) m.push('pricing (or Est. gross profit)');
   return m; }
 const SEND_STEPS=['Needs Review','Sent','Budget'];
 function setStatus(st, o={}){
@@ -1060,7 +1060,7 @@ function drawLeadForm(){
     <button class="btn ghost small" id="closeD">Close</button></div>
   <div class="dbody">
     ${!isNew?`<div class="reviewbox"><div style="flex:1;min-width:180px"><b>Lead${p.bdRep?' from '+esc(p.bdRep):''}</b> · logged ${fmtD(p.leadAt||p.createdAt)} · <span class="${wait>3?'flag bad':''}">waiting ${wait} day${wait===1?'':'s'}</span>. ${p.sentBy?'Assigned to '+esc(p.sentBy)+'.':'<b>No estimator assigned.</b>'}</div>
-      ${canStart?'<button class="btn small" id="startEst">Start estimate</button>':''}</div>`:''}
+      ${canStart?'<button class="btn small" id="startEst">Start pricing</button>':''}</div>`:''}
     <fieldset><legend>Client &amp; property</legend><div class="grid2">
       ${field('Client (company)','client','text','full','list="clientList" autocomplete="off" placeholder="Start typing to pick a past client"')}
       ${field('Property name','property','text','full','list="propList" autocomplete="off" placeholder="e.g. Metro Center Senior"')}
@@ -1069,7 +1069,7 @@ function drawLeadForm(){
       ${field('Contact name','contactName')}
       ${field('Contact phone','contactPhone','tel')}
       ${field('Contact email','contactEmail','email','full')}
-      <label class="f full">Job site address<textarea data-k="siteAddress" id="f-siteAddress" rows="2" ${dis}>${esc(p.siteAddress??'')}</textarea></label>
+      <div class="f full">${propPickHTML(dis)}<label class="f" style="margin:0">Job site address<textarea data-k="siteAddress" id="f-siteAddress" rows="2" ${dis}>${esc(p.siteAddress??'')}</textarea></label></div>
     </div></fieldset>
     <fieldset><legend>What they need</legend>
       <div class="svcpick" role="group" aria-label="Services requested">${svcs.map(v=>`<label class="chip ${picked.includes(v)?'on':''}"><input type="checkbox" data-lis="${esc(v)}" ${picked.includes(v)?'checked':''} ${dis}> ${esc(v)}</label>`).join('')||'<span class="note" style="margin:0">Add your services in Settings.</span>'}</div>
@@ -1132,7 +1132,7 @@ function partsHTML(p, ed){
   const head=`<div class="grid2" style="margin-bottom:8px"><label class="f">Buyer / office contact<select id="ptBuyer" ${dis}><option value="">Estimator on the job${p.sentBy?' ('+esc(p.sentBy)+')':''}</option>${names.map(n=>`<option ${n===p.buyer?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
     <div class="gpline" style="align-self:end">${L.length?`${partsOpen(p)} to order · ${L.filter(x=>x.status==='Ordered').length} ordered · ${L.filter(x=>x.status==='Received').length} received${partsLate(p)?' · <b style="color:var(--bad)">approved '+days(parse(p.dateResolved),today())+' days ago, still to order</b>':''}`:''}</div></div>`;
   if(!L.length) return head+`<div class="note" style="margin:0 0 8px">No parts listed. ${(p.items||[]).some(i=>i.estimate)?'Pull them from the estimate, or add them by hand.':'Add anything that needs buying or booking.'}</div>
-    ${ed?`<div class="toolbar" style="margin:0">${(p.items||[]).some(i=>i.estimate)?'<button type="button" class="btn small" id="ptBuild">Pull from estimate</button>':''}<button type="button" class="btn ghost small" id="ptAdd">+ Part</button></div>`:''}`;
+    ${ed?`<div class="toolbar" style="margin:0">${(p.items||[]).some(i=>i.estimate)?'<button type="button" class="btn small" id="ptBuild">Pull from pricing</button>':''}<button type="button" class="btn ghost small" id="ptAdd">+ Part</button></div>`:''}`;
   return head+`<div class="items">${ALL.map((x,i)=>isRent(x)?'':`<div class="item ptitem pt-${(x.status||'To order').replace(' ','').toLowerCase()}">
     <div class="ptgrid">
       <label class="f ptdesc">Item<input data-pt="${i}.desc" value="${esc(x.desc||'')}" ${dis}></label>
@@ -1158,8 +1158,8 @@ const refreshParts = () => { const b=$('#ptBox'); if(b) b.innerHTML=partsHTML(dr
 const refreshRentals = () => { const b=$('#rtBox'); if(b) b.innerHTML=rentalsTrackHTML(draft, canEditDraft()); };
 function rentalsTrackHTML(p, ed){
   const ALL=p.parts||[], R=ALL.filter(isRent), dis=ed?'':'disabled';
-  if(!R.length) return `<div class="note" style="margin:0 0 8px">No rentals. Lifts and equipment from the estimate's Subcontractors / rentals show up here when the job is approved.</div>
-    ${ed?`<div class="toolbar" style="margin:0">${(p.items||[]).some(i=>(i.estimate?.rentals||[]).length)?'<button type="button" class="btn small" id="ptBuild">Pull from estimate</button>':''}<button type="button" class="btn ghost small" id="rtAdd">+ Rental</button></div>`:''}`;
+  if(!R.length) return `<div class="note" style="margin:0 0 8px">No rentals. Lifts and equipment from the pricing's Subcontractors / rentals show up here when the job is approved.</div>
+    ${ed?`<div class="toolbar" style="margin:0">${(p.items||[]).some(i=>(i.estimate?.rentals||[]).length)?'<button type="button" class="btn small" id="ptBuild">Pull from pricing</button>':''}<button type="button" class="btn ghost small" id="rtAdd">+ Rental</button></div>`:''}`;
   const inp=(i,k,l,type='text',cls='')=>`<label class="f ${cls}">${l}<input data-rt="${i}.${k}" type="${type}" ${type==='number'?'step="any"':''} value="${esc(ALL[i][k]??'')}" ${dis}></label>`;
   return `<div class="items">${ALL.map((x,i)=>{ if(!isRent(x)) return ''; const a=rentAlert(p,x), st=x.status||'To reserve';
     return `<div class="item rtitem rt-${st.replace(/\W+/g,'').toLowerCase()}">
@@ -1202,7 +1202,7 @@ $('#drawer').addEventListener('change', async e=>{ const t=e.target; if(!draft) 
 });
 $('#drawer').addEventListener('click', async e=>{ const t=e.target.closest('button'); if(!t||!draft) return;
   if(t.id==='ptBuild'){ const b=buildParts(draft), keepR=(draft.parts||[]).filter(isRent), keepP=(draft.parts||[]).filter(x=>!isRent(x));
-    const add=[...(keepP.length?[]:b.filter(x=>!isRent(x))), ...(keepR.length?[]:b.filter(isRent))]; if(!add.length){ toast('The estimate has no materials or rentals with a cost.'); return; }
+    const add=[...(keepP.length?[]:b.filter(x=>!isRent(x))), ...(keepR.length?[]:b.filter(isRent))]; if(!add.length){ toast('The pricing has no materials or rentals with a cost.'); return; }
     draft.parts=[...(draft.parts||[]), ...add]; if(await saveParts(`Pulled from the estimate: ${add.length} item${add.length===1?'':'s'}`)){ refreshParts(); refreshRentals(); } }
   if(t.id==='ptAdd'){ draft.parts=[...(draft.parts||[]), {desc:'',qty:1,supplier:'',sku:'',link:'',status:'To order'}]; refreshParts(); }
   if(t.dataset.ptdel!=null){ if(!t.dataset.armed){ t.dataset.armed='1'; t.textContent='Confirm remove'; return; } const x=draft.parts.splice(+t.dataset.ptdel,1)[0]; if(await saveParts(`${isRent(x)?'Rental':'Parts'}: removed ${x.desc}`)){ refreshParts(); refreshRentals(); } }
@@ -1564,7 +1564,7 @@ function renderJobs(){
     <div class="note" style="margin:0 0 8px">Finished jobs with no hours yet. Type the techs and hours each from the crew's text (3 days × 8 hrs = 24 each); the total fills in. Add the start and finish dates and any lift or material bills, then Save. Leave a cost blank if it matched the estimate.</div>
     <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th class="r hide-sm">Estimated</th><th>Techs</th><th>Hours each</th><th>Total hrs</th><th>Start</th><th>Finish</th><th>Lift / sub $</th><th>Materials $</th><th>Other $</th><th></th></tr></thead><tbody>
     ${hrs.length?hrs.map(p=>{ const e=estPerVisit(p), n=visits(p)>1?' /visit':'';
-      return `<tr data-qrow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="r num hide-sm">${e&&e.hrs?`${e.techs} × ${fmtH(e.hpt)} = ${fmtH(e.hrs)} hrs${n?' per visit':''}`:'<span class="note" style="margin:0">no estimate</span>'}</td><td>${cell(p,'techs',e&&e.techs?e.techs:'')}</td><td>${cell(p,'hpt',e&&e.hpt?fmtH(e.hpt):'')}</td><td>${cell(p,'hrs',e&&e.hrs?fmtH(e.hrs):'')}</td><td>${dcell(p,'start')}</td><td>${dcell(p,'date')}</td><td>${cell(p,'rent',e?Math.round(e.rent):'0')}</td><td>${cell(p,'mat',e?Math.round(e.mat):'0')}</td><td>${cell(p,'misc',e?Math.round(e.misc):'0')}</td><td>${canEditRow(p)?`<button class="btn small" data-qsave="${esc(p.num)}">Save</button>`:''}</td></tr>`; }).join('')
+      return `<tr data-qrow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="r num hide-sm">${e&&e.hrs?`${e.techs} × ${fmtH(e.hpt)} = ${fmtH(e.hrs)} hrs${n?' per visit':''}`:'<span class="note" style="margin:0">not priced</span>'}</td><td>${cell(p,'techs',e&&e.techs?e.techs:'')}</td><td>${cell(p,'hpt',e&&e.hpt?fmtH(e.hpt):'')}</td><td>${cell(p,'hrs',e&&e.hrs?fmtH(e.hrs):'')}</td><td>${dcell(p,'start')}</td><td>${dcell(p,'date')}</td><td>${cell(p,'rent',e?Math.round(e.rent):'0')}</td><td>${cell(p,'mat',e?Math.round(e.mat):'0')}</td><td>${cell(p,'misc',e?Math.round(e.misc):'0')}</td><td>${canEditRow(p)?`<button class="btn small" data-qsave="${esc(p.num)}">Save</button>`:''}</td></tr>`; }).join('')
       : '<tr><td colspan="11" class="empty">All finished jobs have their hours. Nice.</td></tr>'}</tbody></table></div>
     <div class="note">Monthly or other recurring contracts: log one typical visit.</div></div>
   <div class="card"><h3>Contract check (${chk.length})</h3>
@@ -1808,7 +1808,7 @@ $('#drawer').addEventListener('click', e=>{
   else if(t.dataset.est!=null) openEst(+t.dataset.est);
   else if(t.dataset.add){ draft.items=[...(draft.items||[])]; if(!draft.items.length && t.dataset.add==='Service' && num(draft.amount)!=null) draft.items.push({type:'Service',service:draft.service||'',qty:1,frequency:draft.frequency||'',amount:num(draft.amount),description:draft.service||''}); else draft.items.push({type:t.dataset.add,service:t.dataset.add==='Add-on'?'':(draft.service||''),qty:1,frequency:draft.frequency||'',amount:'',description:'',accepted:false}); rerenderItems(); }
   else if(t.dataset.del!=null){ draft.items.splice(+t.dataset.del,1); rerenderItems(); }
-  else if(t.dataset.dup!=null){ const i=+t.dataset.dup, c=structuredClone(draft.items[i]); delete c.accepted; draft.items.splice(i+1,0,c); rerenderItems(); toast('Line duplicated, estimate included. Change what differs.'); }
+  else if(t.dataset.dup!=null){ const i=+t.dataset.dup, c=structuredClone(draft.items[i]); delete c.accepted; draft.items.splice(i+1,0,c); rerenderItems(); toast('Line duplicated, pricing included. Change what differs.'); }
   else if(t.dataset.dupopt!=null){ const i=+t.dataset.dupopt, src=draft.items[i], groups=groupsOf(draft);
     const m=/(option\s*)(\d+)/i.exec(src.group||''); let next; if(m){ let n=Math.max(...groups.map(g=>+((/(option\s*)(\d+)/i.exec(g)||[])[2]||0)))+1; next=src.group.replace(m[0], m[1]+n); } else { next=`${src.group} (Option ${groups.length+1})`; }
     const copies=draft.items.filter(x=>x.type!=='Add-on' && x.group===src.group).map(x=>({...structuredClone(x), group:next}));
@@ -1967,7 +1967,7 @@ function compareHTML(p){
     <tr><td>Job cost</td><td class="r num">${c.estCost==null?'—':money(c.estCost)}</td><td class="r num">${money(c.actCost)}</td>${d(c.estCost,c.actCost,'lower')}</tr>
     <tr><td>Gross profit</td><td class="r num">${c.estGP==null?'—':money(c.estGP)}</td><td class="r num"><b>${money(c.actGP)}</b></td>${d(c.estGP,c.actGP,'higher')}</tr>
     <tr><td>Margin</td><td class="r num">${c.estGP==null?'—':m(c.estGP)}</td><td class="r num"><b>${m(c.actGP)}</b></td><td></td></tr>
-  </tbody></table></div>${estPerVisit(p)?'':'<div class="note" style="color:var(--warn)">No estimate on this proposal: enter every actual cost (lift, materials, other) or the margin will look too high. Hours cannot be compared.</div>'}`;
+  </tbody></table></div>${estPerVisit(p)?'':'<div class="note" style="color:var(--warn)">No pricing on this proposal: enter every actual cost (lift, materials, other) or the margin will look too high. Hours cannot be compared.</div>'}`;
 }
 $('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.av; if(!k) return; const [i,f]=k.split('.');
   if(!(draft.actuals||[]).length) draft.actuals=[{date:iso(today())}];
@@ -2016,7 +2016,7 @@ function renderEst(){ // keep the scroll position when the estimate redraws
 function renderEstInner(){
   const it=draft.items[EI], roles=S.est.labor.map(r=>r[0]);
   $('#est').innerHTML = `
-  <div class="esthead"><div><b id="estTitle">Estimate</b><div class="sub">${esc(it.description||'Line '+(EI+1))} · per visit</div></div>
+  <div class="esthead"><div><b id="estTitle">Pricing</b><div class="sub">${esc(it.description||'Line '+(EI+1))} · per visit</div></div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="f inline" style="margin:0">Bid sheet<select id="estSheet" aria-label="Bid sheet">${Object.entries(SHEETS).map(([k,v])=>`<option value="${k}" ${k===E.sheet?'selected':''}>${v.label}</option>`).join('')}</select></label>
     <button class="btn ghost small" id="estClose">Close</button></div></div>
   <div class="estbody"><div class="estmain">
@@ -2062,7 +2062,7 @@ function renderEstInner(){
     </details>`).join('')}
   </div>
   <aside class="esttot card" id="estTot"></aside></div>
-  <button type="button" class="estmini" id="estMini" aria-label="Jump to the estimate totals"></button>`;
+  <button type="button" class="estmini" id="estMini" aria-label="Jump to the totals"></button>`;
   updateEstTotals(); labelTables($('#est'));
   $('#est').classList.toggle('ro', EST_RO);
   if(EST_RO){ $('#est').querySelectorAll('.estmain input, .estmain select').forEach(x=>x.disabled=true); const h=$('#est .esthead .sub'); if(h) h.innerHTML+=' · <b>view only</b> (sent proposals are locked; create a revision to change)'; }
@@ -2105,6 +2105,7 @@ function updateEstTotals(){
       <dt>${lo?'Wages':'Job cost'}</dt><dd>${usd(lo?c.laborCost:c.cost)}</dd>
       <dt>Profit</dt><dd style="color:${c.total&&profit/c.total<floor?'var(--bad)':'inherit'}">${usd(profit)}</dd>
     </dl>
+    <div class="note" style="margin:-4px 0 10px">Profit from: labor ${usd(c.laborPrice-c.laborCost)}${c.matP?` · materials markup ${usd(c.matP-c.mat)}`:''}${c.rentP?` · rentals/subs markup ${usd(c.rentP-c.rent)}`:''}${c.eqP?` · equipment ${usd(c.eqP-c.eq)}`:''}${c.miscP?` · misc ${usd(c.miscP-c.misc)}`:''}. Rentals, materials and tax are costs: only their markup counts.</div>
     ${c.crew.techs ? `<div class="crewbox">${crewText(c)}</div>` : ''}
     ${SHEETS[E.sheet]?.monthly ? `<h4>Monthly billing (quarterly service)</h4><dl class="tots"><dt>Basic (× 1.5 ÷ 3)</dt><dd>${usd(c.total*1.5/3)}</dd><dt>Standard (× 2 ÷ 3)</dt><dd>${usd(c.total*2/3)}</dd><dt>Premium (× 2.25 ÷ 3)</dt><dd>${usd(c.total*2.25/3)}</dd></dl>` : ''}
     <details class="breakdown" ${EST_BD?'open':''}><summary>Full breakdown</summary>
@@ -2134,7 +2135,7 @@ function updateEstTotals(){
       ${c.pass?`<dt>Pass-through</dt><dd>${usd(c.pass)}</dd>`:''}
     </dl></details>
     <button class="btn wide" id="estUse" ${c.total>0?'':'disabled'}>Save &amp; use ${money(rnd)} as line price</button>
-    <div class="toolbar" style="margin-top:6px;justify-content:space-between"><button class="btn ghost small" id="estSave">Save, keep line price</button><button class="btn ghost small" id="estPdf">Estimate PDF</button></div>`;
+    <div class="toolbar" style="margin-top:6px;justify-content:space-between"><button class="btn ghost small" id="estSave">Save, keep line price</button><button class="btn ghost small" id="estPdf">Pricing PDF</button></div>`;
 }
 const SHEET_CALCS = {WC:['swing','bosun','interior','exterior'], SP:['solar'], PW:['pw'], GD:['gd']};
 const calcFor = sheet => (SHEET_CALCS[sheet]||SHEET_CALCS.WC)[0];
@@ -2286,7 +2287,7 @@ $('#est').addEventListener('click', e=>{
   if(t.id==='estUse' || t.id==='estSave'){
     const it=draft.items[EI]; it.estimate=structuredClone(E);
     if(t.id==='estUse') it.amount=Math.floor(estCalc(E).total);
-    closeEst(); rerenderItems(); toast(t.id==='estUse'?`Line price set to ${money(it.amount)}. Save the proposal to keep it.`:'Estimate kept. Save the proposal to keep it.'); }
+    closeEst(); rerenderItems(); toast(t.id==='estUse'?`Line price set to ${money(it.amount)}. Save the proposal to keep it.`:'Pricing kept. Save the proposal to keep it.'); }
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#est').hidden){ e.stopImmediatePropagation(); closeEst(); } }, true);
 
@@ -2582,17 +2583,30 @@ async function ensureClient(d){
     }
   }catch(_){}
 }
+// proposal drawer: a drop-down of the client's addresses (picks property, site address and the property's contact in one go)
+const propOpt = x => { const L=String(x.address||'').split('\n').map(t=>t.trim()).filter(Boolean), cn=(CL.find(c=>c.id===x.client_id)||{}).name, nm=x.name&&norm(x.name)!==norm(L[0]||'')&&norm(x.name)!==norm(cn||'')?x.name+' — ':''; return nm+L.join(', '); };
+function propPickHTML(dis){ const c=draft&&((draft.clientId&&CL.find(x=>x.id===draft.clientId)) || clientOf(draft.client)), L=c?propsOf(c.id):[];
+  return `<span id="propPickBox"${L.length?'':' hidden'}><label class="f" style="margin:0 0 6px">Pick ${c?esc(c.name)+'’s':'the client’s'} address <span class="note" style="margin:0;font-weight:400">(${L.length})</span><select id="f-propPick" ${dis}><option value="">— Choose an address —</option>${L.map(x=>`<option value="${esc(x.id)}" ${draft.propertyId===x.id?'selected':''}>${esc(propOpt(x))}</option>`).join('')}<option value="new">New address (type it below)</option></select></label></span>`; }
+function refreshPropPick(){ const b=document.getElementById('propPickBox'); if(!b) return; const dis=b.querySelector('select')?.disabled?'disabled':''; b.outerHTML=propPickHTML(dis); }
+function pickProperty(id){ if(!draft) return;
+  if(id==='new'){ draft.propertyId=null; for(const k of ['property','siteAddress']){ draft[k]=''; const el=document.getElementById('f-'+k); if(el) el.value=''; } document.getElementById('f-siteAddress')?.focus(); return; }
+  const x=PROPS.find(y=>y.id===id); if(!x) return; const set=(k,v)=>{ draft[k]=v; const el=document.getElementById('f-'+k); if(el) el.value=v; };
+  draft.propertyId=x.id; draft.clientId=x.client_id||draft.clientId; set('property', propLabel(x)); set('siteAddress', x.address||'');
+  const k=x.contact_id && CC.find(y=>y.id===x.contact_id); if(k) for(const [f,v] of [['contactName',k.name],['contactEmail',k.email],['contactPhone',k.phone]]) if(v) set(f,v);
+  if(typeof checkDup==='function') checkDup(); toast('Address, property and site contact filled in'); }
+document.addEventListener('change', e=>{ if(e.target.id==='f-propPick') pickProperty(e.target.value); });
 // proposal drawer: picking a client / property fills what the client record already knows
 function clientFill(k){
   if(!CLOK || !draft) return 0;
-  if(k==='client'){ const c=clientOf(draft.client); draft.clientId=c?c.id:null; draft.propertyId=null; if(!c) return 0;
+  if(k==='client'){ const c=clientOf(draft.client); draft.clientId=c?c.id:null; draft.propertyId=null; if(!c){ refreshPropPick(); return 0; }
     const pc=contactsOf(c.id)[0]||{};
     const src={contactName:pc.name, contactEmail:pc.email, contactPhone:pc.phone, billAddress:c.billing_address, billingEmail:c.billing_email, poRequired:c.po_required?'true':''};
     const n=fillEmpty(src, ['contactName','contactEmail','contactPhone','billAddress','billingEmail','poRequired']);
     const dl=$('#propList'); if(dl){ const opts=[...new Set([...propsOf(c.id).map(propLabel), ...propsFor(draft.client)])]; dl.innerHTML=opts.map(v=>`<option value="${esc(v)}">`).join(''); }
+    refreshPropPick(); const pl=propsOf(c.id); if(pl.length===1 && !String(draft.siteAddress||'').trim()){ pickProperty(pl[0].id); refreshPropPick(); }
     return n; }
   if(k==='property'){ const c=draft.clientId && CL.find(x=>x.id===draft.clientId); if(!c) return 0; const pr=norm(draft.property), kk=akey(draft.property);
-    const hit=propsOf(c.id).find(x=>norm(propLabel(x))===pr || norm(x.name)===pr || (kk && x.addr_key===kk)); draft.propertyId=hit?hit.id:null; if(!hit) return 0;
+    const hit=propsOf(c.id).find(x=>norm(propLabel(x))===pr || norm(x.name)===pr || (kk && x.addr_key===kk)); draft.propertyId=hit?hit.id:null; const ps=document.getElementById('f-propPick'); if(ps) ps.value=hit?hit.id:''; if(!hit) return 0;
     let n=fillEmpty({siteAddress:hit.address}, ['siteAddress']);
     const k=hit.contact_id && CC.find(x=>x.id===hit.contact_id);   // the property's own manager wins over the client's main contact
     if(k){ for(const [f,val] of [['contactName',k.name],['contactEmail',k.email],['contactPhone',k.phone]]) if(val && draft[f]!==val){ draft[f]=val; const el=document.getElementById('f-'+f); if(el) el.value=val; n++; } }
@@ -2911,11 +2925,11 @@ async function makePdf(p){
 }
 async function makeEstimatePdf(p, pairs){
   if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
-  if(!pairs.length){ toast('No estimate to print yet.'); return; }
+  if(!pairs.length){ toast('Nothing priced to print yet.'); return; }
   const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), NAVY=[31,42,92], RED=[179,38,30], L0=46, R0=566, logo=await logoData(), n=v=>num(v)||0;
   const head=()=>{
     if(logo) doc.addImage(logo,'JPEG',46,30,100,23);
-    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...NAVY); doc.text(isBudgetDoc(p)?'BUDGET PROPOSAL WORKSHEET':'ESTIMATE WORKSHEET',R0,42,{align:'right'});
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...NAVY); doc.text(isBudgetDoc(p)?'BUDGET PROPOSAL WORKSHEET':'PRICING WORKSHEET',R0,42,{align:'right'});
     doc.setFontSize(8); doc.setTextColor(...RED); doc.text(isBudgetDoc(p)?`INTERNAL – NOT FOR CLIENT · BUDGET YEAR ${p.budgetYear||today().getFullYear()+1}`:'INTERNAL – NOT FOR CLIENT',R0,54,{align:'right'});
     doc.setDrawColor(...NAVY); doc.setLineWidth(1); doc.line(40,66,572,66); doc.setTextColor(0);
   };
@@ -2948,7 +2962,7 @@ async function makeEstimatePdf(p, pairs){
     const status = m>=tgt?`Healthy: at or above the ${pct(tgt)} target.` : m>=floor?`Getting thin: below the ${pct(tgt)} target. ${pct(tgt)} would be ${money(Math.ceil(mcost/(1-tgt)))}.` : `Below the ${pct(floor)} floor: needs owner approval. ${pct(tgt)} would be ${money(Math.ceil(mcost/(1-tgt)))}.`;
     doc.setTextColor(...mc); doc.setFont('helvetica','bold'); doc.text(status,L0,y); doc.setFont('helvetica','normal'); doc.setTextColor(0); y+=12;
     if(c.crew.techs){ doc.text('Crew: '+crewText(c),L0,y); y+=12; }
-    if(Math.abs(price-c.total)>=1){ doc.setTextColor(92,99,120); doc.text(`Estimate total ${usd(c.total)}; line price used ${usd(price)}.`,L0,y); doc.setTextColor(0); y+=12; }
+    if(Math.abs(price-c.total)>=1){ doc.setTextColor(92,99,120); doc.text(`Priced total ${usd(c.total)}; line price used ${usd(price)}.`,L0,y); doc.setTextColor(0); y+=12; }
     y+=8;
     const R=v=>({content:v,styles:{halign:'right'}});
     const admin=(e.labor||[]).filter(r=>roleKind(r.role)==='admin'&&n(r.hours)), crew=(e.labor||[]).filter(r=>roleKind(r.role)!=='admin'&&n(r.hours));
@@ -2980,9 +2994,9 @@ async function makeEstimatePdf(p, pairs){
       columnStyles:{1:{halign:'right'}}, didParseCell:d=>{ const k=d.row.raw[0];
         if(/^(PRICE|JOB COST|GROSS PROFIT|PROFIT \(|MARGIN)/.test(k)){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor = k==='MARGIN'?mbg : /PROFIT/.test(k)?[227,242,232]:[238,240,246]; if(k==='MARGIN') d.cell.styles.textColor=mc; } } });
   });
-  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120); doc.text(`PF Building Services · internal estimate · ${p.num||''} · page ${i} of ${pages}`,306,775,{align:'center'}); }
+  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120); doc.text(`PF Building Services · internal pricing · ${p.num||''} · page ${i} of ${pages}`,306,775,{align:'center'}); }
   const place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40);
-  await deliverPdf(doc, `${p.num||'NEW'}${(p.rev||1)>1?' Rev '+p.rev:''} Estimate ${place}.pdf`, p, 'Estimate PDF');
+  await deliverPdf(doc, `${p.num||'NEW'}${(p.rev||1)>1?' Rev '+p.rev:''} Pricing ${place}.pdf`, p, 'Pricing PDF');
 }
 async function makeCoPdf(p, co){
   if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
@@ -3179,7 +3193,7 @@ function renderScore(){
     const jc=won.map(jobCompare).filter(Boolean), rv=jc.reduce((s,c)=>s+c.rev,0), ag=jc.reduce((s,c)=>s+c.actGP,0);
     return {n,mine,won,rate:(won.length+lost.length)?won.length/(won.length+lost.length):null,wonAmt:won.reduce((s,p)=>s+lineAmt(p,n),0),openAmt:open.reduce((s,p)=>s+lineAmt(p,n),0),actM: rv?ag/rv:null, jcN:jc.length}; }).filter(r=>r.mine.length);
   $('#score').innerHTML = `
-  <div class="card"><h3>Estimators</h3><div class="note" style="margin:0 0 8px">Side by side, all time. Hours vs estimate: green within ±15%. Commission is on the Commission tab.</div>${table(['Estimator','Sent','Won','Win rate','Won $','Avg GP %','Hours vs estimate','Days to quote','Follow-ups due'],
+  <div class="card"><h3>Estimators</h3><div class="note" style="margin:0 0 8px">Side by side, all time. Hours vs estimate: green within ±15%. Commission is on the Commission tab.</div>${table(['Estimator','Sent','Won','Win rate','Won $','Avg GP %','Hours vs planned','Days to quote','Follow-ups due'],
     est.map(r=>[esc(r.n),r.mine.filter(p=>!PRELOCK.includes(p.status)).length,r.won.length,pct(r.rate),money(r.wonAmt),r.gpBase?pct(r.gpWon/r.gpBase):'—', r.hrsVar==null?'—':`<span class="${Math.abs(r.hrsVar)<=0.15?'up':'down'}">${r.hrsVar>0?'+':r.hrsVar<0?'−':''}${pct(Math.abs(r.hrsVar))}</span>`, (x=>x==null?'—':fmtH(Math.round(x*10)/10))(daysToQuote(r.mine)), r.due?`<span class="flag warn">${r.due}</span>`:'0']), 'No proposals yet.')}</div>
   <div class="card"><h3>Business development</h3>${table(['BD rep','Leads','Waiting on estimator','Won','Won $','GP won $','Days to quote'],
     bd.map(r=>[esc(r.n),r.mine.length,r.mine.filter(p=>p.status==='Lead').length,r.won.length,money(r.wonAmt),money(r.gpWon),(x=>x==null?'—':fmtH(Math.round(x*10)/10))(daysToQuote(r.mine))]), 'No BD reps yet. Add them on the Settings tab when you hire.')}</div>
@@ -3219,7 +3233,7 @@ function renderLeads(){
   $('#leadsBody').innerHTML = `<ol class="flow">${steps.map(([t,d,n],i)=>`<li><div class="fnum">${i+1}</div><div><b>${t}</b>${n!=null?` <span class="fcount">${n}</span>`:''}<div class="note" style="margin:2px 0 0">${d}</div></div></li>`).join('')}</ol>
   <div class="card"><h3>Leads waiting to be priced (${leads.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>PFBS #</th><th>Client</th><th class="hide-sm">Property</th><th class="hide-sm">Services</th><th class="hide-sm">Walkthrough</th><th class="hide-sm">BD rep</th><th>Estimator</th><th class="r">Days waiting</th></tr></thead><tbody>${leadRows}</tbody></table></div>
-    <div class="note">Red after 3 days. The estimator opens the lead and clicks <b>Start estimate</b>, which turns it into a proposal with these services as lines.</div></div>${pros}`;
+    <div class="note">Red after 3 days. The estimator opens the lead and clicks <b>Start pricing</b>, which turns it into a proposal with these services as lines.</div></div>${pros}`;
 }
 function drawProspect(){
   const x=PR, ed=canProspect(), dis=ed?'':'disabled', isN=!x.id;
@@ -3443,7 +3457,7 @@ function renderEstSales(){
   const jm=p=>{ const c=jobCompare(p); return c&&c.rev ? pct(c.actGP/c.rev) : '—'; };
   $('#salesBody').innerHTML = `
   <div class="kpis">
-    ${kpi('To quote',toQuote.length, late?'alert':'', late?`${late} waiting over 3 days`:'leads and estimates in progress')}
+    ${kpi('To quote',toQuote.length, late?'alert':'', late?`${late} waiting over 3 days`:'leads and pricing in progress')}
     ${kpi('Proposals sent',sent.length,'',money(sum(sent,wonAmt))+' '+L)}
     ${kpi('Out with clients',money(sum(out,wonAmt)), due.length?'warn':'', `${out.length} open${due.length?` · ${due.length} follow-up${due.length===1?'':'s'} due`:''}`)}
     ${kpi('Won',money(sum(won,wonAmt)),'',`${won.length} job${won.length===1?'':'s'} ${L}`)}
@@ -3451,7 +3465,7 @@ function renderEstSales(){
     ${kpi('Margin on won',pct(margin), margin!=null&&margin<S.marginFloor?'alert':'','as estimated')}
     ${kpi('Recurring / month',money(sum(act,monthlyValue)),'',`${act.length} active contract${act.length===1?'':'s'}`)}
     ${comm?`<div class="kpi ${owed.length?'warn':''}" data-gocomm="${esc(estRep)}" style="cursor:pointer" title="Open the Commission tab"><div class="l">Commission owed</div><div class="v">${money(sum(owed,estOwed))}</div><div class="note" style="margin:2px 0 0">details on the Commission tab →</div></div>`:''}
-    ${kpi('Hours vs estimate', hv==null?'—':sgn(hv)+pct(Math.abs(hv)), hv==null?'':Math.abs(hv)<=0.15?'':'warn', ch.length?`${ch.length} closed job${ch.length===1?'':'s'} · within ±15% is accurate`:'no hours logged yet')}
+    ${kpi('Hours vs planned', hv==null?'—':sgn(hv)+pct(Math.abs(hv)), hv==null?'':Math.abs(hv)<=0.15?'':'warn', ch.length?`${ch.length} closed job${ch.length===1?'':'s'} · within ±15% is accurate`:'no hours logged yet')}
   </div>
   <div class="sales-grid">
     <div class="card"><h3>Pipeline</h3>${stage}<div class="note">To quote and Out are right now. Won is ${L}. Amounts include approved change orders.</div></div>
@@ -3470,7 +3484,7 @@ function renderEstSales(){
     <div class="card"><h3>Recurring contracts (${act.length})</h3>${rowsTable(['PFBS #','Client','Property','Per month','Contract ends','Typical visit','Commission','Amount'], act.sort((a,b)=>String(renewalOf(a)||'').localeCompare(String(renewalOf(b)||''))),
       p=>{ const r=renewalOf(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), esc(p.property), money(monthlyValue(p)), r?`<span class="${renewalDue(p)?'flag warn':''}">${fmtD(r)}${renewalDue(p)?' · renew':''}</span>`:'—', (h=>!h?'—':h.kind==='none'?'<span class="flag warn">not logged</span>':`<span class="${h.kind==='low'?'flag bad':''}">${pct(h.m)} margin${h.kind==='stale'?' · old':''}</span>`)(contractHealth(p)), p.datePaid?`${commMonths(p)} of 12 mo`:'starts at first payment', money(wonAmt(p))]; },
       'No recurring contracts yet. Monthly, quarterly and other repeat services show here once approved.')}<div class="note">Contracts show "renew" 60 days before they end. Amount is the full contract value.</div></div>
-    <div class="card"><h3>Estimate vs actual</h3>${rowsTable(['PFBS #','Client','Est. hours','Actual hours','Est. margin','Actual margin'], closed.slice(0,10).map(x=>x.p),
+    <div class="card"><h3>Planned vs actual</h3>${rowsTable(['PFBS #','Client','Est. hours','Actual hours','Est. margin','Actual margin'], closed.slice(0,10).map(x=>x.p),
       p=>{ const c=jobCompare(p); return [`<span class="pnum">${esc(p.num)}</span>`, esc(p.client), c.estHrs==null?'—':fmtH(c.estHrs), `${fmtH(c.actHrs)}${c.hrsVar!=null?` <span class="${Math.abs(c.hrsVar)<=0.15?'up':'down'}">(${sgn(c.hrsVar)}${pct(Math.abs(c.hrsVar))})</span>`:''}`, c.estGP!=null&&c.rev?pct(c.estGP/c.rev):'—', `<b>${jm(p)}</b>`]; },
       'Shows up once the office logs actual hours on your finished jobs.')}<div class="note">Your last 10 jobs with hours logged. Green: within ±15% of your estimate.</div></div>
   </div>`;
@@ -3545,7 +3559,7 @@ function renderSettings(){
     ${ta('s-sprates','Solar panel rates by access', (S.est.spRates||[]).map(r=>r.join(' | ')).join('\n'), 'Access | $ per panel. One rate per job on the solar (SP) estimate. Rename the tiers to how you describe access, e.g. Ground mount | 3.')}
     ${ta('s-gdtasks','Gates & doors tasks', (S.est.gdTasks||[]).map(r=>r.join(' | ')).join('\n'), 'Task | crew hours each | parts $ each. Used by the Gates & doors job builder. Leave a number at 0 to type it per job.')}
     ${ta('s-mat','Material presets', S.est.materials.map(r=>r.filter((x,i)=>i<2||x).join(' | ')).join('\n'), 'Name | unit cost | supplier | part / SKU # | link (last three optional). These start every new estimate (qty 0) and carry into Parts to order.')}
-    <div class="card listedit"><h3>Estimate defaults</h3>
+    <div class="card listedit"><h3>Pricing defaults</h3>
       <label class="f">Material markup %<input id="s-mm" type="number" step="any" value="${S.est.matMarkup*100}" ${ro}></label>
       <label class="f">Sales tax on materials %<input id="s-tax" type="number" step="any" value="${Math.round(S.est.taxRate*100000)/1000}" ${ro}></label>
       <label class="f">Rental / sub markup %<input id="s-rm" type="number" step="any" value="${S.est.rentMarkup*100}" ${ro}></label>
@@ -3613,7 +3627,7 @@ function organizeSettings(){
     ['Price book & lists', ['Price book','Job types','Frequencies','Lead sources','Lost reasons','Add-on suggestions','BD email templates']],
     ['Invoicing', ['Invoicing']],
     ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
-    ['Estimating', ['Margins & guardrails','Estimate defaults','Labor roles','Solar panel rates','Gates & doors tasks','Material presets']],
+    ['Estimating', ['Margins & guardrails','Pricing defaults','Labor roles','Solar panel rates','Gates & doors tasks','Material presets']],
     ['Commission', ['Client type → BD rate','Estimator rate by margin','BD goals']],
     ['Warehouse', ['Warehouse']],
     ['Data', ['Clients','Backup','Clean up old proposals']],
