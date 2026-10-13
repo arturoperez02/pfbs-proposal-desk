@@ -286,6 +286,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('convert: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
   await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, sp); await pg.goto(BASE); await pg.waitForTimeout(800);
+  await pg.click('#tabs [data-tab="pipeline"]');
   await pg.fill('#q', 'PFBS-0995').catch(() => {}); await pg.waitForTimeout(300);
   await pg.click('tr[data-id="PFBS-0995"]', T); await pg.waitForSelector('#convJob', T);
   await pg.click('#convJob'); await pg.waitForSelector('#askJob', T); await pg.fill('#askJob', '10250'); await pg.click('dialog.ask [data-a="ok"]');
@@ -296,6 +297,30 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 12. Home: KPIs, jobs board, job progress in the drawer, on hold
+{
+  const un = { num: 'PFBS-0996', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Board Unsched Co', property: '7 Board St', amount: 900, status: 'Approved', date_resolved: '2026-10-05', hcp_job: '10260', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 900 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('home: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, un); await pg.goto(BASE); await pg.waitForTimeout(900);
+  assert.equal(await pg.$eval('#tabs [aria-selected="true"]', e => e.dataset.tab), 'home', 'owner lands on Home');
+  const col = await pg.$$eval('.bcol', cs => cs.map(c => [c.querySelector('h4').textContent, c.textContent]));
+  const uc = col.find(c => /^Unscheduled/.test(c[0]));
+  assert.ok(uc && /Board Unsched Co/.test(uc[1]) && /#10260/.test(uc[1]), 'approved job without visits is Unscheduled with its job #');
+  await pg.click('[data-hopen="PFBS-0996"]'); await pg.waitForSelector('.jflow', T);
+  assert.match(await pg.textContent('.dhead .sub'), /Job for Board Unsched Co/, 'drawer says Job for client');
+  assert.match(await pg.textContent('.jflow'), /Approved.*Scheduled.*not yet.*Done.*Invoiced.*Paid/s, 'progress steps');
+  assert.ok(await pg.$('#jfSched'), 'Schedule is the next step');
+  await pg.click('#jfHold'); await pg.fill('dialog.ask [name="why"]', 'Client paused'); await pg.click('dialog.ask [data-a="ok"]');
+  await pg.waitForSelector('.holdline', T);
+  const h = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-0996'));
+  assert.equal(h.on_hold_reason, 'Client paused'); assert.ok(h.on_hold_since, 'hold date saved'); assert.equal(h.status, 'Approved', 'hold keeps status');
+  await pg.click('#closeD'); await pg.waitForTimeout(200);
+  const held = await pg.$$eval('.bcol', cs => cs.find(c => /^On hold/.test(c.querySelector('h4').textContent)).textContent);
+  assert.match(held, /Board Unsched Co/, 'held job moves to On hold column');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
-console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing passed');
+console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

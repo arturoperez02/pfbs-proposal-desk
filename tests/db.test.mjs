@@ -196,3 +196,10 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.equal(a.job_no, jn, 'first visit = the job #'); assert.ok(b2.job_no !== jn && Number(b2.job_no) > Number(jn), 'next recurring visit gets its own #');
   console.log('db: job # at approval passed');
 }
+// ---------- on hold (update 024) ----------
+{
+  await db.exec(`reset role; update proposals set on_hold_since='2026-10-12', on_hold_reason='Client paused' where num='PFBS-0782'`);
+  const r = (await db.query(`select status, on_hold_reason from proposals where num='PFBS-0782'`)).rows[0];
+  assert.equal(r.on_hold_reason, 'Client paused'); assert.equal(r.status, 'Scheduled', 'hold keeps the status');
+  console.log('db: on hold passed');
+}

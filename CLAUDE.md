@@ -19,7 +19,7 @@ janitorial and gates & doors company in the Bay Area. Owner: Arturo (aperez@pfbu
 ## Files
 | File | What |
 |---|---|
-| `index.html` | The whole CRM: one file, vanilla JS, no build step. Tabs: Pipeline, Leads, Sales, Jobs, Commission, Settings. |
+| `index.html` | The whole CRM: one file, vanilla JS, no build step. Tabs: Home (managers' landing page: KPIs, jobs board Unscheduled / Scheduled / To invoice / Invoice sent / On hold, this week, recent activity), Pipeline, Leads, Sales, Jobs, Schedule, Money, Commission, Clients, Settings. A won job's drawer opens with "Job #… · Job for <client>" and an Approved → Scheduled → Done → Invoiced → Paid bar with the next-step button (`jobFlowHTML`, `jobState`). |
 | `reports.html` | Service reports (moved from the old Cloudflare app). Same screens; data layer is Supabase. Edit this file directly. |
 | `hub.html` | "Apps" launcher page for the team. |
 | `auth.html` | Microsoft sign-in return page (SharePoint, once Entra is set up). |
@@ -88,9 +88,10 @@ punctuation, LLC/Inc/Partners/Management; proposals fill from the client record 
    "only this visit" vs "this and future"; rule prefilled from the proposal frequency; generate ~12 months ahead).
    Schedule asked at Approved. Crews never use an app: keep TechSched's weekly crew emails (per tech, EN/ES,
    date/time/address/team, mailto draft; see `pfbs-schedule` buildJobEmailText). One invoice + one report per visit.
+   024: jobs can be put **on hold** with a reason (`on_hold_since`, `on_hold_reason`); they keep status, job # and schedule.
 3. ~~Money / accountant dashboard~~ (done, 021: Money tab with owed / past due / collected / not deposited, aging by
    client, payments by month with deposit dates, CSV exports, open-HCP-invoice import). Still open: her answers (software
-   → tailor the CSV columns), a Home summary. Original spec — **Home + accountant dashboard**: open / past due / paid, A/R aging, deposits, export, her own login; import the
+   → tailor the CSV columns); Home tab done 10/12. Original spec — **Home + accountant dashboard**: open / past due / paid, A/R aging, deposits, export, her own login; import the
    open HCP invoices (65, ~$162k on 10/12). Waiting on her answers (software, what she pulls, what she wants).
 4. **Warehouse**: KitTracker (separate Supabase project, repo `pfbs-kittracker`); kit lists from line items.
 5. **Leave HCP**: import history from its exports, run both for 1–2 billing cycles, cancel.
