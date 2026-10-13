@@ -33,7 +33,8 @@ Hosting: GitHub Pages from `main` (custom domain via `CNAME`). Pushing to `main`
 ## Database (Supabase)
 - Main table `proposals` (key `num` = `PFBS-0123`). Status flow: Lead → Estimating → Needs Review → Sent / Budget →
   Approved → Scheduled → Invoiced → Paid; or Declined / Expired / Withdrawn. (Follow-up status is retired.)
-- Others: `team_members` (roles: Owner, Admin, Senior Estimator, Estimator, BD Rep), `settings` (one row, `data` jsonb),
+- Others: `team_members` (roles: Owner, Admin, Senior Estimator, Estimator, BD Rep, Accountant (021: Money + Clients only;
+  `can_money()` = managers + Accountant for invoices/payments)), `settings` (one row, `data` jsonb),
   `proposal_activity`, `proposal_history`, `prospects`, `commission_payouts`, `admin_log`, `deleted_proposals`,
   `service_reports`, `private_settings`, `integration_keys`, `invoices`, `invoice_payments`, `clients`, `client_contacts`,
   `properties`, `visits`, `visit_series` (proposals have `client_id` / `property_id`; the text client/property fields stay for display and old data).
@@ -84,7 +85,9 @@ punctuation, LLC/Inc/Partners/Management; proposals fill from the client record 
    "only this visit" vs "this and future"; rule prefilled from the proposal frequency; generate ~12 months ahead).
    Schedule asked at Approved. Crews never use an app: keep TechSched's weekly crew emails (per tech, EN/ES,
    date/time/address/team, mailto draft; see `pfbs-schedule` buildJobEmailText). One invoice + one report per visit.
-3. **Home + accountant dashboard**: open / past due / paid, A/R aging, deposits, export, her own login; import the
+3. ~~Money / accountant dashboard~~ (done, 021: Money tab with owed / past due / collected / not deposited, aging by
+   client, payments by month with deposit dates, CSV exports, open-HCP-invoice import). Still open: her answers (software
+   → tailor the CSV columns), a Home summary. Original spec — **Home + accountant dashboard**: open / past due / paid, A/R aging, deposits, export, her own login; import the
    open HCP invoices (65, ~$162k on 10/12). Waiting on her answers (software, what she pulls, what she wants).
 4. **Warehouse**: KitTracker (separate Supabase project, repo `pfbs-kittracker`); kit lists from line items.
 5. **Leave HCP**: import history from its exports, run both for 1–2 billing cycles, cancel.

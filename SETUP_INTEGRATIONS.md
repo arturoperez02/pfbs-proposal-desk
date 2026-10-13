@@ -139,6 +139,16 @@ The old Cloudflare app keeps working until step 3, so nothing breaks while you t
 4. Every week: Schedule → **Crew emails** → pick the week → **Draft** for each tech (English or Spanish) → Outlook.
 5. Keep TechSched and HCP's schedule running side by side for a week or two, then stop entering jobs there.
 
+## Money tab and your accountant (update 021)
+
+1. Run `sql/021_money.sql` in Supabase.
+2. Add your accountant: Settings → Team → add her email with the role **Accountant**. She signs in like everyone else
+   and sees only **Money** and **Clients**: what's owed, aging by client, payments, deposits, and CSV exports.
+   She can record payments and deposit dates; she can't see proposals, estimates or commission.
+3. **Switch-over day** (when you stop invoicing in HousecallPro): HousecallPro → Invoices → Actions → Export, then
+   CRM Settings → Invoicing → **Import open HousecallPro invoices…**. The open balances come in as sent invoices, and new
+   CRM invoices continue after the highest number. From then on, record payments only in the CRM.
+
 ## SharePoint auto-save
 
 1. entra.microsoft.com → App registrations → **New registration**: name `PFBS Proposal Desk`, accounts in this organization only.

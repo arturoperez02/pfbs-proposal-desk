@@ -212,6 +212,45 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 9. Money: aging, partial payment, deposit, CSV, HCP open-invoice import; accountant sees only Money and Clients
+{
+  const inv = [
+    { id: 'a1', inv_no: 1400, num: null, job_no: '9001', status: 'Sent', invoice_date: '2026-07-01', terms_days: 30, due_date: '2026-07-31', total: 1000, paid: 0, items: [{ description: 'x', amount: 1000 }], bill_to: { name: 'Late Co' }, source: 'hcp' },
+    { id: 'a2', inv_no: 1401, num: null, status: 'Sent', invoice_date: iso(new Date()), terms_days: 30, due_date: '2099-01-01', total: 500, paid: 0, items: [{ description: 'y', amount: 500 }], bill_to: { name: 'Fresh Co' } } ];
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('money: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_INV = x; window.MOCK_RPC = { import_hcp_invoices: ({ payload }) => { window.__hcpinv = payload.invoices; return { data: { imported: payload.invoices.length, linked_to_jobs: 0, next_invoice_no: 1523 }, error: null }; } }; }, inv);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="money"]', T); await pg.waitForTimeout(300);
+  const txt = await pg.$eval('#moneyBody', e => e.innerText);
+  assert.ok(/Owed to us\s*\$1,500\.00/i.test(txt) && /Past due\s*\$1,000\.00/i.test(txt), 'owed and past due');
+  assert.ok(/Late Co[\s\S]*Over 90 days|Late Co\t\t\t\t\$1,000\.00/.test(txt) || /Late Co/.test(txt), 'aging lists the client');
+  await pg.click('[data-mpay="a1"]', T); await pg.fill('dialog.ask [name="amount"]', '400'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(500);
+  assert.match(await pg.$eval('#moneyBody', e => e.innerText), /Owed to us\s*\$1,100\.00/i, 'partial payment lowers what is owed');
+  assert.match(await pg.$eval('#moneyBody', e => e.innerText), /Not deposited yet\s*\$400\.00/i);
+  await pg.click('[data-dep]', T); await pg.waitForTimeout(400);
+  assert.match(await pg.$eval('#moneyBody', e => e.innerText), /Not deposited yet\s*\$0\.00/i, 'marked deposited');
+  const dl = pg.waitForEvent('download', T); await pg.click('#mCsvPay'); const f = await (await dl).path(); const csv = fs.readFileSync(f, 'utf8');
+  assert.ok(/Date received,Deposited,Invoice #,Customer/.test(csv) && /1400,Late Co,9001,Check,400\.00/.test(csv), 'payments CSV');
+  // HCP open invoices import
+  fs.writeFileSync(path.join(B, 'hcpinv.csv'), 'Invoice #,Customer name,Invoice status,Amount due,Due date,Latest send date,Job #\n1500,Demo Co,Open,$720.00,2026-09-09 12:00:00 -0700,2026-08-10 06:00:00 -0700,="10155"\n1499,Demo Co,Paid,$0.00,,,9000\n');
+  await pg.click('#tabs [data-tab="settings"]', T); await pg.waitForTimeout(300);
+  await pg.setInputFiles('#invImport', path.join(B, 'hcpinv.csv')); await pg.waitForSelector('dialog.ask', T);
+  assert.match(await pg.$eval('dialog.ask', e => e.innerText), /1 open invoices, \$720\.00 still owed/);
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(400);
+  assert.deepEqual(await pg.evaluate(() => window.__hcpinv.map(x => [x.inv_no, x.job_no, x.amount_due])), [['1500', '10155', '$720.00']], 'only open ones, job # cleaned');
+  await pg.close();
+  const pa = await b.newPage({ viewport: { width: 1300, height: 900 } }); pa.on('pageerror', e => errs.push('accountant: ' + e.message));
+  await pa.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pa.addInitScript(x => { window.MOCK_TEAM = [{ email: 'acct@x.com', name: 'Book Keeper', role: 'Accountant', active: true }]; window.MOCK_INV = x; }, inv);
+  await pa.goto(BASE + '?u=acct@x.com'); await pa.waitForTimeout(900);
+  const tabs = await pa.$$eval('#tabs [data-tab]', b => b.filter(x => !x.hidden).map(x => x.dataset.tab));
+  assert.deepEqual(tabs, ['money', 'clients'], 'accountant sees Money and Clients only');
+  assert.match(await pa.$eval('#moneyBody', e => e.innerText), /Owed to us/i);
+  await pa.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing passed');

@@ -260,6 +260,7 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="sales" aria-selected="false" id="salesTab" hidden>My Sales</button>
     <button role="tab" data-tab="orders" aria-selected="false" id="ordersTab" hidden>Jobs</button>
     <button role="tab" data-tab="schedule" aria-selected="false" id="schedTab">Schedule</button>
+    <button role="tab" data-tab="money" aria-selected="false" id="moneyTab" hidden>Money</button>
     <button role="tab" data-tab="comm" aria-selected="false" id="commTab" hidden>Commission</button>
     <button role="tab" data-tab="clients" aria-selected="false" id="clientsTab">Clients</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
@@ -346,6 +347,12 @@ td input,td select{padding:5px 8px}
     <div id="schedBody"></div>
   </section>
 
+  <section id="view-money" hidden>
+    <h2>Money</h2>
+    <div class="sub" style="margin-bottom:12px">What clients owe, how late, what came in and what still needs depositing.</div>
+    <div id="moneyBody"></div>
+  </section>
+
   <section id="view-clients" hidden>
     <h2>Clients</h2>
     <div class="sub" style="margin-bottom:12px">Every client with its contacts, properties, proposals and what they owe. Proposals and invoices fill in from here.</div>
@@ -377,7 +384,7 @@ const SUPABASE_ANON_KEY = window.PFBS_CONFIG?.SUPABASE_ANON_KEY || '';
 (() => {
 const STATUSES = ['Lead','Estimating','Needs Review','Sent','Budget','Approved','Scheduled','Invoiced','Paid','Declined','Expired','Withdrawn'];
 const WON = ['Approved','Scheduled','Invoiced','Paid'], LOST = ['Declined','Expired'], OPEN = ['Sent','Follow-up'], PRE = ['Estimating','Needs Review'], PRELOCK = ['Lead','Estimating','Needs Review'];
-const ROLES = ['Owner','Admin','Senior Estimator','Estimator','BD Rep'];
+const ROLES = ['Owner','Admin','Senior Estimator','Estimator','BD Rep','Accountant'];
 const DEFAULTS = {
   reportAppUrl: 'https://pfbs-reports.arturo-perez408.workers.dev', goals: [], services: [], frequencies: [['One-time',1],['Annual',1]], leadSources: [], lostReasons: [],
   clientTypes: [['New client',0.10],['Existing client - new property',0.05],['House account',0]],
@@ -2132,7 +2139,7 @@ async function invPay(v){
   if(error){ toast(error.message); return false; }
   toast(amt>=bal-0.005?`Invoice #${v.inv_no} paid in full`:`Payment recorded · ${usd(Math.round((bal-amt)*100)/100)} still due`); return true;
 }
-async function invRefresh(n){ await loadInvoices(n); loadOpenInvoices(); await loadProposals(); }
+async function invRefresh(n){ await loadInvoices(n); loadOpenInvoices(); loadMoney(); await loadProposals(); }
 async function invOpen(p, id){ if(!INV[p.num]) await loadInvoices(p.num); const v=(INV[p.num]||[]).find(x=>x.id===id); if(v) invEdit(p, v); }
 function invOpenNew(p){ if(!INVOK){ toast('Run database update 018 in Supabase first.'); return; } invEdit(p, invBlank(p)); }
 // ---------- clients, contacts, properties (update 019) ----------
@@ -3069,6 +3076,7 @@ function renderSettings(){
       <label class="f">Old service report app link (clear it once you switch)<input id="s-rpt" type="url" value="${esc(S.reportAppUrl||'')}" ${ro}></label></div>
     <div class="card listedit"><h3>Invoicing</h3>
       ${canPay()?`<label class="f">Next invoice #<span style="display:flex;gap:6px"><input id="s-invno" type="number" placeholder="Loading…" style="flex:1"><button type="button" class="btn small" id="invNoSave">Set</button></span><span class="note" style="margin:2px 0 0">On switch-over day, set this to your last HousecallPro invoice # + 1. Saved on its own.</span></label>`:''}
+      ${['Owner','Admin'].includes(role())?`<div class="toolbar" style="margin:0 0 8px"><label class="btn ghost small">Import open HousecallPro invoices…<input type="file" id="invImport" accept=".csv,text/csv" hidden></label></div>`:''}
       <label class="f">Payment terms (days)<input id="s-invterms" type="number" value="${esc(invS('terms'))}" ${ro}></label>
       <label class="f">Message on every invoice<textarea id="s-invmsg" rows="2" ${ro}>${esc(invS('message'))}</textarea></label>
       <label class="f">Terms at the bottom<textarea id="s-invfoot" rows="3" ${ro}>${esc(invS('footer'))}</textarea></label>
@@ -3446,7 +3454,65 @@ function visitsHTML(p){ if(!VISOK) return '<div class="note" style="margin:0">Ru
     ${past.length?`<div class="note">${past.length} past visit${past.length===1?'':'s'}; last ${fmtD(past[past.length-1].visit_date)}.</div>`:''}
     ${isManager()?`<div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn small" id="visNew">${L.length?'Add a visit':'Schedule'}</button></div>`:''}`; }
 function visNewFor(p){ if(!VISOK){ toast('Run database update 020 in Supabase first.'); return; } const v=visitDraft(p, iso(today())); visEdit(v, {suggestRepeat:isRecurring(p) && !SER.some(s=>s.num===p.num)}); }
-$('#settingsBody').addEventListener('change', async e=>{ if(e.target.id!=='clImport' || !e.target.files[0]) return; const f=e.target.files[0]; e.target.value=''; await importHcp(f); });
+// ---------- Money (update 021): what's owed, aging, payments, deposits, exports — for the office and the accountant ----------
+let MINV=[], MPAY=[], MOK=true, mMonth=null;
+const canMoney = () => isManager() || role()==='Accountant';
+async function loadMoney(){
+  if(!canMoney()) return;
+  const [a,b]=await Promise.all([sb.from('invoices').select('*').order('inv_no',{ascending:false}), sb.from('invoice_payments').select('*').order('id',{ascending:false})]);
+  if(a.error){ MOK=!invMissing(a.error); MINV=[]; MPAY=[]; } else { MOK=true; MINV=a.data||[]; MPAY=b.data||[]; }
+  if(current()==='money') renderMoney();
+}
+const daysLate = v => { const d=invDue(v); return d ? Math.round((today()-parse(d))/864e5) : 0; };
+const invName = v => v.bill_to?.name || (P.find(p=>p.num===v.num)||{}).client || '—';
+function renderMoney(){
+  const box=$('#moneyBody'); if(!box) return;
+  if(!MOK){ box.innerHTML='<div class="card"><div class="note" style="margin:0">Run database updates 018 and 021 in Supabase to turn this on.</div></div>'; return; }
+  if(!mMonth) mMonth=iso(today()).slice(0,7);
+  const open=MINV.filter(v=>v.status==='Sent' && invBal(v)>0.004), tot=open.reduce((s,v)=>s+invBal(v),0), late=open.filter(v=>daysLate(v)>0), lateAmt=late.reduce((s,v)=>s+invBal(v),0);
+  const live=MPAY.filter(x=>!x.voided), mPays=live.filter(x=>String(x.received_on).slice(0,7)===mMonth), mAmt=mPays.reduce((s,x)=>s+Number(x.amount),0), undep=live.filter(x=>!x.deposited_on), undepAmt=undep.reduce((s,x)=>s+Number(x.amount),0);
+  const B=['Not due yet','1–30 days','31–60 days','61–90 days','Over 90 days'], bk=v=>{ const d=daysLate(v); return d<=0?0:d<=30?1:d<=60?2:d<=90?3:4; };
+  const byC=new Map(); for(const v of open){ const n=invName(v); if(!byC.has(n)) byC.set(n,[0,0,0,0,0]); byC.get(n)[bk(v)]+=invBal(v); }
+  const rowsC=[...byC].map(([n,a])=>[n,a,a.reduce((s,x)=>s+x,0)]).sort((a,b)=>b[2]-a[2]), colT=B.map((_,i)=>rowsC.reduce((s,r)=>s+r[1][i],0));
+  const invOf=id=>MINV.find(v=>v.id===id)||{};
+  box.innerHTML=`<div class="kpis">
+      <div class="kpi"><div class="l">Owed to us</div><div class="v">${usd(tot)}</div><div class="note" style="margin:2px 0 0">${open.length} open invoice${open.length===1?'':'s'}</div></div>
+      <div class="kpi"><div class="l">Past due</div><div class="v" style="${lateAmt>0?'color:var(--bad)':''}">${usd(lateAmt)}</div><div class="note" style="margin:2px 0 0">${late.length} invoice${late.length===1?'':'s'}</div></div>
+      <div class="kpi"><div class="l">Collected in ${parse(mMonth+'-01').toLocaleDateString('en-US',{month:'long'})}</div><div class="v">${usd(mAmt)}</div><div class="note" style="margin:2px 0 0">${mPays.length} payment${mPays.length===1?'':'s'}</div></div>
+      <div class="kpi"><div class="l">Not deposited yet</div><div class="v">${usd(undepAmt)}</div><div class="note" style="margin:2px 0 0">${undep.length} check${undep.length===1?'':'s'}/payment${undep.length===1?'':'s'}</div></div></div>
+    <div class="cards" style="margin-top:12px">
+    <div class="card"><h3>Who owes what (aging)</h3><div class="tablewrap"><table><thead><tr><th>Client</th>${B.map(b=>`<th class="r">${b}</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>
+      ${rowsC.map(([n,a,t])=>`<tr><td class="wrap">${esc(n)}</td>${a.map((x,i)=>`<td class="r num ${i>=3&&x?'down':''}">${x?usd(x):''}</td>`).join('')}<td class="r num"><b>${usd(t)}</b></td></tr>`).join('') || `<tr><td colspan="7" class="empty">Nothing owed.</td></tr>`}
+      ${rowsC.length?`<tr><td><b>Total</b></td>${colT.map(x=>`<td class="r num"><b>${x?usd(x):''}</b></td>`).join('')}<td class="r num"><b>${usd(tot)}</b></td></tr>`:''}</tbody></table></div>
+      <div class="note">Days past each invoice's due date. Click a client's invoices below to record a payment.</div></div>
+    <div class="card"><h3>Open invoices (${open.length})</h3><div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Client</th><th class="hide-sm">Job</th><th>Due</th><th class="r">Late</th><th class="r">Balance</th><th></th></tr></thead><tbody>
+      ${open.sort((a,b)=>String(invDue(a)).localeCompare(String(invDue(b)))).map(v=>{ const d=daysLate(v); return `<tr><td class="num"><b>#${esc(v.inv_no)}</b>${v.source==='hcp'?'<div class="note" style="margin:0">from HCP</div>':''}</td><td class="wrap">${esc(invName(v))}</td><td class="hide-sm num">${esc(v.job_no||v.num||'')}</td><td class="num">${fmtD(invDue(v))}</td>
+        <td class="r num ${d>30?'down':''}">${d>0?d+'d':''}</td><td class="r num">${usd(invBal(v))}${num(v.paid)>0?`<div class="note" style="margin:0">of ${usd(v.total)}</div>`:''}</td><td style="white-space:nowrap"><button type="button" class="btn ghost small" data-mopen="${esc(v.id)}">Open</button> <button type="button" class="btn small" data-mpay="${esc(v.id)}">Payment</button></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">No open invoices.</td></tr>'}
+    </tbody></table></div></div>
+    <div class="card"><div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0 0 8px"><h3 style="margin:0">Payments received</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="month" id="mMonth" value="${esc(mMonth)}" aria-label="Month"><button type="button" class="btn ghost small" id="mCsvPay">Payments CSV</button><button type="button" class="btn ghost small" id="mCsvInv">Invoices CSV</button></div></div>
+      <div class="tablewrap"><table class="qatable"><thead><tr><th>Received</th><th>Invoice</th><th>Client</th><th>How</th><th class="r">Amount</th><th>Deposited</th></tr></thead><tbody>
+      ${mPays.sort((a,b)=>String(b.received_on).localeCompare(String(a.received_on))).map(x=>{ const v=invOf(x.invoice_id); return `<tr><td class="num">${fmtD(x.received_on)}</td><td class="num">#${esc(v.inv_no||'')}</td><td class="wrap">${esc(invName(v))}${x.note?`<div class="note" style="margin:0">${esc(x.note)}</div>`:''}</td><td>${esc(x.method)}</td><td class="r num">${usd(x.amount)}</td>
+        <td>${x.deposited_on?fmtD(x.deposited_on):`<span style="white-space:nowrap"><input type="date" class="qa qd" data-depd="${esc(x.id)}" value="${iso(today())}" aria-label="Deposit date"> <button type="button" class="btn small" data-dep="${esc(x.id)}">Deposited</button></span>`}</td></tr>`; }).join('') || '<tr><td colspan="6" class="empty">No payments this month.</td></tr>'}
+      ${mPays.length?`<tr><td colspan="4"><b>Total</b></td><td class="r num"><b>${usd(mAmt)}</b></td><td></td></tr>`:''}</tbody></table></div>
+      ${undep.length && undep.some(x=>String(x.received_on).slice(0,7)!==mMonth)?`<div class="note">${undep.filter(x=>String(x.received_on).slice(0,7)!==mMonth).length} payment(s) from other months are not marked deposited yet.</div>`:''}
+      <div class="note">The CSV files open in Excel and import into most accounting software. Payments can't be edited: void and re-record from the invoice.</div></div></div>`;
+}
+const csvCell = x => { const s=String(x??''); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+function csvDownload(name, head, rows){ const t=[head, ...rows].map(r=>r.map(csvCell).join(',')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+t],{type:'text/csv'})); a.download=name; document.body.appendChild(a); a.click(); a.remove(); }
+function moneyPseudo(v){ return P.find(p=>p.num===v.num) || {num:v.num||'', client:invName(v), property:'', items:[], poRequired:false}; }
+async function importHcpInvoices(file){
+  const rows=parseCsv(await file.text()).filter(r=>/open/i.test(r['Invoice status']||'')), amt=s=>Number(String(s||'').replace(/[^0-9.\-]/g,''))||0;
+  if(!rows.length){ toast('No open invoices in that file. Use HousecallPro → Invoices → Actions → Export.'); return; }
+  const total=rows.reduce((s,r)=>s+amt(r['Amount due']),0);
+  const ok=await formDialog('Import open HousecallPro invoices', `<div class="note" style="margin:0 0 8px">${rows.length} open invoices, ${usd(total)} still owed. Each comes in as a sent invoice with its balance, linked to its job by the HCP job # where the CRM has it. Invoice numbers already in the CRM are skipped, and new CRM invoices continue after the highest number.</div>
+    <div class="note" style="margin:0"><b>Do this on switch-over day</b>, when you stop invoicing in HousecallPro, so payments are only recorded in one place.</div>`, 'Import');
+  if(!ok) return;
+  const inv=rows.map(r=>({inv_no:r['Invoice #'], customer:r['Customer name'], amount_due:r['Amount due'], due_date:r['Due date'], job_no:String(r['Job #']||'').replace(/\D/g,''), sent_on:r['Latest send date']}));
+  const {data,error}=await sb.rpc('import_hcp_invoices',{payload:{invoices:inv}}); if(error){ toast(invMissing(error)?'Run database update 021 in Supabase first.':error.message); return; }
+  toast(`Imported ${data.imported} open invoices (${data.linked_to_jobs} linked to jobs). Next CRM invoice: #${data.next_invoice_no}`); loadMoney(); loadOpenInvoices();
+}
+$('#settingsBody').addEventListener('change', async e=>{ if(e.target.id==='invImport' && e.target.files[0]){ const f=e.target.files[0]; e.target.value=''; await importHcpInvoices(f); return; } if(e.target.id!=='clImport' || !e.target.files[0]) return; const f=e.target.files[0]; e.target.value=''; await importHcp(f); });
 $('#settingsBody').addEventListener('click', async e=>{ if(e.target.id!=='clLink') return; const {data,error}=await sb.rpc('link_clients'); if(error){ toast(invMissing(error)?'Run database update 019 in Supabase first.':error.message); return; }
   toast(`Linked ${data.proposals_linked_to_client} proposals to clients and ${data.proposals_linked_to_property} to properties`); loadProposals(); });
 $('#clientsBody').addEventListener('input', e=>{ if(e.target.id==='clQ'){ clQuery=e.target.value; const pos=e.target.selectionStart; renderClients(); const q=$('#clQ'); q.focus(); q.setSelectionRange(pos,pos); } });
@@ -3478,14 +3544,24 @@ $('#schedBody').addEventListener('click', e=>{ const t=e.target;
     document.body.appendChild(d); d.addEventListener('click', ev=>{ const x=ev.target.closest('[data-vis]'); if(x){ d.close(); d.remove(); const v=VIS.find(y=>y.id===x.dataset.vis); if(v) visEdit(v); } if(ev.target.closest('[data-a="x"]')){ d.close(); d.remove(); } }); d.showModal(); return; }
   const cell=t.closest('[data-day]'); if(cell && isManager()){ const v=visitDraft(null, cell.dataset.day); v.kind='job'; v.title=''; visEdit(v); }
 });
-function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','schedule','comm','clients','settings']) $('#view-'+v).hidden = v!==view; }
+$('#moneyBody').addEventListener('change', e=>{ if(e.target.id==='mMonth'){ mMonth=e.target.value||iso(today()).slice(0,7); renderMoney(); } });
+$('#moneyBody').addEventListener('click', async e=>{ const t=e.target;
+  const pb=t.closest('[data-mpay]'); if(pb){ const v=MINV.find(x=>x.id===pb.dataset.mpay); if(v && await invPay(v)){ await loadMoney(); loadOpenInvoices(); if(isManager()) loadProposals(); } return; }
+  const ob=t.closest('[data-mopen]'); if(ob){ const v=MINV.find(x=>x.id===ob.dataset.mopen); if(!v) return; const pays=MPAY.filter(x=>x.invoice_id===v.id); invEdit(moneyPseudo(v), {...v, payments:pays}); return; }
+  const db=t.closest('[data-dep]'); if(db){ const id=db.dataset.dep, d=document.querySelector(`[data-depd="${id}"]`)?.value||iso(today()); db.disabled=true; const {error}=await sb.from('invoice_payments').update({deposited_on:d}).eq('id',id); if(error){ db.disabled=false; toast(error.message); return; } toast('Marked deposited'); loadMoney(); return; }
+  if(t.id==='mCsvPay'){ const L=MPAY.filter(x=>String(x.received_on).slice(0,7)===mMonth); csvDownload(`Payments ${mMonth}.csv`, ['Date received','Deposited','Invoice #','Customer','Job #','Method','Amount','Void','Note','Recorded by'],
+      L.map(x=>{ const v=MINV.find(y=>y.id===x.invoice_id)||{}; return [x.received_on, x.deposited_on||'', v.inv_no||'', invName(v), v.job_no||v.num||'', x.method, Number(x.amount).toFixed(2), x.voided?'void: '+(x.void_reason||''):'', x.note||'', x.recorded_by||'']; })); return; }
+  if(t.id==='mCsvInv'){ const L=MINV.filter(v=>String(v.invoice_date).slice(0,7)===mMonth || (v.status==='Sent' && invBal(v)>0.004)); csvDownload(`Invoices ${mMonth} and open.csv`, ['Invoice #','Customer','Invoice date','Due date','Job #','PO #','Amount','Paid','Balance','Status','Service date','Billing email'],
+      L.map(v=>[v.inv_no, invName(v), v.invoice_date, invDue(v), v.job_no||v.num||'', v.po_number||'', Number(v.total).toFixed(2), Number(v.paid).toFixed(2), invBal(v).toFixed(2), v.status, v.service_date||'', v.bill_to?.email||''])); return; }
+});
+function show(view){ for(const v of ['login','blocked','setup','pipeline','leads','sales','orders','schedule','money','comm','clients','settings']) $('#view-'+v).hidden = v!==view; }
 $('#tabs').addEventListener('click', e=>{
   const b=e.target.closest('[data-tab]'); if(!b) return;
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x===b);
   show(b.dataset.tab); renderAll();
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
-function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='clients') renderClients(); if(c==='schedule') renderSchedule(); if(c==='settings') renderSettings(); }
+function renderAll(){ const c=current(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='clients') renderClients(); if(c==='schedule') renderSchedule(); if(c==='money') renderMoney(); if(c==='settings') renderSettings(); }
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
@@ -3524,11 +3600,13 @@ async function start(session){
   await Promise.all([loadTeam(), loadSettings()]);
   $('#salesTab').hidden = false;
   $('#ordersTab').hidden = m.role==='BD Rep';
-  $('#commTab').hidden = false;
+  $('#commTab').hidden = m.role==='Accountant';
+  $('#moneyTab').hidden = !(['Owner','Admin','Senior Estimator','Accountant'].includes(m.role));
+  if(m.role==='Accountant'){ for(const t of ['pipeline','leads','sales','orders','schedule','settings']) { const b=document.querySelector(`#tabs [data-tab="${t}"]`); if(b) b.hidden=true; } }
   $('#salesTab').textContent = ['BD Rep','Estimator'].includes(m.role) ? 'My Sales' : 'Sales';
-  const home = ['BD Rep','Estimator'].includes(m.role) ? 'sales' : m.role==='Admin' ? 'orders' : 'pipeline';
+  const home = m.role==='Accountant' ? 'money' : ['BD Rep','Estimator'].includes(m.role) ? 'sales' : m.role==='Admin' ? 'orders' : 'pipeline';
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===home); show(home);
-  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); if(isManager()) loadOpenInvoices();
+  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); if(isManager()) loadOpenInvoices();
   window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })
