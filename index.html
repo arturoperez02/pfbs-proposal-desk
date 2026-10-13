@@ -2382,7 +2382,10 @@ function coKey(n){ const w=String(n||'').toLowerCase().replace(/^\s*\d+\s*-\s*/,
 function hcpGroup(rows){
   const G=new Map(), V=new Map();
   for(const r of rows){
-    const company0=(r['Company']||'').trim(), home=/homeowner/i.test(r['Customer Type']||'') && !company0, company=(r['Company']||'').trim(), display=(r['Display Name']||'').trim(), person=[r['First Name'],r['Last Name']].map(s=>(s||'').trim()).filter(Boolean).join(' ');
+    const company0=(r['Company']||'').trim(), home=/homeowner/i.test(r['Customer Type']||'') && !company0, person=[r['First Name'],r['Last Name']].map(s=>(s||'').trim()).filter(Boolean).join(' ');
+    // "The Broadway c/o Greystar": the building is the property, the company after c/o is the client
+    const co2=company0.split(/\s+c\/o\s+/i), company=(co2.length>1&&co2[0].trim()?co2.slice(1).join(' c/o ').trim():company0), display=(co2.length>1&&co2[0].trim()&&!(r['Display Name']||'').trim()?co2[0].trim():(r['Display Name']||'').trim());
+    const coBldg=co2.length>1&&co2[0].trim()?co2[0].trim():'';
     const name=home ? (display||person) : (company||display||person); if(!name) continue;
     const key=coKey(name); if(G.has(key) && !home) G.get(key).kind='Business'; if(!G.has(key)){ G.set(key,{name, kind:home?'Homeowner':'Business', aliases:[], hcp_ids:[], contacts:[], properties:[], po_required:false, notes:[], billing_address:''}); V.set(key,new Map()); }
     const g=G.get(key), vv=V.get(key); vv.set(name,(vv.get(name)||0)+1);
@@ -2398,7 +2401,7 @@ function hcpGroup(rows){
     const sites=addrs.filter(a=>!a.billing), bill=addrs.find(a=>a.billing);
     if(bill && !g.billing_address && sites.length) g.billing_address=bill.address;
     const use=sites.length?sites:addrs;
-    use.forEach(a=>g.properties.push({contact_hcp_id:r['ID']||'', contact_email:r['Email']||'', name:(use.length===1 && display && norm(display)!==norm(name) && norm(display)!==norm(person))?display:'', address:a.address, notes:a.notes}));
+    use.forEach(a=>g.properties.push({contact_hcp_id:r['ID']||'', contact_email:r['Email']||'', name:(use.length===1 && coBldg)?coBldg:(use.length===1 && display && norm(display)!==norm(name) && norm(display)!==norm(person))?display:'', address:a.address, notes:a.notes}));
   }
   // the name used most (not a "c/o" one) becomes the client name; the other spellings become aliases
   for(const [key,g] of G){ const vs=[...V.get(key)].sort((a,b)=>b[1]-a[1] || (/^\s*c\/o/i.test(a[0])?1:0)-(/^\s*c\/o/i.test(b[0])?1:0) || a[0].length-b[0].length).map(x=>x[0]);

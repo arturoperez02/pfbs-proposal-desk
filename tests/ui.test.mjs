@@ -113,7 +113,8 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const csv = 'First Name,Last Name,Display Name,Mobile Number,Email,Additional Emails,Company,Role,Tags,Notes,ID,Customer Type,Address_1 Street Line 1,Address_1 Street Line 2,Address_1 City,Address_1 State,Address_1 Postal Code,Address_1 Billing?,Address_1 Notes,Address_2 Street Line 1,Address_2 Street Line 2,Address_2 City,Address_2 State,Address_2 Postal Code,Address_2 Billing?,Address_2 Notes\n'
     + "Pat,Demo,Demo Tower,5105550101,pat@demo.example,,Demo Realty,Property Manager,'PO# Required',\"Keys at desk, ask for \"\"Sam\"\"\",111,business,1 Billing Way,Ste 5,Oakland,CA,94612,true,,100 Demo Ave,,Walnut Creek,CA,94596,,Lift needed\n"
     + 'Lee,Demo,Demo Plaza,,lee@demo.example,ap@demo.example,Demo Realty,,,,112,business,200 Demo Blvd,,Oakland,CA,94607,true,,,,,,,,\n'
-    + 'Jo,Home,Jo Home,,jo@home.example,,,,,,113,homeowner,9 Home Ct,,Fremont,CA,94538,true,,,,,,,,\n';
+    + 'Jo,Home,Jo Home,,jo@home.example,,,,,,113,homeowner,9 Home Ct,,Fremont,CA,94538,true,,,,,,,,\n'
+    + ',,The Annex c/o Demo Realty,,annex@demo.example,,The Annex c/o Demo Realty,,,,114,business,300 Annex St,,Oakland,CA,94607,,,,,,,,,\n';
   fs.writeFileSync(path.join(B, 'customers.csv'), csv);
   const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('clients: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
@@ -125,12 +126,13 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.goto(BASE); await pg.waitForTimeout(900);
   await pg.click('#tabs [data-tab="settings"]', T); await pg.waitForTimeout(400);
   await pg.setInputFiles('#clImport', path.join(B, 'customers.csv')); await pg.waitForSelector('dialog.ask', T);
-  assert.match(await pg.$eval('dialog.ask', e => e.innerText), /2 clients \(1 companies, 1 homeowners\), 3 contacts, 3 properties/);
+  assert.match(await pg.$eval('dialog.ask', e => e.innerText), /2 clients \(1 companies, 1 homeowners\), 4 contacts, 4 properties/);
   await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
   const imp = await pg.evaluate(() => window.__imp); const demo = imp.find(c => c.name === 'Demo Realty');
   assert.deepEqual([demo.contacts.map(k => k.name), demo.po_required, demo.aliases, demo.billing_address, demo.properties.map(x => x.address)],
-    [['Pat Demo', 'Lee Demo'], true, ['Demo Tower', 'Demo Plaza'], '1 Billing Way Ste 5\nOakland, CA 94612', ['100 Demo Ave\nWalnut Creek, CA 94596', '200 Demo Blvd\nOakland, CA 94607']], 'people at one company → one client; billing office is not a property');
+    [['Pat Demo', 'Lee Demo', 'The Annex c/o Demo Realty'], true, ['Demo Tower', 'Demo Plaza', 'The Annex c/o Demo Realty'], '1 Billing Way Ste 5\nOakland, CA 94612', ['100 Demo Ave\nWalnut Creek, CA 94596', '200 Demo Blvd\nOakland, CA 94607', '300 Annex St\nOakland, CA 94607']], 'people at one company → one client; billing office is not a property');
   assert.equal(demo.notes, 'Keys at desk, ask for "Sam"', 'quoted CSV fields parse');
+  assert.ok(demo.properties.some(x => x.name === 'The Annex' && /300 Annex St/.test(x.address)), '"Building c/o Company" → property under that company');
   assert.equal(imp.find(c => c.kind === 'Homeowner').name, 'Jo Home');
   await pg.click('#tabs [data-tab="clients"]', T); await pg.waitForTimeout(300);
   await pg.fill('#clQ', 'walnut'); await pg.waitForTimeout(200);
