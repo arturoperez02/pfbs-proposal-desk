@@ -537,6 +537,17 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 22. Phone width: no tab is wider than the screen (tables scroll inside their card)
+{
+  const pg = await b.newPage({ viewport: { width: 390, height: 900 } }); pg.on('pageerror', e => errs.push('phone: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort()); await pg.addInitScript(() => sessionStorage.clear());
+  await pg.goto(BASE); await pg.waitForTimeout(800);
+  const tabs = await pg.$$eval('#tabs [data-tab]', L => L.filter(x => !x.hidden).map(x => x.dataset.tab)), wide = [];
+  for (const t of tabs) { await pg.click('#tabs [data-tab="' + t + '"]'); await pg.waitForTimeout(200); const ov = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth); if (ov > 4) wide.push(t + ' +' + ov + 'px'); }
+  assert.deepEqual(wide, [], 'no sideways scrolling on a phone');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
