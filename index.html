@@ -770,6 +770,8 @@ function drawDrawer(){
       ${!canReview()&&PRE.includes(orig?.status??'Estimating')?'<div class="note">Move it to Needs Review when it is ready. The senior estimator sends it.</div>':''}
       ${p.status==='Budget' ? `<div class="grid2" style="margin-top:6px">${field('Budget year','budgetYear','number')}${field('Check back on','budgetCheck','date')}</div>
         <div class="note">Budget numbers stay out of the pipeline, win rate and follow-up emails. On the check-back date it shows under Follow-up due. When the client is ready, click <b>Sent</b> to turn it into a proposal (follow-ups start that day), or <b>Approved</b> if they approve the budget price.</div>` : `<div id="openline">${openLine(p)}</div>`}
+      ${!isNew && ed && ['Sent','Budget','Needs Review'].includes(p.status) && isManager() ? `<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn" id="convJob">✓ Client approved: convert to job</button><span class="note" style="margin:0">Approves it, gives it a job #, and opens the schedule.</span></div>` : ''}
+      ${!isNew && p.status==='Approved' && isManager() && VISOK && !VIS.some(v=>v.num===p.num) ? `<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn" id="convSched">Schedule this job</button></div>` : ''}
       ${won && !isNew && ed ? `<div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn ghost small" id="bdNext">Next year's budget proposal +${Math.round(incPct()*1000)/10}%</button></div>` : ''}
       ${!isNew && p.status!=='Lead' ? `<div class="revline"><span>Revision <b>${p.rev||1}</b>${(p.revisions||[]).length?` · ${(p.revisions||[]).map(r=>`Rev ${r.rev}: ${money(r.amount)} on ${fmtD(r.date)}`).join(' · ')}`:''}</span>${ed && !PRE.includes(p.status) && outcome(p)!=='Won' ? `<button type="button" class="btn ghost small" id="revBtn">${draft._revArmed?'Confirm: start Rev '+((p.rev||1)+1):'Create revision'}</button>`:''}</div>`:''}
       ${p.renewalOf?`<div class="gpline">Renewal of <a href="#" data-open="${esc(p.renewalOf)}">${esc(p.renewalOf)}</a></div>`:''}
@@ -904,7 +906,7 @@ function missingForSend(p){ const m=[];
   if(num(p.gp)==null && !estimateTotals(p)) m.push('an estimate (or Est. gross profit)');
   return m; }
 const SEND_STEPS=['Needs Review','Sent','Budget'];
-function setStatus(st){
+function setStatus(st, o={}){
   if(draft.status===st) return;
   if(SEND_STEPS.includes(st) && PRELOCK.includes(draft.status)){ syncFromItems(draft); const m=missingForSend(draft);
     if(m.length){ const msg=`Before it goes ${st==='Needs Review'?'to review':'out'}, add: ${m.join(', ')}.`;
@@ -917,7 +919,17 @@ function setStatus(st){
   if(st==='Paid' && !draft.datePaid) draft.datePaid=iso(today());
   if(WON.includes(st) && !(draft.parts||[]).length){ const b=buildParts(draft); if(b.length){ draft.parts=b; const r=b.filter(isRent).length; toast(`From the estimate: ${b.length-r} part${b.length-r===1?'':'s'} to order${r?`, ${r} rental${r===1?'':'s'} to reserve`:''}. Save to keep.`); } }
   drawDrawer();
-  if(st==='Approved' && !draft.hcpJob && !JOBNO_ON){ const dr=draft; askJobNo(dr).then(v=>{ if(v && draft===dr){ draft.hcpJob=v; const f=$('#f-hcpJob'); if(f) f.value=v; $('#dmsg').textContent='HCP job # added. Save to keep it.'; } }); }
+  if(st==='Approved' && !draft.hcpJob && !JOBNO_ON && !o.noAsk){ const dr=draft; askJobNo(dr).then(v=>{ if(v && draft===dr){ draft.hcpJob=v; const f=$('#f-hcpJob'); if(f) f.value=v; $('#dmsg').textContent='HCP job # added. Save to keep it.'; } }); }
+}
+// one click: approved → job (with its job #) → schedule it
+async function convertToJob(){
+  if(!draft || isNew) return; const n=draft.num;
+  setStatus('Approved', {noAsk:true}); if(draft.status!=='Approved') return;
+  if(!JOBNO_ON && !draft.hcpJob){ const v=await askJobNo(draft); if(v) draft.hcpJob=v; }
+  await save();
+  const p=P.find(x=>x.num===n); if(!p || !WON.includes(p.status)) return;
+  toast(p.hcpJob?`Job #${p.hcpJob} created. Now schedule it.`:'Job created. Now schedule it.');
+  if(VISOK) visNewFor(p);
 }
 async function save(after, o={}){
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
@@ -954,6 +966,8 @@ $('#drawer').addEventListener('click', e=>{ const m=e.target.closest('[data-stmo
 $('#drawer').addEventListener('click', e=>{ if(!draft) return; const t=e.target;
   if(t.closest('#invNew')){ invOpenNew(draft); return; }
   if(t.closest('#visNew')){ visNewFor(draft); return; }
+  if(t.closest('#convSched')){ visNewFor(draft); return; }
+  if(t.closest('#convJob')){ convertToJob(); return; }
   const vo=t.closest('[data-visopen]'); if(vo){ e.preventDefault(); const v=VIS.find(x=>x.id===vo.dataset.visopen); if(v) visEdit(v); return; }
   const o=t.closest('[data-inv]'); if(o){ invOpen(draft, o.dataset.inv); return; }
   const py=t.closest('[data-invpay]'); if(py){ const v=(INV[draft.num]||[]).find(x=>x.id===py.dataset.invpay); if(v) invPay(v).then(ok=>{ if(ok) invRefresh(v.num); }); } });

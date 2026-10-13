@@ -280,6 +280,22 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 11. Convert to job: approve → job # → schedule opens
+{
+  const sp = { num: 'PFBS-0995', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Demo Co', property: '5 Demo St', site_address: '5 Demo St', amount: 2400, status: 'Sent', items: [{ type: 'Service', qty: 1, description: 'Pressure wash plaza', amount: 2400 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('convert: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, sp); await pg.goto(BASE); await pg.waitForTimeout(800);
+  await pg.fill('#q', 'PFBS-0995').catch(() => {}); await pg.waitForTimeout(300);
+  await pg.click('tr[data-id="PFBS-0995"]', T); await pg.waitForSelector('#convJob', T);
+  await pg.click('#convJob'); await pg.waitForSelector('#askJob', T); await pg.fill('#askJob', '10250'); await pg.click('dialog.ask [data-a="ok"]');
+  await pg.waitForSelector('dialog.inved [name="visit_date"]', T);
+  const st = await pg.evaluate(() => { const p = DBX.proposals.find(x => x.num === 'PFBS-0995'); return [p.status, p.hcp_job]; });
+  assert.deepEqual(st, ['Approved', '10250'], 'approved with its job #');
+  assert.match(await pg.$eval('[name="num"] option:checked', e => e.textContent), /Demo Co · 5 Demo St — Pressure wash plaza/, 'schedule opens on that job');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing passed');
