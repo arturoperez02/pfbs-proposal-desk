@@ -133,3 +133,26 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.equal((await q1(`select jsonb_array_length(backup_json()->'visits') n`)).n, 1);
   console.log('db: schedule checks passed');
 }
+
+// ---------- money (update 021) ----------
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role; update proposals set hcp_job='10155', status='Invoiced' where num='PFBS-0780'; insert into team_members(email,name,role) values ('acct@x.com','Book Keeper','Accountant') on conflict do nothing;`);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  const pl = { invoices: [{ inv_no: '1500', customer: 'Acme Property Group', amount_due: '$720.00', due_date: '2026-09-09 12:00:00 -0700', job_no: '10155' }, { inv_no: '1501', customer: 'Nobody', amount_due: '$0.00' }, { inv_no: '1502', customer: 'Someone New', amount_due: '1,200.50', due_date: '2026-11-05' }] };
+  let r = (await q1(`select import_hcp_invoices('${JSON.stringify(pl)}'::jsonb) r`)).r;
+  assert.deepEqual([r.imported, r.skipped, r.linked_to_jobs], [2, 1, 1]);
+  r = (await q1(`select import_hcp_invoices('${JSON.stringify(pl)}'::jsonb) r`)).r; assert.equal(r.imported, 0, 'importing twice adds nothing');
+  const i = await q1(`select status, total, due_date, source, num, bill_to->>'name' n from invoices where inv_no=1500`);
+  assert.deepEqual([i.status, Number(i.total), i.due_date.toISOString().slice(0, 10), i.source, i.num, i.n], ['Sent', 720, '2026-09-09', 'hcp', 'PFBS-0780', 'Acme Property Group']);
+  assert.ok(Number((await q1(`select next_invoice_no() n`)).n) > 1526, 'numbering stays ahead of imported numbers');
+  await db.exec(`reset role; select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000003","email":"acct@x.com"}',false); set role authenticated;`);
+  assert.ok((await q1(`select count(*)::int c from invoices`)).c >= 3, 'accountant sees invoices');
+  assert.equal(await db.query(`select count(*)::int c from proposals`).then(r => r.rows[0].c, () => 0), 0, 'accountant does not see proposals');
+  const id = (await q1(`select id from invoices where inv_no=1500`)).id;
+  await db.query(`insert into invoice_payments(invoice_id, amount, method, received_on) values ('${id}', 720, 'Check', '2026-10-01')`);
+  assert.equal((await q1(`select status from invoices where inv_no=1500`)).status, 'Paid', 'accountant records payments');
+  await assert.rejects(db.query(`select import_hcp_invoices('{}'::jsonb)`), /owner or admin/);
+  await db.exec('reset role');
+  console.log('db: money checks passed');
+}
