@@ -68,7 +68,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 #drawer .dtabs button{border:0;background:none;padding:10px 16px;font-weight:600;color:var(--muted,#666);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
 #drawer .dtabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 h3.setsec{margin:28px 0 10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#666)} h3.setsec:first-child{margin-top:4px}
-dialog.ask.inved{max-width:760px} .invrow{display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid var(--line)} .invrow textarea{grid-column:1/-1;min-height:34px;font-size:13px} .invhead{display:flex;justify-content:space-between;margin:10px 0 6px;font-size:13px;color:var(--mut,#666)} .flag.ok{background:#e3f4e8;color:#1e6b3a}
+dialog.ask.inved{max-width:760px} .inved:not(.linepo) .invrow [data-f="po"]{display:none} .inved.linepo .invrow{grid-template-columns:1fr 130px 110px auto} .invrow{display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid var(--line)} .invrow textarea{grid-column:1/-1;min-height:34px;font-size:13px} .invhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:10px 0 6px;font-size:13px;color:var(--mut,#666)} .flag.ok{background:#e3f4e8;color:#1e6b3a}
 dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px} tr.voided td{color:var(--muted,#888)}
 .btn.small{padding:5px 10px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -1942,7 +1942,7 @@ const invPlace = (v,p) => (p&&p.property) || String(v.service_address||'').split
 function invEmail(v,p){ const n=v.inv_no, place=invPlace(v,p), em=String(v.bill_to?.email||'').toLowerCase(), c=p&&p.contactEmail&&em.includes(String(p.contactEmail).toLowerCase());
   const first=c?(p.contactName||'').trim().split(/\s+/)[0]:'';
   return { to:String(v.bill_to?.email||'').split(/[;,\s]+/).filter(Boolean).join('; '),
-    subject:`Invoice #${n} from PF Building Services – ${place}${v.po_number?` (PO ${v.po_number})`:''}`,
+    subject:`Invoice #${n} from PF Building Services – ${place}${(()=>{ const pos=v.po_number?[v.po_number]:[...new Set((v.items||[]).map(i=>i.po).filter(Boolean))]; return pos.length?` (PO ${pos.slice(0,3).join(', ')}${pos.length>3?'…':''})`:''; })()}`,
     body:`${first?`Hi ${first},`:'Hello,'}\n\nAttached is invoice #${n} for ${place}. Please let me know if you have any questions.\n\nThank you for your business.` }; }
 async function makeInvoicePdf(v, p){
   if(!window.jspdf){ toast('PDF tools did not load. Check your connection and reload.'); return null; }
@@ -1950,7 +1950,7 @@ async function makeInvoicePdf(v, p){
   if(logo) doc.addImage(logo,'JPEG',L0,40,150,35);
   doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0); doc.text('PF Building Services',L0,92);
   // summary box
-  const bx=340, rows=[['JOB','#'+(v.job_no||p?.num||'')], ...(v.job_no&&p?.num?[['PFBS #',p.num]]:[]), ['INVOICE','#'+v.inv_no], ...(v.po_number?[['PO #',v.po_number]]:[]),
+  const bx=340, rows=[['JOB','#'+(v.job_no||p?.num||'')], ...(v.job_no&&p?.num?[['PFBS #',p.num]]:[]), ['INVOICE','#'+v.inv_no], ...(v.po_number?[['PO #',v.po_number]]:(v.items||[]).some(i=>i.po)?[['PO #','See each service']]:[]),
     ['SERVICE DATE',fmtInv(v.service_date)], ['INVOICE DATE',fmtInv(v.invoice_date)], ['PAYMENT TERMS',`Net ${num(v.terms_days)??30}`], ['DUE DATE',fmtInv(invDue(v))]];
   let y=58; doc.setDrawColor(150); doc.setLineWidth(0.6);
   const boxH=rows.length*17+38; doc.rect(bx,44,R0-bx,boxH);
@@ -1971,12 +1971,15 @@ async function makeInvoicePdf(v, p){
   doc.setFontSize(11); doc.setTextColor(...GRAY); doc.text('INVOICE',L0,y); y+=10;
   doc.setFillColor(178,178,178); doc.rect(L0,y,R0-L0,18,'F'); doc.setTextColor(255); doc.setFontSize(9); doc.text('Services',L0+8,y+12); doc.text('Amount',R0-8,y+12,{align:'right'}); y+=32; doc.setTextColor(0);
   const brk=need=>{ if(y+need>720){ doc.addPage(); y=60; } };
-  for(const it of (v.items||[])){
+  const IT=v.items||[];
+  IT.forEach((it,k)=>{
     const d=doc.splitTextToSize(String(it.description||''),R0-L0-110), nn=String(it.notes||'').split('\n').map(s=>s.trim()).filter(Boolean);
-    brk(d.length*12+nn.length*11+14); doc.setFontSize(9.5); doc.text(d,L0+8,y); if(num(it.amount)!=null) doc.text(usd(it.amount),R0-8,y,{align:'right'}); y+=d.length*12;
-    doc.setFontSize(8); doc.setTextColor(...GRAY); for(const n of nn){ const t=doc.splitTextToSize(/^[-–•]/.test(n)?n:'- '+n,R0-L0-120); doc.text(t,L0+8,y); y+=t.length*10.5; } doc.setTextColor(0); y+=8;
-  }
-  doc.setDrawColor(190); doc.line(L0,y,R0,y); y+=22; brk(100);
+    brk(d.length*12+nn.length*11+(it.po?12:0)+18); doc.setFontSize(9.5); doc.text(d,L0+8,y); if(num(it.amount)!=null) doc.text(usd(it.amount),R0-8,y,{align:'right'}); y+=d.length*12;
+    if(it.po){ doc.setFontSize(8.5); doc.setFont('helvetica','bold'); doc.text('PO # '+it.po,L0+8,y); doc.setFont('helvetica','normal'); y+=11; }
+    doc.setFontSize(8); doc.setTextColor(...GRAY); for(const n of nn){ const t=doc.splitTextToSize(/^[-–•]/.test(n)?n:'- '+n,R0-L0-120); doc.text(t,L0+8,y); y+=t.length*10.5; } doc.setTextColor(0);
+    y+=4; if(k<IT.length-1){ doc.setDrawColor(225); doc.setLineWidth(0.5); doc.line(L0,y,R0,y); y+=14; } else y+=4;
+  });
+  doc.setDrawColor(150); doc.setLineWidth(0.8); doc.line(L0,y,R0,y); y+=22; brk(100);
   const tl=[['Subtotal',usd(v.total)],['Job Total',usd(v.total)]]; if(num(v.paid)>0) tl.push(['Payments received','-'+usd(v.paid)]);
   doc.setFontSize(9.5); tl.forEach(([a,b])=>{ doc.text(a,360,y); doc.text(b,R0-8,y,{align:'right'}); y+=20; });
   doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Amount Due',360,y+2); doc.text(usd(invBal(v)),R0-8,y+2,{align:'right'}); doc.setFont('helvetica','normal'); y+=40;
@@ -1991,8 +1994,8 @@ const invFile = (v,p) => `Invoice ${v.inv_no} - ${invPlace(v,p).replace(/[\\/:*?
 // the editor: everything in one place, filled from the job; saving writes PO# and billing back to the job so it is typed once
 function invEdit(p, v){
   const ro=v.status==='Paid'||v.status==='Void', dis=ro?'disabled':'', prior=(INV[p.num]||[]).filter(x=>x.status!=='Void'&&x.id!==v.id).reduce((s,x)=>s+(num(x.total)||0),0);
-  const d=document.createElement('dialog'); d.className='ask inved';
-  const row=it=>`<div class="invrow"><input data-f="description" value="${esc(it.description||'')}" placeholder="Service" aria-label="Service" ${dis}><input data-f="amount" type="number" step="0.01" inputmode="decimal" value="${esc(it.amount??'')}" placeholder="$" aria-label="Amount" ${dis}>${ro?'':'<button type="button" class="btn ghost small" data-a="rm" aria-label="Remove line">✕</button>'}<textarea data-f="notes" rows="1" placeholder="Notes under the line (one per line), e.g. Includes boom rental" aria-label="Notes under the line" ${dis}>${esc(it.notes||'')}</textarea></div>`;
+  const d=document.createElement('dialog'); d.className='ask inved'+((v.items||[]).some(i=>i.po)?' linepo':'');
+  const row=it=>`<div class="invrow"><input data-f="description" value="${esc(it.description||'')}" placeholder="Service" aria-label="Service" ${dis}><input data-f="po" value="${esc(it.po||'')}" placeholder="PO #" aria-label="PO # for this service" ${dis}><input data-f="amount" type="number" step="0.01" inputmode="decimal" value="${esc(it.amount??'')}" placeholder="$" aria-label="Amount" ${dis}>${ro?'':'<button type="button" class="btn ghost small" data-a="rm" aria-label="Remove line">✕</button>'}<textarea data-f="notes" rows="1" placeholder="Notes under the line (one per line), e.g. Includes boom rental" aria-label="Notes under the line" ${dis}>${esc(it.notes||'')}</textarea></div>`;
   const pays=(v.payments||[]).map(x=>`<div class="${x.voided?'note':''}" style="margin:2px 0">${x.voided?'<s>':''}${usd(x.amount)} · ${esc(x.method)} · received ${fmtD(x.received_on)}${x.deposited_on?' · deposited '+fmtD(x.deposited_on):''}${x.note?' · '+esc(x.note):''} · ${esc(x.recorded_by||'')}${x.voided?'</s> void: '+esc(x.void_reason||''):` <button type="button" class="btn ghost small" data-a="payvoid" data-id="${esc(x.id)}">Void</button>`}</div>`).join('');
   const [lab]=invLabel(v);
   d.innerHTML=`<h3>${v.inv_no?`Invoice #${esc(v.inv_no)}`:'New invoice'} · ${esc(p.num)} <span class="flag">${esc(lab)}</span></h3>
@@ -2009,7 +2012,7 @@ function invEdit(p, v){
       <label class="f">Billing address<textarea name="bill_address" rows="2" ${dis}>${esc(v.bill_to?.address||'')}</textarea></label>
       <label class="f full">Service address<textarea name="service_address" rows="2" ${dis}>${esc(v.service_address||'')}</textarea></label>
     </div>
-    <div class="invhead"><b>Services</b><span>Amount</span></div><div id="invItems">${(v.items||[]).map(row).join('')}</div>
+    <div class="invhead"><b>Services</b><label style="font-weight:400"><input type="checkbox" id="invLinePo" ${(v.items||[]).some(i=>i.po)?'checked':''} ${dis}> PO# per service</label><span>Amount</span></div><div id="invItems">${(v.items||[]).map(row).join('')}</div>
     ${ro?'':'<button type="button" class="btn ghost small" data-a="add">+ Line</button>'}
     <div class="gpline" style="text-align:right">Total <b id="invTot">${usd(v.total)}</b>${num(v.paid)>0?` · paid ${usd(v.paid)} · <b>due ${usd(invBal(v))}</b>`:''}</div>
     <label class="f">Message on the invoice<textarea name="message" rows="2" ${dis}>${esc(v.message||'')}</textarea></label>
@@ -2028,7 +2031,7 @@ function invEdit(p, v){
   const collect=()=>{ const f=n=>d.querySelector(`[name="${n}"]`).value.trim();
     return { invoice_date:f('invoice_date')||iso(today()), service_date:f('service_date')||null, terms_days:Math.max(0,Math.round(num(f('terms_days'))??30)), po_number:f('po_number')||null, job_no:f('job_no')||null,
       bill_to:{name:f('bill_name'), address:f('bill_address'), email:f('bill_email')}, service_address:f('service_address'), message:f('message'),
-      items:[...d.querySelectorAll('.invrow')].map(r=>({description:r.querySelector('[data-f="description"]').value.trim(), notes:r.querySelector('[data-f="notes"]').value.trim(), amount:num(r.querySelector('[data-f="amount"]').value)})).filter(x=>x.description||x.amount!=null) }; };
+      items:[...d.querySelectorAll('.invrow')].map(r=>{ const x={description:r.querySelector('[data-f="description"]').value.trim(), notes:r.querySelector('[data-f="notes"]').value.trim(), amount:num(r.querySelector('[data-f="amount"]').value)}; const po=r.querySelector('[data-f="po"]').value.trim(); if(d.classList.contains('linepo') && po) x.po=po; return x; }).filter(x=>x.description||x.amount!=null) }; };
   const close=()=>{ d.close(); d.remove(); };
   async function save(){
     const row=collect(); if(!row.items.length){ toast('Add at least one line.'); return null; }
@@ -2044,6 +2047,7 @@ function invEdit(p, v){
     await loadInvoices(p.num); return v;
   }
   d.addEventListener('input', e=>{ if(e.target.matches('[data-f="amount"]')) tot(); });
+  d.addEventListener('change', e=>{ if(e.target.id==='invLinePo'){ d.classList.toggle('linepo', e.target.checked); if(e.target.checked) d.querySelector('.invrow [data-f="po"]')?.focus(); } });
   d.addEventListener('cancel', e=>{ e.preventDefault(); close(); });
   d.addEventListener('click', async e=>{ const b=e.target.closest('[data-a]'); if(!b) return; const a=b.dataset.a;
     if(a==='x') return close();
@@ -2060,7 +2064,8 @@ function invEdit(p, v){
       if(a==='pay'){ close(); if(await invPay(v)) await invRefresh(p.num); }
       if(a==='send'){
         const row=ro?v:collect();
-        if(p.poRequired && !row.po_number){ toast('This client requires a PO# on invoices. Add it first.'); d.querySelector('[name="po_number"]').focus(); return; }
+        if(p.poRequired===true||p.poRequired==='true'){ const lines=row.items||[], perLine=lines.length&&lines.every(i=>i.po);
+          if(!row.po_number && !perLine){ toast(lines.some(i=>i.po)?'This client requires a PO#: add one to every service, or one for the whole invoice.':'This client requires a PO# on invoices. Add it first.'); (ro?null:d.querySelector('[name="po_number"]'))?.focus(); return; } }
         if(!String(row.bill_to?.email||'').includes('@')){ toast('Add the billing email first.'); d.querySelector('[name="bill_email"]').focus(); return; }
         const saved=ro?v:await save(); if(!saved) return;
         const doc=await makeInvoicePdf(saved,p); if(!doc) return;
