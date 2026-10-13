@@ -676,7 +676,7 @@ function actText(a){
 function activityItems(){
   if(!actOK) return hist.map(h=>`<div>${fmtD(h.changed_at)} — ${esc(h.status)}${h.changed_by?' · '+esc(h.changed_by):''}</div>`).join('') + '<div class="note">Run database update 006 for the full activity log.</div>';
   if(!ACT.length) return '<div class="note" style="margin:0">No activity yet.</div>';
-  return ACT.map(a=>`<div class="act-${a.kind}"><span class="when">${new Date(a.at).toLocaleString([], {month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})}</span> <span class="who">${esc(a.by_name||'')}</span> ${actText(a)}</div>`).join('');
+  return ACT.map(a=>`<div class="act-${a.kind}"><span class="when">${new Date(a.at).toLocaleString('en-US', {month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})}</span> <span class="who">${esc(a.by_name||'')}</span> ${actText(a)}</div>`).join('');
 }
 async function addActivity(num, kind, note){
   const {error}=await sb.from('proposal_activity').insert({num, kind, note});
@@ -1256,7 +1256,7 @@ function renderHome(){
       </div><div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" data-go="schedule">Open schedule</button></div></div>
       <div class="card"><h3>Recent activity</h3><div class="hlist">
         ${HACT===null?'<div class="note" style="margin:0">Loading…</div>':HACT.length?HACT.map(a=>{ const p=P.find(x=>x.num===a.num), jn=p&&jobNoOf(p);
-          return `<div><span class="note" style="margin:0">${new Date(a.at).toLocaleString([], {month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})} · ${esc(a.by_name||'')}</span><br><a data-hopen="${esc(a.num)}">${jn?'Job #'+esc(jn):esc(a.num)}${p?' · '+esc(p.client||''):''}</a>: ${actText(a)}</div>`; }).join(''):'<div class="note" style="margin:0">No activity yet.</div>'}
+          return `<div><span class="note" style="margin:0">${new Date(a.at).toLocaleString('en-US', {month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})} · ${esc(a.by_name||'')}</span><br><a data-hopen="${esc(a.num)}">${jn?'Job #'+esc(jn):esc(a.num)}${p?' · '+esc(p.client||''):''}</a>: ${actText(a)}</div>`; }).join(''):'<div class="note" style="margin:0">No activity yet.</div>'}
       </div></div>
     </div>`;
 }
@@ -2795,7 +2795,7 @@ function renderComm(){
       <div class="tablewrap"><table><thead><tr><th>Paid on</th><th class="r">Amount</th><th>Method</th><th class="hide-sm">Reference</th><th class="hide-sm">Jobs</th><th class="hide-sm">Recorded by</th><th></th></tr></thead><tbody>
       ${mine.length?mine.map(x=>`<tr style="cursor:default" class="${x.voided?'voided':''}"><td class="num">${fmtD(x.paid_on)}</td><td class="r num">${x.voided?`<s>${money(x.amount)}</s>`:`<b>${money(x.amount)}</b>`}</td><td>${esc(x.method||'')}</td><td class="hide-sm">${esc(x.reference||'')}</td>
         <td class="hide-sm wrap">${(x.lines||[]).map(l=>`<a href="#" data-open="${esc(l.num)}">${esc(l.num)}</a> ${money(l.amount)}`).join(' · ')}</td>
-        <td class="hide-sm">${esc(x.recorded_by||'')}<div class="note" style="margin:0">${x.created_at?new Date(x.created_at).toLocaleString([], {month:'numeric',day:'numeric',year:'2-digit',hour:'numeric',minute:'2-digit'}):''}</div></td>
+        <td class="hide-sm">${esc(x.recorded_by||'')}<div class="note" style="margin:0">${x.created_at?new Date(x.created_at).toLocaleString('en-US', {month:'numeric',day:'numeric',year:'2-digit',hour:'numeric',minute:'2-digit'}):''}</div></td>
         <td>${x.voided?`<span class="flag bad">Voided</span><div class="note" style="margin:0">${esc(x.void_reason||'')} · ${esc(x.voided_by||'')}</div>`:(mgr?`<button class="btn ghost small" data-void="${x.id}">Void</button>`:'')}</td></tr>`).join('')
         : '<tr><td colspan="7" class="empty">No payouts recorded yet.</td></tr>'}</tbody></table></div>
       <div class="note">Payouts can't be edited or deleted. If one is wrong, void it with a reason and record it again; both stay on record.</div></div>
@@ -3343,7 +3343,7 @@ async function loadAdminLog(){
   const {data,error}=await sb.from('admin_log').select('*').order('at',{ascending:false}).limit(150);
   if(error){ box.innerHTML='<div class="note">Run database update 011 to turn on the change log.</div>'; return; }
   const short=v=>{ const t=String(v??''); return t.length>120?esc(t.slice(0,120))+'…':esc(t); };
-  box.innerHTML = data.length ? `<div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Area</th><th>What</th><th class="hide-sm">Before</th><th>After</th></tr></thead><tbody>${data.map(x=>`<tr style="cursor:default"><td class="num">${new Date(x.at).toLocaleString([], {month:'numeric',day:'numeric',year:'2-digit',hour:'numeric',minute:'2-digit'})}</td><td>${esc(x.by_name||'')}</td><td>${esc(x.area)}</td><td>${esc(x.item||'')}</td><td class="hide-sm wrap">${short(x.old_value)}</td><td class="wrap">${short(x.new_value)}</td></tr>`).join('')}</tbody></table></div>`
+  box.innerHTML = data.length ? `<div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Area</th><th>What</th><th class="hide-sm">Before</th><th>After</th></tr></thead><tbody>${data.map(x=>`<tr style="cursor:default"><td class="num">${new Date(x.at).toLocaleString('en-US', {month:'numeric',day:'numeric',year:'2-digit',hour:'numeric',minute:'2-digit'})}</td><td>${esc(x.by_name||'')}</td><td>${esc(x.area)}</td><td>${esc(x.item||'')}</td><td class="hide-sm wrap">${short(x.old_value)}</td><td class="wrap">${short(x.new_value)}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="note">No changes logged yet.</div>';
 }
 const cuList = d => d ? P.filter(p=>OPEN.includes(p.status) && p.dateSent && p.dateSent < d) : [];
