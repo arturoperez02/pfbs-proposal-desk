@@ -52,7 +52,7 @@ header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .cltabs{display:flex;gap:4px;border-bottom:1px solid var(--line)} .cltabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer} .cltabs button[aria-selected="true"]{color:var(--navy,#1F2A6B);border-bottom-color:var(--navy,#1F2A6B)}
 .clhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:10px 0 6px} .cltabs{margin-top:8px;overflow-x:auto;white-space:nowrap}
 .clgrid{display:grid;grid-template-columns:minmax(260px,360px) 1fr;gap:14px} @media (max-width:820px){ .clgrid{grid-template-columns:1fr} } .clgrid .card{margin:0 0 12px}
-.clsum{display:grid;gap:8px} .clsum span{display:block;font-size:12px;color:var(--muted)} .clsum b{font-weight:600} .clmap{width:100%;height:220px;border:0;display:block} .claddr{padding:6px 0 10px} .gmenu button{display:flex;justify-content:space-between;width:100%;text-align:left;background:none;border:0;padding:9px 12px;border-radius:6px;font:inherit;font-weight:600;cursor:pointer;color:inherit} .gmenu button:hover,.gmenu button:focus{background:var(--bg)} .gmenu small{font-weight:400;color:var(--muted)}
+.clsum{display:grid;gap:8px} .clsum span{display:block;font-size:12px;color:var(--muted)} .clsum b{font-weight:600} .clmap{width:100%;height:220px;border:0;display:block} .claddr{padding:6px 0 10px} .gmenu button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;text-align:left;background:none;border:0;padding:9px 12px;border-radius:6px;font:inherit;font-weight:600;cursor:pointer;color:inherit} .gmenu button:hover,.gmenu button:focus{background:var(--bg)} .gmenu small{font-weight:400;color:var(--muted)}
 .gsec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px 4px} .gitem{display:block;width:100%;text-align:left;background:none;border:0;padding:7px 10px;border-radius:6px;font:inherit;cursor:pointer;color:inherit} .gitem:hover,.gitem.on{background:var(--bg)} .gitem small{display:block;color:var(--muted);font-size:12px}
 @media (max-width:700px){ .gbar{flex-basis:100%;max-width:none} }
 .brand b{font-family:var(--display);font-size:24px;letter-spacing:.04em;color:#fff}
@@ -1247,11 +1247,11 @@ function newJobPage(recurring, o={}){
   const crewOpts=allTechs();
   d.innerHTML=`<div class="toolbar" style="justify-content:space-between;margin:0 0 10px"><h3 style="margin:0">New ${recurring?'recurring ':''}job</h3><div style="display:flex;gap:8px"><button type="button" class="btn ghost" data-a="x">Cancel</button><button type="button" class="btn" data-a="save">Save job</button></div></div>
   <div class="jp"><div>
-    <div class="card"><h4>Customer</h4>
+    <div class="card"><h4>Client</h4>
       <div class="jpsearch"><input name="cq" placeholder="Name, email, phone or address" autocomplete="off"><div class="jpres" hidden></div></div>
       <div class="jpsel" hidden></div>
-      <div style="text-align:right;margin-top:6px"><button type="button" class="btn ghost small" data-a="newcl">+ New customer</button></div>
-      <div class="jpnew" hidden><label class="f">Customer (company or homeowner)<input name="nc_name"></label><div class="row2"><label class="f">Contact<input name="nc_contact"></label><label class="f">Phone<input name="nc_phone"></label></div><label class="f">Email<input name="nc_email" type="email"></label></div>
+      <div style="text-align:right;margin-top:6px"><button type="button" class="btn ghost small" data-a="newcl">+ New client</button></div>
+      <div class="jpnew" hidden><label class="f">Client (company or homeowner)<input name="nc_name"></label><div class="row2"><label class="f">Contact<input name="nc_contact"></label><label class="f">Phone<input name="nc_phone"></label></div><label class="f">Email<input name="nc_email" type="email"></label></div>
       <label class="f" style="margin-top:6px">Job site address<textarea name="site" rows="2" placeholder="Street, city"></textarea></label>
     </div>
     <div class="card"><h4>Schedule</h4>
@@ -1288,7 +1288,7 @@ function newJobPage(recurring, o={}){
   const pickProp=()=>{ const pr=PROPS.find(x=>x.id===q('prop')?.value); st.prop=pr||null; if(pr){ q('site').value=pr.address||propLabel(pr); showContact(pr.contact_id&&CC.find(x=>x.id===pr.contact_id)); } else showContact(); busy(); };
   const results=()=>{ const t=norm(q('cq').value), box=d.querySelector('.jpres'); if(t.length<2){ box.hidden=true; return; }
     const L=CL.filter(c=>c.active!==false && [c.name, ...(c.aliases||[]), c.billing_email, ...contactsOf(c.id).flatMap(k=>[k.name,k.email,k.phone]), ...propsOf(c.id).flatMap(p=>[p.name,p.address])].some(x=>norm(x).includes(t))).slice(0,8);
-    box.innerHTML=L.map(c=>`<button type="button" data-cl="${esc(c.id)}">${esc(c.name)}<small>${propsOf(c.id).length} propert${propsOf(c.id).length===1?'y':'ies'}${contactsOf(c.id)[0]?' · '+esc(contactsOf(c.id)[0].name||contactsOf(c.id)[0].email||''):''}</small></button>`).join('')||'<div class="note" style="margin:8px">No match. Use + New customer.</div>'; box.hidden=false; };
+    box.innerHTML=L.map(c=>`<button type="button" data-cl="${esc(c.id)}">${esc(c.name)}<small>${propsOf(c.id).length} propert${propsOf(c.id).length===1?'y':'ies'}${contactsOf(c.id)[0]?' · '+esc(contactsOf(c.id)[0].name||contactsOf(c.id)[0].email||''):''}</small></button>`).join('')||'<div class="note" style="margin:8px">No match. Use + New client.</div>'; box.hidden=false; };
   const row0=()=>({visit_date:q('d1').value, end_date:q('d2').value&&q('d2').value>q('d1').value?q('d2').value:null, start_time:q('anytime').checked?null:q('t1').value||null, end_time:q('anytime').checked?null:q('t2').value||null, skip_weekends:q('skipwk').checked, kind:'job'});
   const busy=()=>{ const r=row0(); for(const l of d.querySelectorAll('.jpteam [data-tech]')){ const cf=r.visit_date?techConflicts({...r, techs:[l.dataset.tech]}, null):[], b=l.querySelector('.vbusy'); b.hidden=!cf.length; b.title=cf.map(c=>`${fmtD(c.day)} ${visLabel(c.v)}`).join('\n'); } };
   drawLines(); busy(); if(st.client) drawSel(); else q('cq').focus();
@@ -1310,7 +1310,7 @@ function newJobPage(recurring, o={}){
       const ln={kind, desc:it.name, qty:1, price:it.price??''}; if(empty>=0) st.lines[empty]=ln; else st.lines.push(ln); drawLines(); return; }
     if(a==='addsvc'||a==='addmat'){ st.lines.push({kind:a==='addsvc'?'svc':'mat', desc:'', qty:1, price:''}); drawLines(); d.querySelectorAll(`.jp${a==='addsvc'?'svc':'mat'} [data-lf="desc"]`).forEach((x,i,L)=>{ if(i===L.length-1) x.focus(); }); return; }
     if(a==='save'){
-      const name=st.client?st.client.name:(st.newClient?q('nc_name').value.trim():''); if(!name){ toast('Pick the customer, or add a new one.'); return; }
+      const name=st.client?st.client.name:(st.newClient?q('nc_name').value.trim():''); if(!name){ toast('Pick the client, or add a new one.'); return; }
       const lines=st.lines.filter(l=>l.desc.trim()); if(!lines.length){ toast('Add at least one service with a description.'); return; }
       const site=q('site').value.trim(); if(!site && !st.prop){ toast('Add the job site address.'); return; }
       if(!q('jtype').value){ const svcs=(S.services||[]).filter(x=>x!=='Multiple services'), txt=norm(lines.map(l=>l.desc).join(' ')), hit=svcs.find(x=>txt.includes(norm(x))) || svcs.find(x=>norm(x).split(' ').filter(w=>w.length>3).some(w=>txt.includes(w))); if(hit) q('jtype').value=hit; }   // job type from the line items: not picked twice
@@ -1346,7 +1346,7 @@ function newItems(){ const r=role(), mgr=isManager(), L=[];
   if(mgr) L.push(['job','Job','approved work, scheduled next'], ['recurring','Recurring Job','repeats on a schedule']);
   if(canCreate()) L.push(['proposal','Proposal','price it and send it to the client']);
   if(mgr && VISOK) L.push(['event','Event','meeting, training, day off']);
-  if(mgr || r==='Accountant') L.push(['customer','Customer','a client with contacts and properties']);
+  if(mgr || r==='Accountant') L.push(['customer','Client','a company or homeowner, with contacts and properties']);
   if(canLead()) L.push(['lead','Lead','someone asking for a quote']);
   return L; }
 async function newThing(k){
@@ -2692,7 +2692,7 @@ function renderClient(c){
     : CLTAB==='proposals' ? `<div class="card">${pTable(props.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="num"><b>${esc(p.num)}</b></td><td class="wrap">${esc(p.property||'')}${scopeLines(p)[0]?`<div class="note" style="margin:0">${esc(scopeLines(p)[0].slice(0,70))}</div>`:''}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="r num">${money(p.amount)}</td><td class="hide-sm num">${fmtD(p.dateSent)}</td></tr>`), ['Proposal','Property · scope','Status','Amount','Sent'])}</div>`
     : CLTAB==='jobs' ? `<div class="card">${pTable(jobs.map(p=>{ const st=jobState(p), jn=jobNoOf(p); return `<tr data-id="${esc(p.num)}" tabindex="0"><td class="num">${jn?`<span class="jobtag">#${esc(jn)}</span>`:'—'}</td><td class="wrap">${esc(p.property||'')}${scopeLines(p)[0]?`<div class="note" style="margin:0">${esc(scopeLines(p)[0].slice(0,70))}</div>`:''}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="num">${st.next?fmtD(st.next.visit_date):'—'}</td><td class="r num">${money(wonAmt(p))}</td></tr>`; }), ['Job #','Property · scope','Status','Next visit','Amount'])}</div>`
     : CLTAB==='invoices' ? `<div class="card">${pTable(inv.sort((a,b)=>Number(b.inv_no)-Number(a.inv_no)).map(v=>{ const [lab,cls]=invLabel(v); return `<tr data-mrow="${esc(v.id)}" style="cursor:pointer"><td class="num"><b>#${esc(v.inv_no)}</b>${v.source==='hcp'?'<div class="note" style="margin:0">from HCP</div>':''}</td><td class="wrap">${esc(invWhat(v)||'')}</td><td class="num">${esc(v.job_no||'')}</td><td class="num">${fmtD(invDue(v))}</td><td><span class="flag ${cls}">${esc(lab)}</span></td><td class="r num">${v.status==='Sent'?usd(invBal(v)):usd(v.total)}</td></tr>`; }), ['Invoice','What','Job #','Due','Status','Balance / total'])}</div>`
-    : CLTAB==='notes' ? `<div class="card"><h3>Customer notes</h3><textarea id="cl-notes" rows="4" placeholder="Private notes about this customer (office only)">${esc(c.notes||'')}</textarea><div class="note">Click Save changes to keep them.</div></div>
+    : CLTAB==='notes' ? `<div class="card"><h3>Client notes</h3><textarea id="cl-notes" rows="4" placeholder="Private notes about this client (office only)">${esc(c.notes||'')}</textarea><div class="note">Click Save changes to keep them.</div></div>
         <div class="card"><h3>Job notes</h3>${pp.filter(p=>String(p.notes||'').trim()).map(p=>`<div style="padding:6px 0;border-bottom:1px solid var(--line)"><a href="#" data-open="${esc(p.num)}">${jobNoOf(p)?'Job #'+esc(jobNoOf(p)):esc(p.num)} · ${esc(p.property||'')}</a><div style="white-space:pre-wrap;font-size:13px">${esc(p.notes)}</div></div>`).join('')||'<div class="note" style="margin:0">No notes on its proposals or jobs.</div>'}</div>`
     : `<div class="clgrid"><div>
         <div class="card"><h3>Summary</h3><div class="clsum"><div><span>Created</span><b>${fmtD(c.created_at)}</b></div>${canM?`<div><span>Lifetime value</span><b>${usd(life)}</b></div><div><span>Outstanding balance</span><b class="${owed>0.004?'down':''}">${usd(owed)}</b></div>`:''}<div><span>Jobs</span><b>${jobs.length}</b></div><div><span>Open proposals</span><b>${props.filter(p=>outcome(p)==='Open').length}</b></div></div></div>
@@ -2715,8 +2715,8 @@ function renderClient(c){
         <div class="card"><h3>Contacts</h3><div class="tablewrap"><table class="qatable"><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th></th></tr></thead><tbody id="clK">${contactsOf(c.id).map(kRow).join('')}</tbody></table></div>
           <button type="button" class="btn ghost small" id="clKAdd">+ Contact</button></div>
       </div></div>`;
-  box.innerHTML=`<div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><button class="btn ghost" id="clBack">‹ Customers</button></div>
-    <div class="clhead"><div><div class="note" style="margin:0">Customers › ${esc(c.name)}</div><h2 style="margin:2px 0 0">${esc(c.name)}${c.kind==='Homeowner'?' <span class="flag">Homeowner</span>':''}${c.po_required?' <span class="flag warn">PO# required</span>':''}${owed>0.004&&canM?` <span class="flag bad">${usd(owed)} owed</span>`:''}</h2></div>
+  box.innerHTML=`<div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><button class="btn ghost" id="clBack">‹ Clients</button></div>
+    <div class="clhead"><div><div class="note" style="margin:0">Clients › ${esc(c.name)}</div><h2 style="margin:2px 0 0">${esc(c.name)}${c.kind==='Homeowner'?' <span class="flag">Homeowner</span>':''}${c.po_required?' <span class="flag warn">PO# required</span>':''}${owed>0.004&&canM?` <span class="flag bad">${usd(owed)} owed</span>`:''}</h2></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">${mgr?'<button class="btn ghost small" data-clnew="job">+ Job</button>':''}${canCreate()?'<button class="btn ghost small" id="clProp">+ Proposal</button>':''}${canLead()?'<button class="btn ghost small" data-clnew="lead">+ Lead</button>':''}${mgr?'<button class="btn ghost small" data-clnew="recurring">+ Recurring job</button>':''}
         ${['Owner','Admin'].includes(role())?'<button class="btn ghost small" id="clArch">Archive</button>':''}<button class="btn small" id="clSave">Save changes</button></div></div>
     <div class="dtabs cltabs" role="tablist">${tabs.map(([k,t])=>`<button type="button" role="tab" data-cltab="${k}" aria-selected="${k===CLTAB}">${t}</button>`).join('')}</div>
