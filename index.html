@@ -3861,6 +3861,10 @@ async function loadMoney(){
 }
 const daysLate = v => { const d=invDue(v); return d ? Math.round((today()-parse(d))/864e5) : 0; };
 const invName = v => v.bill_to?.name || (P.find(p=>p.num===v.num)||{}).client || '—';
+let mFind='';
+function findInvHTML(){ const q=norm(mFind); if(!q) return '<div class="note" style="margin:0">Type an invoice #, client or job # to look up any invoice, paid ones from HousecallPro included.</div>';
+  const L=MINV.filter(v=>[v.inv_no, invName(v), v.job_no, v.num, v.po_number].some(x=>norm(x).includes(q))).sort((a,b)=>Number(b.inv_no)-Number(a.inv_no)).slice(0,40);
+  return L.length?`<div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Client</th><th>Job</th><th>Date</th><th class="r">Amount</th><th>Status</th><th></th></tr></thead><tbody>${L.map(v=>{ const [lab,cls]=invLabel(v); return `<tr><td class="num"><b>#${esc(v.inv_no)}</b>${v.source==='hcp'?'<div class="note" style="margin:0">from HCP</div>':''}</td><td class="wrap">${esc(invName(v))}</td><td class="num">${esc(v.job_no||v.num||'')}</td><td class="num">${fmtD(v.invoice_date)}</td><td class="r num">${num(v.total)?usd(v.total):'—'}</td><td><span class="flag ${cls}">${esc(lab)}</span></td><td><button type="button" class="btn ghost small" data-mopen="${esc(v.id)}">Open</button></td></tr>`; }).join('')}</tbody></table></div>`:'<div class="note" style="margin:0">No invoice matches.</div>'; }
 function renderMoney(){
   const box=$('#moneyBody'); if(!box) return;
   if(!MOK){ box.innerHTML='<div class="card"><div class="note" style="margin:0">Run database updates 018 and 021 in Supabase to turn this on.</div></div>'; return; }
@@ -3881,6 +3885,7 @@ function renderMoney(){
       ${rowsC.map(([n,a,t])=>`<tr><td class="wrap">${esc(n)}</td>${a.map((x,i)=>`<td class="r num ${i>=3&&x?'down':''}">${x?usd(x):''}</td>`).join('')}<td class="r num"><b>${usd(t)}</b></td></tr>`).join('') || `<tr><td colspan="7" class="empty">Nothing owed.</td></tr>`}
       ${rowsC.length?`<tr><td><b>Total</b></td>${colT.map(x=>`<td class="r num"><b>${x?usd(x):''}</b></td>`).join('')}<td class="r num"><b>${usd(tot)}</b></td></tr>`:''}</tbody></table></div>
       <div class="note">Days past each invoice's due date. Click a client's invoices below to record a payment.</div></div>
+    <div class="card"><h3>Find an invoice</h3><input id="mFind" type="search" placeholder="Invoice #, client or job #" value="${esc(mFind)}" style="margin:0 0 8px"><div id="mFindL">${findInvHTML()}</div></div>
     <div class="card"><h3>Open invoices (${open.length})</h3><div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Client</th><th class="hide-sm">Job</th><th>Due</th><th class="r">Late</th><th class="r">Balance</th><th></th></tr></thead><tbody>
       ${open.sort((a,b)=>String(invDue(a)).localeCompare(String(invDue(b)))).map(v=>{ const d=daysLate(v); return `<tr><td class="num"><b>#${esc(v.inv_no)}</b>${v.source==='hcp'?'<div class="note" style="margin:0">from HCP</div>':''}</td><td class="wrap">${esc(invName(v))}</td><td class="hide-sm num">${esc(v.job_no||v.num||'')}</td><td class="num">${fmtD(invDue(v))}</td>
         <td class="r num ${d>30?'down':''}">${d>0?d+'d':''}</td><td class="r num">${usd(invBal(v))}${num(v.paid)>0?`<div class="note" style="margin:0">of ${usd(v.total)}</div>`:''}</td><td style="white-space:nowrap"><button type="button" class="btn ghost small" data-mopen="${esc(v.id)}">Open</button> <button type="button" class="btn small" data-mpay="${esc(v.id)}">Payment</button></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">No open invoices.</td></tr>'}
@@ -3897,16 +3902,31 @@ function renderMoney(){
 const csvCell = x => { const s=String(x??''); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
 function csvDownload(name, head, rows){ const t=[head, ...rows].map(r=>r.map(csvCell).join(',')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+t],{type:'text/csv'})); a.download=name; document.body.appendChild(a); a.click(); a.remove(); }
 function moneyPseudo(v){ return P.find(p=>p.num===v.num) || {num:v.num||'', client:invName(v), property:'', items:[], poRequired:false}; }
+function pickFile(title, body){ return new Promise(res=>{ const d=document.createElement('dialog'); d.className='ask';
+  d.innerHTML=`<h3>${title}</h3>${body}<input type="file" accept=".csv,text/csv" id="pfFile" style="margin:8px 0"><div class="toolbar"><button type="button" class="btn ghost" data-a="skip">Skip</button><button type="button" class="btn" data-a="ok">Continue</button></div>`;
+  document.body.appendChild(d); const done=v=>{ d.close(); d.remove(); res(v); };
+  d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='skip') done(null); if(a==='ok') done(d.querySelector('#pfFile').files[0]||null); });
+  d.addEventListener('cancel', e=>{ e.preventDefault(); done(null); }); d.showModal(); }); }
+// paid HousecallPro invoices as history (update 028): amounts come from HCP's Jobs export, matched by job #
+async function importHcpPaid(all){
+  const paid=all.filter(r=>/paid/i.test(r['Invoice status']||'')); if(!paid.length) return '';
+  const jf=await pickFile(`Also keep the ${paid.length} paid invoices as a record?`, `<div class="note" style="margin:0">HousecallPro's invoice export doesn't include the amount of paid invoices. Pick HousecallPro's <b>Jobs</b> export (Customers → Jobs → Actions → Export) and each paid invoice gets its job's amount. Skip to leave the paid ones out. They come in as history only: they don't change any job, commission or what's owed.</div>`);
+  if(!jf) return '';
+  const jobs=new Map(parseCsv(await jf.text()).map(r=>[String(r['Job #']||'').replace(/\D/g,''), r['Job amount']]));
+  const inv=paid.map(r=>{ const jn=String(r['Job #']||'').replace(/\D/g,''); return {inv_no:r['Invoice #'], customer:r['Customer name'], amount:jobs.get(jn)||'', job_no:jn, sent_on:r['Latest send date']}; });
+  const {data,error}=await sb.rpc('import_hcp_paid_invoices',{payload:{invoices:inv}}); if(error){ toast(invMissing(error)?'Run database update 028 in Supabase first (paid invoices).':error.message); return ''; }
+  return ` · ${data.imported} paid invoices kept as history`; }
 async function importHcpInvoices(file){
-  const rows=parseCsv(await file.text()).filter(r=>/open/i.test(r['Invoice status']||'')), amt=s=>Number(String(s||'').replace(/[^0-9.\-]/g,''))||0;
-  if(!rows.length){ toast('No open invoices in that file. Use HousecallPro → Invoices → Actions → Export.'); return; }
+  const all=parseCsv(await file.text()), rows=all.filter(r=>/open/i.test(r['Invoice status']||'')), amt=s=>Number(String(s||'').replace(/[^0-9.\-]/g,''))||0;
+  if(!rows.length){ const h=await importHcpPaid(all); if(h) toast('Done'+h); else toast('No open invoices in that file. Use HousecallPro → Invoices → Actions → Export.'); loadMoney(); return; }
   const total=rows.reduce((s,r)=>s+amt(r['Amount due']),0);
   const ok=await formDialog('Import open HousecallPro invoices', `<div class="note" style="margin:0 0 8px">${rows.length} open invoices, ${usd(total)} still owed. Each comes in as a sent invoice with its balance, linked to its job by the HCP job # where the CRM has it. Invoice numbers already in the CRM are skipped, and new CRM invoices continue after the highest number.</div>
     <div class="note" style="margin:0"><b>Do this on switch-over day</b>, when you stop invoicing in HousecallPro, so payments are only recorded in one place.</div>`, 'Import');
   if(!ok) return;
   const inv=rows.map(r=>({inv_no:r['Invoice #'], customer:r['Customer name'], amount_due:r['Amount due'], due_date:r['Due date'], job_no:String(r['Job #']||'').replace(/\D/g,''), sent_on:r['Latest send date']}));
   const {data,error}=await sb.rpc('import_hcp_invoices',{payload:{invoices:inv}}); if(error){ toast(invMissing(error)?'Run database update 021 in Supabase first.':error.message); return; }
-  toast(`Imported ${data.imported} open invoices (${data.linked_to_jobs} linked to jobs). Next CRM invoice: #${data.next_invoice_no}`); loadMoney(); loadOpenInvoices();
+  const hist=await importHcpPaid(all);
+  toast(`Imported ${data.imported} open invoices (${data.linked_to_jobs} linked to jobs)${hist}. Next CRM invoice: #${data.next_invoice_no}`); loadMoney(); loadOpenInvoices();
 }
 $('#settingsBody').addEventListener('change', async e=>{ if(e.target.id==='invImport' && e.target.files[0]){ const f=e.target.files[0]; e.target.value=''; await importHcpInvoices(f); return; } if(e.target.id!=='clImport' || !e.target.files[0]) return; const f=e.target.files[0]; e.target.value=''; await importHcp(f); });
 $('#settingsBody').addEventListener('click', async e=>{ if(e.target.id!=='clLink') return; const {data,error}=await sb.rpc('link_clients'); if(error){ toast(invMissing(error)?'Run database update 019 in Supabase first.':error.message); return; }
@@ -3941,6 +3961,7 @@ $('#schedBody').addEventListener('click', e=>{ const t=e.target;
     document.body.appendChild(d); d.addEventListener('click', ev=>{ const x=ev.target.closest('[data-vis]'); if(x){ d.close(); d.remove(); const v=VIS.find(y=>y.id===x.dataset.vis); if(v) visEdit(v); } if(ev.target.closest('[data-a="x"]')){ d.close(); d.remove(); } }); d.showModal(); return; }
   const cell=t.closest('[data-day]'); if(cell && isManager()){ const v=visitDraft(null, cell.dataset.day); v.kind='job'; v.title=''; visEdit(v); }
 });
+$('#moneyBody').addEventListener('input', e=>{ if(e.target.id==='mFind'){ mFind=e.target.value; $('#mFindL').innerHTML=findInvHTML(); } });
 $('#moneyBody').addEventListener('change', e=>{ if(e.target.id==='mMonth'){ mMonth=e.target.value||iso(today()).slice(0,7); renderMoney(); } });
 $('#moneyBody').addEventListener('click', async e=>{ const t=e.target;
   const pb=t.closest('[data-mpay]'); if(pb){ const v=MINV.find(x=>x.id===pb.dataset.mpay); if(v && await invPay(v)){ await loadMoney(); loadOpenInvoices(); if(isManager()) loadProposals(); } return; }

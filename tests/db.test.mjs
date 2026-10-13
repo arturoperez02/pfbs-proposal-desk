@@ -255,3 +255,20 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: warehouse tables passed');
 }
+// ---------- paid HousecallPro invoices as history (update 028) ----------
+{
+  const owner = `select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`;
+  await db.exec('reset role');
+  const snap = async () => JSON.stringify((await db.query(`select num, status, date_paid from proposals order by num`)).rows);
+  const before = await snap();
+  await db.exec(owner);
+  const pl = { invoices: [{ inv_no: '901', customer: 'X Co', amount: '$1,250.00', job_no: '10302', sent_on: '2025-05-01 10:00:00 -0700' }, { inv_no: '902', customer: 'X Co', amount: '', job_no: '9', sent_on: '' }] };
+  const r = (await db.query(`select import_hcp_paid_invoices($1::jsonb) j`, [JSON.stringify(pl)])).rows[0].j;
+  assert.equal(r.imported, 2);
+  assert.equal((await db.query(`select import_hcp_paid_invoices($1::jsonb) j`, [JSON.stringify({ invoices: [{ inv_no: '901', amount: '5' }] })])).rows[0].j.skipped, 1, 'second run skips');
+  await db.exec('reset role');
+  const v = (await db.query(`select inv_no, status, total::float t, paid::float p, num from invoices where inv_no in (901,902) order by inv_no`)).rows;
+  assert.deepEqual(v.map(x => [x.status, x.t, x.p, x.num]), [['Paid', 1250, 1250, null], ['Paid', 0, 0, null]], 'history: paid, not linked to a CRM job');
+  assert.equal(await snap(), before, 'no job changed');
+  console.log('db: paid HCP invoices passed');
+}

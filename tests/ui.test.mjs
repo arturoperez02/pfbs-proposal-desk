@@ -232,7 +232,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   function iso(d) { return d.toISOString().slice(0, 10); }
   const pg = await b.newPage({ viewport: { width: 1300, height: 950 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('money: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
-  await pg.addInitScript(x => { window.MOCK_INV = x; window.MOCK_RPC = { import_hcp_invoices: ({ payload }) => { window.__hcpinv = payload.invoices; return { data: { imported: payload.invoices.length, linked_to_jobs: 0, next_invoice_no: 1523 }, error: null }; } }; }, inv);
+  await pg.addInitScript(x => { window.MOCK_INV = x; window.MOCK_RPC = { import_hcp_invoices: ({ payload }) => { window.__hcpinv = payload.invoices; return { data: { imported: payload.invoices.length, linked_to_jobs: 0, next_invoice_no: 1523 }, error: null }; }, import_hcp_paid_invoices: ({ payload }) => { window.__hcppaid = payload.invoices; return { data: { imported: payload.invoices.length, skipped: 0, next_invoice_no: 1523 }, error: null }; } }; }, inv);
   await pg.goto(BASE); await pg.waitForTimeout(900);
   await pg.click('#tabs [data-tab="money"]', T); await pg.waitForTimeout(300);
   const txt = await pg.$eval('#moneyBody', e => e.innerText);
@@ -252,6 +252,10 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.match(await pg.$eval('dialog.ask', e => e.innerText), /1 open invoices, \$720\.00 still owed/);
   await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(400);
   assert.deepEqual(await pg.evaluate(() => window.__hcpinv.map(x => [x.inv_no, x.job_no, x.amount_due])), [['1500', '10155', '$720.00']], 'only open ones, job # cleaned');
+  // paid ones as history, amounts from the HCP Jobs export
+  fs.writeFileSync(path.join(B, 'hcpjobs.csv'), 'Job #,Customer name,Job description,Job status,Address,Job created date,Job scheduled start date,Assigned employees,Job amount,Due amount\n9000,Demo Co,Windows,Completed,1 Demo St,,,,$1250.00,$0.00\n');
+  await pg.waitForSelector('#pfFile', T); await pg.setInputFiles('#pfFile', path.join(B, 'hcpjobs.csv')); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(400);
+  assert.deepEqual(await pg.evaluate(() => window.__hcppaid.map(x => [x.inv_no, x.job_no, x.amount])), [['1499', '9000', '$1250.00']], 'paid invoice kept with its job amount');
   await pg.close();
   const pa = await b.newPage({ viewport: { width: 1300, height: 900 } }); pa.on('pageerror', e => errs.push('accountant: ' + e.message));
   await pa.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());

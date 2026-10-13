@@ -193,3 +193,12 @@ To cut a device off, remove its email in Settings → Warehouse.
 3. Run it again whenever Oscar adds or changes jobs in TechSched: new ones are added, imported ones are updated, nothing
    is duplicated. TechSched is only read, never changed.
 4. When Oscar schedules in the CRM only, stop using TechSched; the crew emails come from Schedule → Crew emails.
+
+
+## Paid HousecallPro invoices as a record (update 028)
+
+1. Supabase (CRM project) → SQL Editor → run `sql/028_hcp_paid_invoices.sql`.
+2. In HousecallPro export both **Invoices** (Customers → Invoices → Actions → Export) and **Jobs** (Customers → Jobs → Actions → Export).
+3. CRM → Settings → Invoicing → Import open HousecallPro invoices → pick the invoices file → Import. When it asks about the
+   paid ones, pick the Jobs file → Continue. Paid invoices come in as history with their job's amount.
+4. Look any invoice up in Money → **Find an invoice**. History invoices never change a job, commission or what's owed.
