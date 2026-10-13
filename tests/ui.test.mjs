@@ -513,6 +513,30 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 21. Top bar: search everything, and "+ New" → Job (approved, then the schedule opens)
+{
+  const sj = { num: 'PFBS-1003', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Searchable Towers', property: '9 Find St', amount: 700, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10420', items: [{ type: 'Service', qty: 1, description: 'Skylight cleaning', amount: 700 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('top bar: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, sj);
+  await pg.goto(BASE); await pg.waitForTimeout(800);
+  assert.ok(await pg.isVisible('#gq'), 'search box in the top bar');
+  await pg.keyboard.press('/'); await pg.keyboard.type('10420'); await pg.waitForSelector('#gres .gitem', T);
+  assert.match(await pg.textContent('#gres'), /Job #10420 · Searchable Towers/, 'finds a job by its job #');
+  await pg.fill('#gq', 'skylight'); await pg.waitForTimeout(250); assert.match(await pg.textContent('#gres'), /Searchable Towers/, 'finds by scope of work');
+  await pg.keyboard.press('Enter'); await pg.waitForSelector('#drawer:not([hidden]) .jflow', T);
+  assert.match(await pg.textContent('.dhead'), /Job #10420/, 'Enter opens it');
+  await pg.click('#closeD'); await pg.waitForTimeout(200);
+  await pg.click('#gNew'); assert.deepEqual(await pg.$$eval('#gMenu [data-gnew]', L => L.map(x => x.dataset.gnew)), ['job', 'recurring', 'estimate', 'event', 'customer', 'lead'], 'HCP-style New menu');
+  await pg.click('[data-gnew="job"]'); await pg.waitForSelector('#f-client', T);
+  await pg.fill('#f-client', 'Walk-in Job Co'); await pg.dispatchEvent('#f-client', 'change');
+  await pg.fill('#f-property', '1 Quick St'); await pg.dispatchEvent('#f-property', 'change');
+  await pg.click('#saveD'); await pg.waitForSelector('dialog.inved [name="visit_date"]', T);
+  const made = await pg.evaluate(() => DBX.proposals.find(x => x.client === 'Walk-in Job Co'));
+  assert.equal(made.status, 'Approved', 'saved straight as a job'); assert.match(await pg.$eval('[name="num"] option:checked', e => e.textContent), /Walk-in Job Co/, 'schedule opens on it');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

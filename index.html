@@ -39,6 +39,12 @@ button,input,select,textarea{font:inherit;color:inherit}
 header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:#1F2A5C;color:#fff;padding-inline:16px}
 .bar-in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:16px;min-height:56px;flex-wrap:wrap}
 .brand{display:flex;align-items:baseline;gap:10px}
+.gbar{display:flex;gap:8px;align-items:center;flex:1 1 320px;max-width:520px} .gsearch{position:relative;flex:1} .gsearch input{width:100%;background:#fff;border-radius:20px;padding:7px 14px;border:1px solid transparent}
+.gnew{position:relative} .gnewbtn{background:#fff;color:#1F2A5C;border-radius:20px;font-weight:700;padding:7px 16px}
+.gpop{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface,#fff);color:var(--ink,#111);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);z-index:40;max-height:70vh;overflow:auto;padding:6px}
+.gmenu{left:auto;right:0;min-width:220px} .gmenu button{display:flex;justify-content:space-between;width:100%;text-align:left;background:none;border:0;padding:9px 12px;border-radius:6px;font:inherit;font-weight:600;cursor:pointer;color:inherit} .gmenu button:hover,.gmenu button:focus{background:var(--bg)} .gmenu small{font-weight:400;color:var(--muted)}
+.gsec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px 4px} .gitem{display:block;width:100%;text-align:left;background:none;border:0;padding:7px 10px;border-radius:6px;font:inherit;cursor:pointer;color:inherit} .gitem:hover,.gitem.on{background:var(--bg)} .gitem small{display:block;color:var(--muted);font-size:12px}
+@media (max-width:700px){ .gbar{flex-basis:100%;max-width:none} }
 .brand b{font-family:var(--display);font-size:24px;letter-spacing:.04em;color:#fff}
 .brand span{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#C9A227}
 nav.tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
@@ -273,6 +279,10 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="clients" aria-selected="false" id="clientsTab">Clients</button>
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
+  <div class="gbar" id="gbar" hidden>
+    <div class="gsearch"><input type="search" id="gq" placeholder="Search jobs, clients, invoices…  ( / )" autocomplete="off" aria-label="Search everything"><div class="gpop" id="gres" hidden></div></div>
+    <div class="gnew"><button type="button" class="btn small gnewbtn" id="gNew" aria-haspopup="true" aria-expanded="false">+ New</button><div class="gpop gmenu" id="gMenu" hidden></div></div>
+  </div>
   <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
 </div></header>
 
@@ -962,6 +972,7 @@ async function convertToJob(){
   if(VISOK) visNewFor(p);
 }
 async function save(after, o={}){
+  const jobFlow=draft&&isNew?draft._job:null;
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
   if(draft.status==='Lead' && !draft.sentBy){ $('#dmsg').textContent='Assign an estimator before saving the lead.'; return; }
   const btn=$('#saveD'); btn.disabled=true; $('#dmsg').textContent='Saving…';
@@ -979,6 +990,7 @@ async function save(after, o={}){
   highlight=saved.num; query=''; $('#q').value='';
   const fit=FILTERS.find(([n,f])=>n!=='All' && f(saved)); filter = fit ? fit[0] : 'All';
   closeDrawer(); await loadProposals();
+  if(jobFlow){ const pj=P.find(x=>x.num===saved.num); if(pj && VISOK){ toast(pj.hcpJob?`Job #${pj.hcpJob} created. Now schedule it.`:'Job created. Now schedule it.'); const v=visitDraft(pj, iso(today())); visEdit(v, {suggestRepeat: jobFlow==='recurring' || isRecurring(pj)}); } return; }
   if(o.reopen){ openDrawer(saved.num); return; }
   document.querySelector(`tr[data-id="${saved.num}"]`)?.scrollIntoView({block:'center', behavior:'smooth'});
   clearTimeout(save.t); save.t=setTimeout(()=>{ highlight=null; document.querySelectorAll('tr.hl').forEach(r=>r.classList.remove('hl')); }, 6000);
@@ -1197,6 +1209,61 @@ async function copyOldKitTracker(){
   await old.auth.signOut();
   msg.innerHTML='Done. '+esc(out.join(' · ')||'The old KitTracker had no data.'); toast('Warehouse data copied'); loadKits();
 }
+// ---------- top bar: "+ New" menu and search everything (like HousecallPro's) ----------
+function newItems(){ const r=role(), mgr=isManager(), L=[];
+  if(mgr) L.push(['job','Job','approved work, scheduled next'], ['recurring','Recurring Job','repeats on a schedule']);
+  if(canCreate()) L.push(['estimate','Estimate','a proposal to price and send']);
+  if(mgr && VISOK) L.push(['event','Event','meeting, training, day off']);
+  if(mgr || r==='Accountant') L.push(['customer','Customer','a client with contacts and properties']);
+  if(canLead()) L.push(['lead','Lead','someone asking for a quote']);
+  return L; }
+async function newThing(k){
+  $('#gMenu').hidden=true; $('#gNew').setAttribute('aria-expanded','false');
+  if(k==='estimate') return openDrawer(null);
+  if(k==='lead') return openDrawer(null,{lead:true});
+  if(k==='job' || k==='recurring'){ await openDrawer(null); draft._job=k; draft.status='Approved'; draft.dateSent=iso(today()); draft.dateResolved=iso(today()); DTAB='prop';
+    if(k==='recurring' && draft.items[0]) draft.items[0].frequency=(S.frequencies.find(f=>/month/i.test(f[0]))||S.frequencies.find(f=>f[1]>1)||[''])[0];
+    drawDrawer(); const m=$('#dmsg'); if(m) m.textContent=k==='recurring'?'New recurring job: pick the client and property, describe the work and price per visit, then Save. It gets its job # and the schedule opens with a repeat.':'New job: pick the client and property, describe the work and price, then Save. It gets its job # and the schedule opens.';
+    $('#f-client')?.focus(); return; }
+  if(k==='event'){ const v=visitDraft(null, iso(today())); return visEdit(v); }
+  if(k==='customer'){ document.querySelector('#tabs [data-tab="clients"]')?.click(); setTimeout(()=>document.getElementById('clNew')?.click(), 50); }
+}
+$('#gNew').addEventListener('click', e=>{ e.stopPropagation(); const m=$('#gMenu'), open=m.hidden; $('#gres').hidden=true;
+  m.innerHTML=newItems().map(([k,t,h])=>`<button type="button" data-gnew="${k}">${esc(t)} <small>${esc(h)}</small></button>`).join('') || '<div class="note" style="margin:6px">Nothing to create with your role.</div>';
+  m.hidden=!open; $('#gNew').setAttribute('aria-expanded', String(open)); if(open) m.querySelector('button')?.focus(); });
+$('#gMenu').addEventListener('click', e=>{ const b=e.target.closest('[data-gnew]'); if(b) newThing(b.dataset.gnew); });
+document.addEventListener('click', e=>{ if(!e.target.closest('.gnew')){ $('#gMenu').hidden=true; $('#gNew').setAttribute('aria-expanded','false'); } if(!e.target.closest('.gsearch')) $('#gres').hidden=true; });
+let GHITS=[], GSEL=0;
+function gSearch(q){ q=norm(q); if(q.length<2) return [];
+  const has=(...xs)=>xs.some(x=>norm(x).includes(q)), out=[];
+  const won=p=>WON.includes(p.status);
+  if(role()!=='Accountant') for(const p of P){ if(out.filter(x=>x.k==='p').length>=8) break;
+    const jn=jobNoOf(p); if(has(p.num, p.client, p.property, p.siteAddress, p.contactName, p.contactEmail, jn, p.poNumber, ...(scopeLines(p)||[]).slice(0,2)))
+      out.push({k:'p', id:p.num, t:`${jn?'Job #'+jn+' · ':''}${p.client||''}${p.property?' · '+p.property:''}`, s:`${p.num} · ${p.status}${num(p.amount)?' · '+money(p.amount):''}${scopeLines(p)[0]?' · '+scopeLines(p)[0].slice(0,50):''}`, sec:won(p)?'Jobs':'Estimates & leads'}); }
+  for(const c of (typeof CL!=='undefined'?CL:[])){ if(out.filter(x=>x.k==='c').length>=6) break;
+    if(has(c.name, ...(c.aliases||[]), c.billing_email)) out.push({k:'c', id:c.id, t:c.name, s:c.kind||'Client', sec:'Customers'}); }
+  if(canMoney()) for(const v of MINV){ if(out.filter(x=>x.k==='i').length>=6) break;
+    if(has(v.inv_no, invName(v), v.job_no, v.po_number, invWhat(v))) out.push({k:'i', id:v.id, t:`Invoice #${v.inv_no} · ${invName(v)}`, s:`${invLabel(v)[0]} · ${v.status==='Sent'?usd(invBal(v))+' due':usd(v.total)}${invWhat(v)?' · '+invWhat(v):''}`, sec:'Invoices'}); }
+  if(role()!=='Accountant') for(const v of VIS){ if(out.filter(x=>x.k==='v').length>=6) break;
+    if(v.kind==='job' && (has(v.job_no) || (v.kind==='event'&&has(v.title)))) out.push({k:'v', id:v.id, t:`Visit ${fmtD(v.visit_date)}${v.job_no?' · Job #'+v.job_no:''} · ${visLabel(v)}`, s:(v.techs||[]).join(', ')||'no crew yet', sec:'Schedule'}); }
+  return out; }
+function gRender(){ const box=$('#gres'), q=$('#gq').value; GHITS=gSearch(q); GSEL=0;
+  if(norm(q).length<2){ box.hidden=true; return; }
+  let sec=''; box.innerHTML=GHITS.map((h,i)=>{ const head=h.sec!==sec?`<div class="gsec">${esc(h.sec)}</div>`:''; sec=h.sec; return head+`<button type="button" class="gitem ${i===0?'on':''}" data-gi="${i}">${esc(h.t)}<small>${esc(h.s)}</small></button>`; }).join('') || '<div class="note" style="margin:8px">Nothing found.</div>';
+  box.hidden=false; }
+async function gOpen(h){ if(!h) return; $('#gres').hidden=true; $('#gq').blur();
+  if(h.k==='p') return openDrawer(h.id);
+  if(h.k==='c'){ document.querySelector('#tabs [data-tab="clients"]')?.click(); CLSEL=h.id; renderClients(); window.scrollTo(0,0); return; }
+  if(h.k==='i'){ const v=MINV.find(x=>x.id===h.id); if(v) invEdit(moneyPseudo(v), {...v, payments:MPAY.filter(x=>x.invoice_id===v.id)}); return; }
+  if(h.k==='v'){ const v=VIS.find(x=>x.id===h.id); if(v) visEdit(v); } }
+$('#gq').addEventListener('input', ()=>{ clearTimeout(gRender.t); gRender.t=setTimeout(gRender, 120); });
+$('#gq').addEventListener('focus', ()=>{ if(norm($('#gq').value).length>=2) gRender(); });
+$('#gq').addEventListener('keydown', e=>{ const items=[...document.querySelectorAll('#gres .gitem')];
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); if(!items.length) return; GSEL=(GSEL+(e.key==='ArrowDown'?1:-1)+items.length)%items.length; items.forEach((b,i)=>b.classList.toggle('on',i===GSEL)); items[GSEL].scrollIntoView({block:'nearest'}); }
+  if(e.key==='Enter'){ e.preventDefault(); gOpen(GHITS[GSEL]); }
+  if(e.key==='Escape'){ $('#gres').hidden=true; $('#gq').blur(); } });
+$('#gres').addEventListener('click', e=>{ const b=e.target.closest('[data-gi]'); if(b) gOpen(GHITS[+b.dataset.gi]); });
+document.addEventListener('keydown', e=>{ if(e.key==='/' && !e.target.closest('input,textarea,select,[contenteditable]') && !$('#gbar').hidden){ e.preventDefault(); $('#gq').focus(); } });
 // ---------- the job: where it stands (HCP-style Schedule → Done → Invoice → Paid) ----------
 const jobVisits = p => VIS.filter(v=>v.num===p.num && v.kind==='job' && v.status!=='Cancelled').sort((a,b)=>String(a.visit_date).localeCompare(String(b.visit_date)));
 const jobNoOf = p => p.hcpJob || (VIS.find(v=>v.num===p.num && v.job_no)||{}).job_no || '';
@@ -4072,7 +4139,7 @@ async function start(session){
   const email=(session.user.email||'').toLowerCase();
   const {data:m}=await sb.from('team_members').select('*').eq('email',email).eq('active',true).maybeSingle();
   if(!m){ show('blocked'); $('#blockedMsg').textContent=`${email} isn't on the PF Building Services team list. Ask Arturo to add you.`; return; }
-  me=m; $('#whoName').textContent=`${m.name} · ${m.role}`; $('#who').hidden=false; $('#tabs').hidden=false;
+  me=m; $('#whoName').textContent=`${m.name} · ${m.role}`; $('#who').hidden=false; $('#tabs').hidden=false; $('#gbar').hidden=false;
   const nx=new URLSearchParams(location.search).get('next'); if(nx && /^reports\.html(#\/r\/[a-z0-9-]+)?$|^reports\.html\?num=PFBS-\d+$/i.test(nx)){ location.replace(nx); return; }
   $('#rptLink').hidden = !['Owner','Admin','Senior Estimator'].includes(m.role);
   await Promise.all([loadTeam(), loadSettings()]);
