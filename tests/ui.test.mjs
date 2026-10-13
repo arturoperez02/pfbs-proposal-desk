@@ -348,6 +348,15 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 15. A report already started with an empty work list takes the work from the job when opened
+{
+  const sr = { id: 'sr-empty-1', status: 'pending', num: 'PFBS-0963', created_at: new Date().toISOString(), doc: { client: 'DEMO CLIENT', work: [''], categories: {} } };
+  const pg = await page('reports.html?num=PFBS-0963', { sr: [sr], width: 430 });
+  await pg.waitForSelector('#f_work', T);
+  assert.deepEqual(await pg.$$eval('#f_work input, #f_work textarea', e => e.map(x => x.value).filter(Boolean)), ['EXTERIOR WINDOW CLEANING', 'PRESSURE WASH ENTRY'], 'work filled from the job');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
