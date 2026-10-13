@@ -68,11 +68,22 @@ npm test                                                      # database + brows
 `tests/mock.js` stands in for supabase-js in the browser (made-up data; `MOCK_EXTRA`, `MOCK_SR`, `MOCK_RPC`,
 `MOCK_EMAIL` let a test add rows, fake RPCs or sign in as another role). Add a test for every bug fixed.
 
-## Roadmap (merging everything into one CRM)
-1. Service reports: built (`reports.html`, update 017). Switch the HCP "Job finished" Zap to `zap_report_job`.
-2. Warehouse: KitTracker (separate Supabase project, repo `pfbs-kittracker`) into the CRM; kit lists from line items.
-3. Schedule: TechSched (Firebase, private repo `pfbs-schedule`) last, with a crew view.
-4. Invoicing: built (update 018). Next: accountant dashboard (A/R aging, deposits, export for her software, her own login).
-5. Import HousecallPro history (its Excel export), run both for 1–2 billing cycles, cancel HCP.
+## Roadmap (merging everything into one CRM) — order agreed 10/12/2026
+Done: service reports (`reports.html`, 017; switch the HCP "Job finished" Zap to `zap_report_job`), invoicing (018).
+1. **Clients & properties**: `clients` (company, billing address, AP email, PO required), contacts, properties (one
+   client can have 40+). Import from HousecallPro's customer CSV inside the app (Settings), never into this repo:
+   202 customers, people and companies mixed, merge by company; "Billing?" flag marks the billing address;
+   tags used: "PO# Required", "Invoice to AP". Proposals pick client + property; contacts/billing fill in.
+2. **Schedule** (replaces HCP's schedule AND TechSched data entry): visits per job with dates/times + assigned techs,
+   month view, recurring rule (every N weeks/months, day # or "first Tuesday", ends never/after N/on date; edit
+   "only this visit" vs "this and future"; rule prefilled from the proposal frequency; generate ~12 months ahead).
+   Schedule asked at Approved. Crews never use an app: keep TechSched's weekly crew emails (per tech, EN/ES,
+   date/time/address/team, mailto draft; see `pfbs-schedule` buildJobEmailText). One invoice + one report per visit.
+3. **Home + accountant dashboard**: open / past due / paid, A/R aging, deposits, export, her own login; import the
+   open HCP invoices (65, ~$162k on 10/12). Waiting on her answers (software, what she pulls, what she wants).
+4. **Warehouse**: KitTracker (separate Supabase project, repo `pfbs-kittracker`); kit lists from line items.
+5. **Leave HCP**: import history from its exports, run both for 1–2 billing cycles, cancel.
+HCP facts: Oscar creates each job in HCP and retypes it in TechSched; HCP job statuses are not kept up (738 "Scheduled",
+29 "Completed"), so "done" = invoiced and "paid" = payment recorded in the CRM. Invoice numbers continue after HCP's last.
 
 Pending on Arturo's side: Supabase Pro (daily backups), Entra app for SharePoint (send client ID + tenant ID only).
