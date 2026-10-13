@@ -26,5 +26,6 @@
 | 022_jobs_contacts.sql | Run once: a job # on every visit (HCP's # until switch-over, then the CRM's own, set in Settings → Job numbers), weekday-only visits, invoices mark visits Done, a contact per property. Needs 021. |
 | 023_job_no_on_approval.sql | Run once: once the CRM numbers jobs, approving a proposal gives the job its job #; its first visit uses it, later recurring visits get their own. Needs 022. |
 | 024_on_hold.sql | Run once: put a job on hold (with a reason) and take it off hold; held jobs get their own column on the Home board; "Give it a job #" for approved jobs that have none. Needs 023. |
+| 025_warehouse_feed.sql | Run once: KitTracker's "Import from CRM Schedule" reads upcoming scheduled jobs (job #, site, techs, work, equipment, vehicle, scope). Only logins added in Settings → Warehouse can read it, and they see nothing else. Needs 024. |
 
 Client data is never stored in this repository.

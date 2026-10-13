@@ -3238,6 +3238,9 @@ function renderSettings(){
       <div class="toolbar" style="margin:0"><label class="btn">Import HousecallPro customers…<input type="file" id="clImport" accept=".csv,text/csv" hidden></label><button type="button" class="btn ghost" id="clLink">Link proposals to clients</button></div></div>`:''}
     ${canPay()?`<div class="card listedit"><h3>Job numbers</h3><label class="f">Next job #<span style="display:flex;gap:6px"><input id="s-jobno" type="number" placeholder="Using HousecallPro job #s" style="flex:1"><button type="button" class="btn small" id="jobNoSave">Set</button></span></label>
       <div class="note">Until this is set, each visit uses the HCP job # typed on the job. On switch-over day, set it to HousecallPro's last job # + 1: from then on every visit gets the next number, like HCP.</div></div>`:''}
+    ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Warehouse (KitTracker)</h3><div id="whList" class="note" style="margin:0 0 6px">Loading…</div>
+      <label class="f">Add a KitTracker login<span style="display:flex;gap:6px"><input id="s-wh" type="email" placeholder="warehouse@pfbuildingservices.com" style="flex:1"><button type="button" class="btn small" id="whAdd">Add</button></span></label>
+      <div class="note">KitTracker's "Import from CRM Schedule" signs in with this email (create it once in Supabase → Authentication → Add user, with a password). It can only read upcoming scheduled jobs: no prices, clients list or money.</div></div>`:''}
     ${ta('s-crew','Crew', crew().map(c=>c.filter((x,i)=>i<2||x).join(' | ')).join('\n'), 'Name | email | es or en (the language of their schedule email). One tech per line. Emails stay in the database, not on any page.')}
     ${ta('s-work','Work types (schedule)', workTypes().join('\n'), 'One per line. Ticked on each visit and listed in the crew email.')}
     ${ta('s-equip','Equipment (schedule)', equipList().join('\n'), 'One per line.')}
@@ -3287,6 +3290,18 @@ function renderSettings(){
     $('#jobNoSave').onclick=async ()=>{ const n=Math.round(num($('#s-jobno').value)||0); if(!n){ toast('Type a number.'); return; }
       if(!confirm(`From now on the CRM gives every new visit a job #, starting at ${n}. Do this when you stop creating jobs in HousecallPro. Continue?`)) return;
       const {error}=await sb.rpc('set_next_job_no',{n}); toast(error?error.message:`Next job will be #${n}`); if(!error) loadAdminLog(); };
+  }
+  if($('#whAdd')){
+    const whLoad=async()=>{ const {data,error}=await sb.from('warehouse_logins').select('email').order('email'); const b=$('#whList'); if(!b) return;
+      if(error){ b.textContent='Run database update 025 in Supabase first.'; $('#whAdd').disabled=true; return; }
+      b.innerHTML=(data||[]).length?data.map(r=>`<div>${esc(r.email)} <button type="button" class="btn ghost small" data-whdel="${esc(r.email)}">Remove</button></div>`).join(''):'No KitTracker login yet.'; };
+    whLoad();
+    $('#whAdd').onclick=async()=>{ const e=$('#s-wh').value.trim().toLowerCase(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){ toast('Type the email KitTracker signs in with.'); return; }
+      const {error}=await sb.from('warehouse_logins').insert({email:e, added_by:me.name}); if(error){ toast(error.message); return; }
+      $('#s-wh').value=''; toast('KitTracker login added'); whLoad(); };
+    $('#whList').onclick=async ev=>{ const d=ev.target.closest('[data-whdel]'); if(!d) return; if(!confirm(`Stop ${d.dataset.whdel} from reading the schedule?`)) return;
+      const {error}=await sb.from('warehouse_logins').delete().eq('email',d.dataset.whdel); if(error){ toast(error.message); return; }
+      whLoad(); };
   }
   if($('#invNoSave')){
     sb.rpc('next_invoice_no').then(({data,error})=>{ const i=$('#s-invno'); if(!i) return; if(error){ i.placeholder='Run database update 018 first'; i.disabled=true; $('#invNoSave').disabled=true; } else i.value=data??''; });

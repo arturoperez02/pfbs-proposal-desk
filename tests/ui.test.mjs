@@ -337,6 +337,17 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 14. Settings → Warehouse: add a KitTracker login
+{
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('warehouse: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.goto(BASE); await pg.waitForTimeout(800);
+  await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('#whAdd', T);
+  await pg.fill('#s-wh', 'Warehouse@Example.com'); await pg.click('#whAdd'); await pg.waitForTimeout(300);
+  assert.match(await pg.textContent('#whList'), /warehouse@example\.com/, 'login listed (lower case)');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

@@ -163,3 +163,18 @@ The old Cloudflare app keeps working until step 3, so nothing breaks while you t
 In a proposal, Files → **Choose SharePoint folder** (it suggests Clients / client / property / service from your existing folders).
 After that, every proposal, estimate and change order PDF downloads and also saves into that folder, named like
 `WC 10-9-2026 Metro Center Senior - PFBS-0801.pdf`. Other files in the folder (OPOS, photos, contracts) are untouched.
+
+
+## KitTracker reads the CRM schedule (update 025)
+
+The warehouse packs kits from the CRM schedule instead of retyping jobs. TechSched keeps working the whole time.
+
+1. Supabase (the **CRM** project, not KitTracker's) → SQL Editor → run `sql/025_warehouse_feed.sql`.
+2. Supabase (CRM project) → **Authentication → Users → Add user → Create new user**. Email: the warehouse login
+   (for example `warehouse@pfbuildingservices.com`), a password, tick **Auto confirm user**. Do not add it to the CRM team.
+3. CRM → **Settings → Warehouse (KitTracker)** → type that email → **Add**.
+4. KitTracker → New Job → **📋 Import from CRM Schedule** → sign in once with that email and password.
+   After that, tap a job: job #, date, site, client, techs, vehicle, template, scope and equipment fill in.
+
+That login can only read the next two weeks of scheduled jobs. It cannot see prices, proposals, clients or money.
+To cut a device off, remove the email in Settings → Warehouse.

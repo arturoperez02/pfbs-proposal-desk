@@ -94,6 +94,9 @@ punctuation, LLC/Inc/Partners/Management; proposals fill from the client record 
    → tailor the CSV columns); Home tab done 10/12. Original spec — **Home + accountant dashboard**: open / past due / paid, A/R aging, deposits, export, her own login; import the
    open HCP invoices (65, ~$162k on 10/12). Waiting on her answers (software, what she pulls, what she wants).
 4. **Warehouse**: KitTracker (separate Supabase project, repo `pfbs-kittracker`); kit lists from line items.
+   Step 1 done (025): KitTracker "Import from CRM Schedule" calls `warehouse_jobs(days)` on this project with a
+   warehouse login listed in `warehouse_logins` (Settings → Warehouse; not a team member, so every other table stays closed).
+   The TechSched import stays until Oscar schedules only in the CRM. Next: KitTracker job status (packed / picked up / returned) back on the CRM visit.
 5. **Leave HCP**: import history from its exports, run both for 1–2 billing cycles, cancel.
 HCP facts: Oscar creates each job in HCP and retypes it in TechSched; HCP job statuses are not kept up (738 "Scheduled",
 29 "Completed"), so "done" = invoiced and "paid" = payment recorded in the CRM. Invoice numbers continue after HCP's last.

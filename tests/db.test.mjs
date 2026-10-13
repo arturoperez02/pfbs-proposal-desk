@@ -223,3 +223,20 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: give a job its # passed');
 }
+// ---------- KitTracker reads the schedule (update 025) ----------
+{
+  const claims = e => `select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-0000000000aa","email":"${e}"}',false); set role authenticated;`;
+  await db.exec(`reset role; update proposals set items='[{"type":"Service","description":"Exterior windows\\nall elevations","group":"A"},{"type":"Service","description":"Option B line","group":"B"},{"type":"Add-on","description":"Gutter","accepted":true},{"type":"Add-on","description":"Skylights"}]'::jsonb, pricing_option=null where num='PFBS-0784'`);
+  await db.exec(`update visits set visit_date=current_date + 2, techs='{Rigo}', work='{Pressure Washing}' where num='PFBS-0784' and visit_date='2026-12-02'`);
+  await db.exec(claims('warehouse@example.com'));
+  await assert.rejects(db.query(`select warehouse_jobs(14)`), /not set up for the warehouse/, 'unknown login refused');
+  await assert.rejects(db.query(`select * from proposals limit 1`).then(r => { if (r.rows.length) throw new Error('leak'); throw new Error('none'); }), /none|permission/, 'warehouse login sees no proposals');
+  await db.exec(`reset role; insert into warehouse_logins(email) values ('warehouse@example.com') on conflict do nothing`);
+  await db.exec(claims('warehouse@example.com'));
+  const L = (await db.query(`select warehouse_jobs(14) j`)).rows[0].j;
+  await db.exec('reset role');
+  const x = L.find(v => v.num === 'PFBS-0784');
+  assert.ok(x && x.job_no && x.techs[0] === 'Rigo' && x.work[0] === 'Pressure Washing', 'visit in the feed with job #, techs, work');
+  assert.deepEqual(x.scope, ['Exterior windows', 'Gutter'], 'scope = first option + accepted add-ons, first line only');
+  console.log('db: warehouse feed passed');
+}
