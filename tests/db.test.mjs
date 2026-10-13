@@ -85,3 +85,33 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   const bk = await q1(`select backup_json() b`); assert.ok(bk.b.invoices.length === 2 && bk.b.invoice_payments.length === 2, 'backup has invoices');
   console.log('db: invoicing checks passed');
 }
+
+// ---------- clients (update 019) ----------
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec('reset role');
+  assert.equal((await q1(`select pfbs_addr_key('2150 Webster Street, Oakland, CA') k`)).k, '2150 WEBSTER ST');
+  assert.equal((await q1(`select pfbs_addr_key('100 Village Ln.\nFoster City') k`)).k, '100 VILLAGE LN');
+  await db.exec(`update proposals set client='Acme Property Group', site_address='100 Test Plaza\nOakland, CA' where num='PFBS-0772'`);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  const payload = { clients: [
+    { name: 'Acme Property Group', aliases: ['Acme Tower'], po_required: true, billing_email: 'ap@acme.example', billing_address: '1 Billing Way\nOakland, CA',
+      contacts: [{ name: 'Pat Demo', email: 'pat@acme.example', role: 'Property Manager' }, { name: 'Pat Demo', email: 'PAT@acme.example' }],
+      properties: [{ name: 'Acme Tower', address: '100 Test Plaza, Oakland, CA 94612' }, { name: 'Acme Tower', address: '100 Test Plaza' }, { name: 'Annex', address: '200 Test Plaza' }] },
+    { name: 'Jo Homeowner', kind: 'Homeowner', contacts: [{ name: 'Jo Homeowner', phone: '5105550000' }], properties: [{ address: '9 Home Ct' }] } ] };
+  let r = (await q1(`select import_clients('${JSON.stringify(payload)}'::jsonb) r`)).r;
+  assert.deepEqual([r.clients_new, r.clients_updated, r.contacts_new, r.properties_new], [2, 0, 2, 3], 'dedupes contacts by email and properties by address');
+  assert.ok(r.proposals_linked_to_client >= 1 && r.proposals_linked_to_property >= 1, 'existing proposals linked');
+  r = (await q1(`select import_clients('${JSON.stringify(payload)}'::jsonb) r`)).r;
+  assert.deepEqual([r.clients_new, r.clients_updated, r.contacts_new, r.properties_new], [0, 2, 0, 0], 'importing twice adds nothing');
+  const c = await q1(`select po_required, billing_email, (select count(*)::int from client_contacts where client_id=c.id and is_primary) prim from clients c where name='Acme Property Group'`);
+  assert.equal(c.po_required, true); assert.equal(c.prim, 1, 'one primary contact');
+  await assert.rejects(db.query(`insert into clients(name) values ('  acme property group ')`), /unique|duplicate/i, 'no duplicate client names');
+  await db.exec(`reset role; select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000002","email":"e@x.com"}',false); set role authenticated;`);
+  assert.ok((await q1(`select count(*)::int c from clients`)).c >= 2, 'estimators can see clients');
+  await db.query(`insert into clients(name) values ('New From Estimator')`);
+  await assert.rejects(db.query(`select import_clients('{}'::jsonb)`), /owner or admin/);
+  await assert.rejects(db.query(`delete from clients where name='New From Estimator'`).then(async () => { if ((await q1(`select count(*)::int c from clients where name='New From Estimator'`)).c) throw new Error('kept'); }), /kept/, 'only the owner deletes');
+  await db.exec('reset role');
+  console.log('db: clients checks passed');
+}
