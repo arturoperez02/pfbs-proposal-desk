@@ -147,6 +147,9 @@ legend{font-family:var(--display);font-size:17px;color:var(--ink);margin-bottom:
 .cards{display:grid;gap:16px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
 .note{font-size:12px;color:var(--muted);margin-top:8px}
+.setnav{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px} .setnav a{font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;text-decoration:none;color:inherit;background:var(--surface)} .savebar{position:sticky;bottom:0;z-index:5;background:var(--bg,#f6f7fb);padding:10px 0;margin-top:16px;border-top:1px solid var(--line,#dde)} h3.setsec{scroll-margin-top:80px}
+.crewcard{grid-column:1/-1}
+@media (max-width:700px){ header.bar{position:static} .crewtbl thead{display:none} .crewtbl,.crewtbl tbody,.crewtbl tr,.crewtbl td{display:block;width:100%} .crewtbl tr{border-bottom:2px solid var(--line);padding:8px 0;position:relative} .crewtbl td{border:0;padding:3px 8px} .crewtbl td:nth-child(6){text-align:left!important} .crewtbl td:nth-child(6)::before{content:'Active ';font-size:13px;color:var(--muted)} .crewtbl td:nth-child(5)::before{content:'Other names';display:block;font-size:12px;color:var(--muted)} .crewtbl td:last-child{position:absolute;top:8px;right:0;width:auto} .crewtbl td:first-child input{width:calc(100% - 48px)} .crewtbl input:not([type=checkbox]),.crewtbl select{width:100%} .capchecks{min-width:0} } .crewtbl td{vertical-align:top} .crewtbl input:not([type=checkbox]),.crewtbl select{min-width:120px} .capchecks{display:flex;flex-wrap:wrap;gap:4px 12px;min-width:260px} .capchecks label{font-size:13px;white-space:nowrap;display:flex;gap:4px;align-items:center}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .listedit{display:grid;gap:6px;align-content:start}
 .listedit textarea{min-height:150px;font-size:14px}
@@ -333,7 +336,7 @@ td input,td select{padding:5px 8px}
 
   <section id="view-leads" hidden>
     <div class="toolbar" style="justify-content:space-between">
-      <div><h2>Leads</h2><div class="sub" id="leadsSub">New requests waiting for an estimate, and the prospects BD is working on.</div></div>
+      <div><h2>Leads</h2><div class="sub" id="leadsSub">New requests waiting for a proposal, and the prospects BD is working on.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="prospBtn" hidden>+ Prospect</button><button class="btn" id="leadBtn2" hidden>+ New lead</button></div>
     </div>
     <div id="leadsBody"></div>
@@ -355,7 +358,7 @@ td input,td select{padding:5px 8px}
   </section>
 
   <section id="view-home" hidden>
-    <div class="toolbar" style="justify-content:space-between"><div><h2>Home</h2><div class="sub">What needs doing today: estimates out, jobs to schedule and invoice, money owed. Click anything to open it.</div></div></div>
+    <div class="toolbar" style="justify-content:space-between"><div><h2>Home</h2><div class="sub">What needs doing today: proposals out, jobs to schedule and invoice, money owed. Click anything to open it.</div></div></div>
     <div id="homeBody"></div>
   </section>
   <section id="view-orders" hidden>
@@ -1209,7 +1212,10 @@ $('#drawer').addEventListener('click', async e=>{ const t=e.target.closest('butt
 let KITS=[];
 async function loadKits(){ if(!['Owner','Admin','Senior Estimator','Estimator'].includes(role())) return;
   const {data,error}=await sb.from('wh_jobs').select('id,hcp_job_number,visit_id,status,packed_at,picked_up_at,returned_at,scheduled_date,tech_names').order('created_at',{ascending:false}).limit(500);
-  KITS=error?[]:(data||[]); if(draft && document.getElementById('jfBox')) $('#jfBox').innerHTML=jobFlowHTML(draft); }
+  KITS=error?[]:(data||[]); if(draft && document.getElementById('jfBox')) $('#jfBox').innerHTML=jobFlowHTML(draft);
+  const vh=await sb.from('wh_vehicles').select('name,is_active,sort_order').order('sort_order'); WH_VEH=vh.error?[]:(vh.data||[]).filter(v=>v.is_active!==false && v.name).map(v=>v.name); }
+// one vehicle list: the warehouse's Vehicles (if any) plus Settings → Vehicles
+let WH_VEH=[]; const vehList = () => [...new Set([...WH_VEH, ...(S.vehicles||[])])];
 const KIT_LABEL={pending:'Kit not packed',packed:'Kit packed',picked_up:'Kit picked up',returned:'Kit returned',completed:'Kit returned'};
 function kitLine(p){
   const vids=new Set(VIS.filter(v=>v.num===p.num).map(v=>v.id)), nos=new Set([p.hcpJob, ...VIS.filter(v=>v.num===p.num).map(v=>v.job_no)].filter(Boolean).map(String));
@@ -1255,7 +1261,7 @@ function newJobPage(recurring, o={}){
       <label style="font-size:13px;display:block"><input type="checkbox" name="skipwk"> Weekdays only (skip Sat &amp; Sun)</label>
       <label class="f" style="margin-top:6px">Repeats<select name="rep">${presetsFor(td).filter(x=>x[0]!=='custom').map(([k,t])=>`<option value="${k}" ${recurring&&k==='month'?'selected':''}>${esc(t)}</option>`).join('')}</select></label>
       <label style="font-size:13px;display:block"><input type="checkbox" name="nosched"> Don't schedule yet</label>
-      <div class="f" style="margin-top:6px"><b>Team</b><div class="vchecks jpteam">${crewOpts.map(t=>`<label data-tech="${esc(t)}"><input type="checkbox" name="techs" value="${esc(t)}"> ${esc(t)} <span class="vbusy flag warn" hidden>busy</span></label>`).join('')||'<span class="note" style="margin:0">Add your crew in Settings → Crew.</span>'}</div></div>
+      <div class="f" style="margin-top:6px"><b>Team</b> <select name="jcap" style="width:auto;margin-left:6px" aria-label="Show techs who can do"><option value="">Show everyone</option>${skillList().map(x=>`<option>${esc(x)}</option>`).join('')}</select><div class="vchecks jpteam">${crewOpts.map(t=>`<label data-tech="${esc(t)}"><input type="checkbox" name="techs" value="${esc(t)}"> ${esc(t)}${skillsOf(t).length?` <span class="note" style="margin:0">(${esc(skillsOf(t).join(', '))})</span>`:''} <span class="vbusy flag warn" hidden>busy</span></label>`).join('')||'<span class="note" style="margin:0">Add your crew in Settings → Crew.</span>'}</div></div>
     </div>
     <div class="card"><h4>Job type</h4><select name="jtype"><option value="">—</option>${(S.services||[]).map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
   </div><div>
@@ -1290,7 +1296,7 @@ function newJobPage(recurring, o={}){
   d.addEventListener('input', e=>{ const t=e.target; if(t.name==='cq') results();
     const li=t.closest('[data-li]'); if(li && t.dataset.lf==='desc'){ const L=st.lines[+li.dataset.li], hit=pbFind(t.value, L.kind); if(hit && hit.price!=null && !num(L.price)){ L.price=hit.price; li.querySelector('[data-lf="price"]').value=hit.price; } }
     if(li){ st.lines[+li.dataset.li][t.dataset.lf]=t.value; li.querySelector('.tot').textContent=usd((num(st.lines[+li.dataset.li].qty)||0)*(num(st.lines[+li.dataset.li].price)||0)); totals(); } });
-  d.addEventListener('change', e=>{ const n=e.target.name; if(n==='prop') pickProp(); if(['d1','d2','t1','t2','anytime','skipwk'].includes(n)) busy();
+  d.addEventListener('change', e=>{ const n=e.target.name; if(n==='jcap'){ const k=e.target.value; for(const l of d.querySelectorAll('.jpteam [data-tech]')) l.hidden=!!k && !l.querySelector('input').checked && !skillsOf(l.dataset.tech).includes(k); } if(n==='prop') pickProp(); if(['d1','d2','t1','t2','anytime','skipwk'].includes(n)) busy();
     if(n==='d1'){ const sel=q('rep'), v=sel.value; sel.innerHTML=presetsFor(q('d1').value).filter(x=>x[0]!=='custom').map(([k,t])=>`<option value="${k}" ${k===v?'selected':''}>${esc(t)}</option>`).join(''); } });
   d.addEventListener('click', async e=>{ const t=e.target, a=t.closest('[data-a]')?.dataset.a;
     const cb=t.closest('[data-cl]'); if(cb){ st.client=CL.find(c=>c.id===cb.dataset.cl); st.newClient=false; d.querySelector('.jpnew').hidden=true; d.querySelector('.jpres').hidden=true; drawSel(); return; }
@@ -1463,8 +1469,8 @@ function renderHome(){
   const week=VIS.filter(v=>v.status!=='Cancelled' && v.visit_date<=wk && visEnd(v)>=td).sort((a,b)=>(a.visit_date+(a.start_time||'')).localeCompare(b.visit_date+(b.start_time||'')));
   const nocrew=week.filter(v=>v.kind==='job' && !(v.techs||[]).length).length;
   $('#homeBody').innerHTML=`<div class="hkpi">
-      ${kpi('pipeline', est.length, `Open estimates · ${money(est.reduce((a,p)=>a+(num(p.amount)||0),0))}`)}
-      ${kpi('pipeline', rev.length+drafts.length, `Being estimated · ${rev.length} in review`)}
+      ${kpi('pipeline', est.length, `Proposals out · ${money(est.reduce((a,p)=>a+(num(p.amount)||0),0))}`)}
+      ${kpi('pipeline', rev.length+drafts.length, `Being priced · ${rev.length} in review`)}
       ${kpi('board', col('Unscheduled').length, 'Jobs not scheduled', col('Unscheduled').length?'bad':'')}
       ${kpi('board', col('To invoice').length, 'Done, to invoice', col('To invoice').length?'bad':'')}
       ${OPENINV?kpi('money', usd(due).replace(/\.\d\d$/,''), `Owed · ${OI.length} open invoice${OI.length===1?'':'s'}${od.length?` · <b class="bad">${usd(odAmt).replace(/\.\d\d$/,'')} past due</b>`:''}`):''}
@@ -1535,7 +1541,7 @@ function renderJobs(){
   const needs=p=>{ const n=[]; const po=partsOpen(p), ra=rentAlerts(p);
     if(p.onHoldSince) n.push(`<span class="flag bad">On hold${p.onHoldReason?': '+esc(p.onHoldReason):''}</span>`);
     if(p.status==='Approved') n.push('<span class="flag warn">Not scheduled</span>');
-    const jn=(VIS.find(v=>v.num===p.num && v.job_no)||{}).job_no || p.hcpJob; if(jn) n.push(`<span class="note" style="margin:0">Job #${esc(jn)}</span>`); else if(p.status!=='Approved') n.push('<span class="flag warn">No job #</span>');
+    const jn=(VIS.find(v=>v.num===p.num && v.job_no)||{}).job_no || p.hcpJob; if(!jn && p.status!=='Approved') n.push('<span class="flag warn">No job #</span>');
     if(po) n.push(`<span class="flag ${partsLate(p)?'bad':'warn'}">${po} part${po===1?'':'s'} to order</span>`);
     for(const a of ra) n.push(`<span class="flag ${a[0]}">${esc(a[1])}</span>`);
     return n.join('<br>') || '<span class="note" style="margin:0">Ready</span>'; };
@@ -3522,12 +3528,11 @@ function renderSettings(){
       <label class="f">Add a KitTracker login<span style="display:flex;gap:6px"><input id="s-wh" type="email" placeholder="warehouse@pfbuildingservices.com" style="flex:1"><button type="button" class="btn small" id="whAdd">Add</button></span></label>
       <div class="note">The warehouse tablet signs in to the <b>Warehouse</b> tab with this email and its password (create it once in Supabase → Authentication → Add user). It can use the warehouse and read upcoming jobs: no prices, proposals, clients or money. The office team doesn't need to be listed here.</div>
       ${role()==='Owner'?`<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" id="whCopy">Copy data from the old KitTracker</button></div><div id="whCopyMsg" class="note" style="margin:4px 0 0"></div>`:''}</div>`:''}
-    ${ta('s-crew','Crew', crew().map(c=>[c[0], c[1]||'', c[2]||'en', (c[3]||[]).join(', ')].join(' | ').replace(/( \| )+$/,'')).join('\n'), 'Name | email | es or en (their schedule email language) | capabilities, separated by commas. One tech per line. Emails stay in the database, not on any page.')}
-    ${ta('s-skills','Capabilities', skillList().join('\n'), 'One per line (e.g. Swing Stage). Tag each tech with them in Crew; the visit editor can then show only the techs who can do the job.')}
+    ${crewCardHTML(crew(), skillList(), ro)}
     ${ta('s-esterms','Spanish words for crew emails', (S.esTerms||[]).join('\n'), 'English | Español, one per line (e.g. "Loading dock | Andén de carga"). The scope of work is translated with these plus the built-in list for techs who get their schedule in Spanish.')}
     ${ta('s-equip','Equipment (schedule)', equipList().join('\n'), 'One per line.')}
-    ${ta('s-veh','Vehicles', (S.vehicles||[]).join('\n'), 'One per line, e.g. Truck 1 (white F-250). Leave empty if you don\'t assign vehicles.')}
-    ${ta('s-svc','Services', lines(S.services), 'One per line.')}
+    ${ta('s-veh','Vehicles', (S.vehicles||[]).join('\n'), 'One per line, e.g. Truck 1 (white F-250). Vehicles added in Warehouse → Vehicles show up on the schedule too, so there is no need to type them twice.')}
+    ${ta('s-svc','Job types (services)', lines(S.services), 'The kinds of work, one per line (Window Cleaning, Pressure Washing…). Used for the Job type on jobs and proposals and for sales by service. Prices go in the Price book.')}
     ${ta('s-pb','Price book (services)', (S.priceBook&&S.priceBook.length?S.priceBook:(S.services||[]).filter(x=>x!=='Multiple services').map(n=>[n])).map(r=>[r[0], r[1]??'', r[2]||'', r[3]||''].join(' | ').replace(/( \| )+$/,'')).join('\n'), 'Name | price | unit (visit, hour, door…) | description. One per line. Picked on new jobs, proposals and invoices; the price fills in. Materials come from Material presets (Estimating), at cost + material markup.')}
     ${ta('s-freq','Frequencies', lines(S.frequencies), 'Name | visits per year.')}
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
@@ -3602,25 +3607,28 @@ function organizeSettings(){
   for(const id of ['#s-exp','#s-rpt']){ const l=root.querySelector(id)?.closest('label'); if(l) extra.appendChild(l); }
   const groups=[
     ['Team', ['Team']],
-    ['Commission', ['Client type → BD rate','Estimator rate by margin','BD goals']],
-    ['Estimating', ['Margins & guardrails','Estimate defaults','Labor roles','Solar panel rates','Gates & doors tasks','Material presets']],
-    ['Lists', ['Services','Frequencies','Lead sources','Lost reasons','Add-on suggestions','BD email templates']],
-    ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
+    ['Schedule & crew', ['Crew','Job numbers','Equipment (schedule)','Vehicles','Spanish words','Work types (schedule)']],
+    ['Price book & lists', ['Price book','Job types','Frequencies','Lead sources','Lost reasons','Add-on suggestions','BD email templates']],
     ['Invoicing', ['Invoicing']],
-    ['Schedule', ['Job numbers','Crew','Work types (schedule)','Equipment (schedule)','Vehicles']],
-    ['Change log', ['Change log']],
-    ['Data', ['Clients','Backup','Clean up old proposals']]];
+    ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
+    ['Estimating', ['Margins & guardrails','Estimate defaults','Labor roles','Solar panel rates','Gates & doors tasks','Material presets']],
+    ['Commission', ['Client type → BD rate','Estimator rate by margin','BD goals']],
+    ['Warehouse', ['Warehouse']],
+    ['Data', ['Clients','Backup','Clean up old proposals']],
+    ['Change log', ['Change log']]];
   const save=root.querySelector('#saveS')?.parentElement, frag=document.createDocumentFragment();
   for(const [title, names] of groups){
     const got=names.map(n=> n==='Proposal & links' ? extra : find(n)).filter(Boolean); if(!got.length) continue;
     const h=document.createElement('h3'); h.className='setsec'; h.textContent=title; frag.appendChild(h);
     const g=document.createElement('div'); g.className='settings-grid'; got.forEach(c=>{ c.style.marginTop=''; g.appendChild(c); }); frag.appendChild(g);
-    if(title==='Proposal text' && save) frag.appendChild(save);
   }
   const left=cards.filter(c=>!frag.contains(c));   // anything not listed stays, at the end
   if(left.length){ const g=document.createElement('div'); g.className='settings-grid'; left.forEach(c=>g.appendChild(c)); frag.appendChild(g); }
   root.querySelectorAll('.settings-grid').forEach(x=>{ if(!x.children.length) x.remove(); });
-  root.innerHTML=''; root.appendChild(frag);
+  if(save){ save.className='savebar'; save.style.marginTop=''; frag.appendChild(save); }   // always in reach, at the bottom of the screen
+  const secs=[...frag.querySelectorAll('h3.setsec')]; secs.forEach((h,i)=>h.id='setsec'+i);
+  const nav=document.createElement('div'); nav.className='setnav'; nav.innerHTML=secs.map((h,i)=>`<a href="#setsec${i}">${esc(h.textContent)}</a>`).join('');
+  root.innerHTML=''; root.appendChild(nav); root.appendChild(frag);
 }
 async function loadAdminLog(){
   const box=$('#logBox'); if(!box) return;
@@ -3671,10 +3679,10 @@ $('#settingsBody').addEventListener('click', async e=>{
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
       reportAppUrl:/hooks\.zapier\.com/i.test($('#s-rpt').value)?'':$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, priceIncrease:(num($('#s-pinc').value)??5)/100, expiryDays:Number($('#s-exp').value)||90,
-      crew:L('s-crew').map(l=>{ const [a,b,c,dd]=l.split('|').map(x=>x.trim()); return [a, b||'', /^es/i.test(c||'')?'es':'en', String(dd||'').split(',').map(x=>x.trim()).filter(Boolean)]; }).filter(c=>c[0]), skillOptions:L('s-skills'), esTerms:L('s-esterms').filter(l=>l.includes('|')), equipment:L('s-equip'), vehicles:L('s-veh'),
+      ...readCrewCard(), esTerms:L('s-esterms').filter(l=>l.includes('|')), equipment:L('s-equip'), vehicles:L('s-veh'),
       invoice:{ reminders:String($('#s-invrem').value||'').split(/[,\s]+/).map(Number).filter(n=>Number.isFinite(n)).sort((a,b)=>a-b), terms:Math.max(0,Math.round(num($('#s-invterms').value)??30)), message:$('#s-invmsg').value.trim(), footer:$('#s-invfoot').value.trim(), address:$('#s-invaddr').value.trim(), phone:$('#s-invphone').value.trim(), email:$('#s-invemail').value.trim(), website:$('#s-invweb').value.trim(), license:$('#s-invlic').value.trim() } };
     const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
-    if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
+    if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll(); fixTechNames();
   }
 });
 $('#settingsBody').addEventListener('change', async e=>{
@@ -3693,8 +3701,67 @@ const EQUIP_DEF=['Boom Lift','Scissor Lift','Swing Stage','Pressure Washer','Wat
 const crew = () => (S.crew&&S.crew.length?S.crew:CREW_DEF).filter(c=>c[0]);
 const SKILL_DEF=['Chair Work','Swing Stage','Solar Panel Cleaning','Lift Cleaning (Boom/Scissor)','Ground Floor Window Washing','Pressure Washing','Interior Cleaning','Janitorial'];
 const skillList = () => S.skillOptions&&S.skillOptions.length?S.skillOptions:SKILL_DEF;
-const allTechs = () => [...new Set([...crew().map(c=>c[0]), ...VIS.flatMap(v=>v.techs||[])])].filter(t=>t&&t!=='N/A');
-const skillsOf = n => (crew().find(c=>c[0]===n)||[])[3]||[];
+// Crew row: [name, email, 'es'|'en', capabilities[], other names[], inactive]. Every tech name on a visit is read through crewName,
+// so "Rigo", "rigo perez" and "Rigoberto" all become the one crew name: one tech, one row, everywhere.
+const crewOn = () => crew().filter(c=>!c[5]);
+const crewName = t => { const s=String(t||'').trim(), low=s.toLowerCase(); if(!s) return s; const C=crew(), first=x=>x.toLowerCase().split(/\s+/)[0];
+  const hit=C.find(c=>c[0].toLowerCase()===low) || C.find(c=>(c[4]||[]).some(a=>String(a).trim().toLowerCase()===low)); if(hit) return hit[0];
+  const byFirst=C.filter(c=>first(c[0])===first(s)); if(byFirst.length===1 && (!s.includes(' ') || !byFirst[0][0].includes(' '))) return byFirst[0][0];
+  return s; };
+const normTechs = L => [...new Set((L||[]).map(crewName).filter(t=>t && t!=='N/A'))];
+const normVis = L => { for(const v of L||[]) if(Array.isArray(v.techs)) v.techs=normTechs(v.techs); return L; };
+const allTechs = () => [...new Set([...crewOn().map(c=>c[0]), ...normTechs(VIS.filter(v=>visEnd(v)>=addDays(iso(today()),-30)).flatMap(v=>v.techs||[]))])];
+const skillsOf = n => (crew().find(c=>c[0]===crewName(n))||[])[3]||[];
+// Settings → Crew: one row per tech with a checkbox per capability (like TechSched)
+function crewCardHTML(rows, skills, ro){
+  const known=new Set(rows.map(c=>c[0].toLowerCase())), stray=[...new Set(VIS.flatMap(v=>v.techs||[]))].filter(t=>t && t!=='N/A' && !known.has(t.toLowerCase()) && crewName(t)===t);
+  const row=(c,i)=>`<tr data-crew="${i}"><td><input data-cf="name" value="${esc(c[0]||'')}" placeholder="Full name" aria-label="Tech name" ${ro}></td>
+    <td><input data-cf="email" type="email" value="${esc(c[1]||'')}" placeholder="email for their schedule" aria-label="Email" ${ro}></td>
+    <td><select data-cf="lang" aria-label="Email language" ${ro}><option value="es" ${c[2]!=='en'?'selected':''}>Español</option><option value="en" ${c[2]==='en'?'selected':''}>English</option></select></td>
+    <td class="wrap"><div class="capchecks">${skills.map(k=>`<label><input type="checkbox" data-cap="${esc(k)}" ${(c[3]||[]).includes(k)?'checked':''} ${ro}> ${esc(k)}</label>`).join('')}</div></td>
+    <td><input data-cf="aka" value="${esc((c[4]||[]).join(', '))}" placeholder="e.g. Rigo, Rigoberto" aria-label="Other names" ${ro}></td>
+    <td style="text-align:center"><input type="checkbox" data-cf="on" ${c[5]?'':'checked'} aria-label="Active" ${ro}></td>
+    <td>${ro?'':`<button type="button" class="btn ghost small" data-crewdel="${i}" aria-label="Remove ${esc(c[0]||'tech')}">✕</button>`}</td></tr>`;
+  return `<div class="card listedit crewcard" id="crewCard"><h3>Crew (techs) &amp; capabilities</h3>
+    <div class="note" style="margin:0 0 8px">One row per tech. Tick what each tech can do; the visit editor and New job page can then show only the techs who can do the job. Their schedule emails go out in the language picked here. <b>Other names</b>: any other way the name was typed (TechSched, old visits); they are merged into this tech everywhere. Untick <b>Active</b> for someone who left: they disappear from the pickers but stay on old visits.</div>
+    <div class="tablewrap"><table class="crewtbl"><thead><tr><th>Tech</th><th>Email</th><th>Schedule email in</th><th>Capabilities</th><th>Other names</th><th>Active</th><th></th></tr></thead><tbody>${rows.map(row).join('')}</tbody></table></div>
+    ${ro?'':`<div class="toolbar" style="margin:8px 0 0;flex-wrap:wrap"><button type="button" class="btn ghost small" data-crewa="add">+ Add tech</button><button type="button" class="btn ghost small" data-crewa="cap">+ Capability</button>${skills.length?`<select data-crewa="capdel" aria-label="Remove a capability" style="width:auto"><option value="">Remove a capability…</option>${skills.map(k=>`<option>${esc(k)}</option>`).join('')}</select>`:''}<button type="button" class="btn ghost small" data-crewa="ts">Bring team from TechSched</button></div>`}
+    ${stray.length&&!ro?`<div class="lockline" style="margin:8px 0 0">On the schedule but not in the crew: ${stray.map(t=>`<button type="button" class="btn ghost small" data-crewadd="${esc(t)}">+ ${esc(t)}</button>`).join(' ')}<div class="note" style="margin:4px 0 0">Add the ones who are real techs. If it's someone already listed under another spelling, type it in their <b>Other names</b> instead.</div></div>`:''}
+    <input type="hidden" id="crewSkills" value="${esc(JSON.stringify(skills))}"></div>`; }
+function readCrewCard(){
+  const box=document.getElementById('crewCard'); if(!box) return {crew:S.crew||[], skillOptions:S.skillOptions||[]};
+  const skills=JSON.parse(box.querySelector('#crewSkills').value||'[]'), out=[], seen=new Set();
+  for(const tr of box.querySelectorAll('tr[data-crew]')){ const g=k=>tr.querySelector(`[data-cf="${k}"]`); const name=g('name').value.trim().replace(/\s+/g,' '); if(!name || seen.has(name.toLowerCase())) continue; seen.add(name.toLowerCase());
+    const aka=[...new Set(g('aka').value.split(',').map(x=>x.trim()).filter(x=>x && x.toLowerCase()!==name.toLowerCase()))];
+    const r=[name, g('email').value.trim(), g('lang').value==='en'?'en':'es', [...tr.querySelectorAll('[data-cap]:checked')].map(x=>x.dataset.cap)];
+    if(aka.length || !g('on').checked) r.push(aka); if(!g('on').checked) r.push(true); out.push(r); }
+  return {crew:out, skillOptions:skills}; }
+function redrawCrewCard(mut){ const cur=readCrewCard(), rows=cur.crew, skills=cur.skillOptions;
+  // keep rows with an empty name too while editing
+  const box=document.getElementById('crewCard'); const blanks=[...box.querySelectorAll('tr[data-crew]')].filter(tr=>!tr.querySelector('[data-cf="name"]').value.trim()).length;
+  for(let i=0;i<blanks;i++) rows.push(['','','es',[]]); mut&&mut(rows, skills);
+  box.outerHTML=crewCardHTML(rows, skills, ''); }
+document.addEventListener('click', async e=>{
+  const t=e.target; if(!t.closest || !t.closest('#crewCard')) return;
+  const del=t.closest('[data-crewdel]'); if(del){ const tr=del.closest('tr'); const n=tr.querySelector('[data-cf="name"]').value.trim(); if(!n || confirm(`Remove ${n} from the crew? Their name stays on old visits. (To keep them on old jobs but out of the pickers, untick Active instead.)`)) { tr.remove(); } return; }
+  const add=t.closest('[data-crewadd]'); if(add){ redrawCrewCard(rows=>rows.push([add.dataset.crewadd,'','es',[]])); toast('Added. Tick their capabilities, then Save settings.'); return; }
+  const a=t.closest('button[data-crewa]')?.dataset.crewa; if(!a) return;
+  if(a==='add'){ redrawCrewCard(rows=>rows.push(['','','es',[]])); const L=document.querySelectorAll('#crewCard [data-cf="name"]'); L[L.length-1]?.focus(); return; }
+  if(a==='cap'){ const r=await formDialog('New capability', '<label class="f">Capability<input name="k" placeholder="e.g. Rope Access" required></label>', 'Add'); const k=(r?.k||'').trim(); if(!k) return; redrawCrewCard((rows,sk)=>{ if(!sk.some(x=>x.toLowerCase()===k.toLowerCase())) sk.push(k); }); return; }
+  if(a==='ts'){ t.disabled=true; const T=await tsTeam(); t.disabled=false; if(!T){ toast('Could not reach TechSched.'); return; }
+    T.techs=[...new Set([...T.techs, ...VIS.filter(v=>String(v.ext_id||'').startsWith('techsched:')).flatMap(v=>v.techs||[])])].filter(x=>x && x!=='N/A');
+    const before=crew(); S.crew=readCrewCard().crew; const M=teamMerge(T); S.crew=before;
+    redrawCrewCard((rows,sk)=>{ rows.splice(0, rows.length, ...M.crew); for(const k of M.skillOptions) if(!sk.includes(k)) sk.push(k); });
+    toast(`TechSched: ${M.added.length} added, ${M.updated.length} updated. Check the rows, then Save settings.`); } });
+document.addEventListener('change', e=>{ const s=e.target.closest && e.target.closest('#crewCard select[data-crewa="capdel"]'); if(!s || !s.value) return; const k=s.value;
+  if(!confirm(`Remove the capability "${k}"? It is unticked for every tech.`)){ s.value=''; return; }
+  redrawCrewCard((rows,sk)=>{ const i=sk.indexOf(k); if(i>=0) sk.splice(i,1); for(const r of rows) r[3]=(r[3]||[]).filter(x=>x!==k); }); });
+// After the crew is saved: write the one crew name onto visits/series that still use another spelling (so crew emails and the warehouse see one tech)
+async function fixTechNames(){ if(!isManager() || !VISOK) return 0; let n=0;
+  for(const tb of ['visits','visit_series']){ const q=tb==='visits'?sb.from(tb).select('id,techs').gte('visit_date', addDays(iso(today()),-400)):sb.from(tb).select('id,techs');
+    const r=await q; if(r.error) continue;
+    for(const v of r.data||[]){ const fixed=normTechs(v.techs); if(JSON.stringify(fixed)!==JSON.stringify(v.techs||[])){ const u=await sb.from(tb).update({techs:fixed}).eq('id',v.id); if(!u.error) n++; } } }
+  if(n){ toast(`Tech names fixed on ${n} visit${n===1?'':'s'}`); loadSchedule(); } return n; }
 const EQUIP_SKILL={'Swing Stage':'Swing Stage','Boom Lift':'Lift Cleaning (Boom/Scissor)','Scissor Lift':'Lift Cleaning (Boom/Scissor)','Bosun Chair':'Chair Work'};
 const workTypes = () => S.workTypes&&S.workTypes.length?S.workTypes:WORK_DEF;
 const equipList = () => S.equipment&&S.equipment.length?S.equipment:EQUIP_DEF;
@@ -3717,7 +3784,7 @@ const visLabel = v => { const p=visJob(v); return v.kind==='event' ? (v.title||'
 async function loadSchedule(){
   const from=iso(new Date(today().getFullYear(), today().getMonth()-6, 1));
   const [a,b]=await Promise.all([sb.from('visits').select('*').gte('visit_date',from).order('visit_date'), sb.from('visit_series').select('*').eq('active',true)]);
-  if(a.error){ VISOK=!invMissing(a.error); VIS=[]; SER=[]; } else { VISOK=true; VIS=a.data||[]; SER=b.data||[]; }
+  if(a.error){ VISOK=!invMissing(a.error); VIS=[]; SER=[]; } else { VISOK=true; VIS=normVis(a.data||[]); SER=normVis(b.data||[]); }
   if(current()==='schedule') renderSchedule(); if(current()==='home') renderHome();
   if(draft && document.getElementById('visBox')) $('#visBox').innerHTML=visitsHTML(draft);
   if(draft && document.getElementById('jfBox')) $('#jfBox').innerHTML=jobFlowHTML(draft);
@@ -3767,7 +3834,7 @@ async function genSeries(s, from){
   return rows.length;
 }
 async function topUpSeries(){ let k=''; try{ k=localStorage.getItem('pfbs.topup')||''; }catch(_){} if(k===iso(today())) return;
-  let n=0; for(const s of SER) n+=await genSeries(s); try{ localStorage.setItem('pfbs.topup', iso(today())); }catch(_){} if(n){ const a=await sb.from('visits').select('*').gte('visit_date',iso(new Date(today().getFullYear(), today().getMonth()-6, 1))).order('visit_date'); if(!a.error) VIS=a.data||[]; if(current()==='schedule') renderSchedule(); } }
+  let n=0; for(const s of SER) n+=await genSeries(s); try{ localStorage.setItem('pfbs.topup', iso(today())); }catch(_){} if(n){ const a=await sb.from('visits').select('*').gte('visit_date',iso(new Date(today().getFullYear(), today().getMonth()-6, 1))).order('visit_date'); if(!a.error) VIS=normVis(a.data||[]); if(current()==='schedule') renderSchedule(); } }
 // ---- month view ----
 let DBL=new Set();
 function renderSchedule(){
@@ -3783,7 +3850,7 @@ function renderSchedule(){
   const noCrew=VIS.filter(v=>v.kind==='job' && v.status==='Scheduled' && !(v.techs||[]).length && v.visit_date>=td && v.visit_date<=addDays(td,14)).length;
   box.innerHTML=`<div class="toolbar" style="flex-wrap:wrap;gap:8px;justify-content:space-between">
       <div style="display:flex;gap:6px;align-items:center"><button class="btn ghost small" id="schPrev" aria-label="Previous month">‹</button><b style="min-width:150px;text-align:center">${first.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</b><button class="btn ghost small" id="schNext" aria-label="Next month">›</button><button class="btn ghost small" id="schToday">Today</button></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="schTech" aria-label="Show tech"><option value="">All techs</option>${crew().map(c=>`<option ${schTech===c[0]?'selected':''}>${esc(c[0])}</option>`).join('')}</select>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="schTech" aria-label="Show tech"><option value="">All techs</option>${allTechs().map(t=>`<option ${schTech===t?'selected':''}>${esc(t)}</option>`).join('')}</select>
       <button class="btn ghost small" id="schWeek">Crew emails</button>${mgr?'<button class="btn ghost small" id="schEvent">+ Event</button><button class="btn ghost small" id="schTs">Import from TechSched</button>':''}</div></div>
     ${noCrew?`<div class="lockline" style="margin:8px 0">${noCrew} visit${noCrew===1?'':'s'} in the next 2 weeks ${noCrew===1?'has':'have'} no techs assigned.</div>`:''}
     ${DBL.size?`<div class="lockline" style="margin:8px 0;border-color:#f0a020">⚠ ${DBL.size} visit${DBL.size===1?'':'s'} this month share a tech at the same time (orange). Open one to fix it.</div>`:''}
@@ -3811,7 +3878,7 @@ function visEdit(v, opts={}){
     +(jn?`<div class="vscope"><b>Job notes</b> <span class="note" style="margin:0">from the proposal; office only</span>${mgr?' <button type="button" class="btn ghost small" data-a="usenotes">Add to crew notes</button>':''}<div style="white-space:pre-wrap;margin-top:4px">${esc(jn)}</div></div>`:''); };
   const d=document.createElement('dialog'); d.className='ask inved';
   const checks=(name, list, sel)=>`<div class="vchecks">${list.map(x=>`<label><input type="checkbox" name="${name}" value="${esc(x)}" ${sel.includes(x)?'checked':''} ${dis}> ${esc(x)}</label>`).join('')}</div>`;
-  d.innerHTML=`${v.kind==='job'?`<div class="jobno ${v.job_no?'':'none'}">${v.job_no?'Job #'+esc(v.job_no):(v.id?'No job # yet':'')}</div>`:''}<h3>${v.id?'Visit':'Schedule'}${p?` <span class="note" style="margin:0">${esc(p.client||'')}${p.property?' · '+esc(p.property):''} · ${esc(p.num)}</span>`:v.kind==='event'?' · event':''}${ser?` <span class="flag">${esc(ruleText(ser))}</span>`:''}</h3>
+  d.innerHTML=`${v.kind==='job'?`<div class="jobno ${(v.job_no||p?.hcpJob)?'':'none'}">${v.job_no?'Job #'+esc(v.job_no):p?.hcpJob?'Job #'+esc(p.hcpJob):(v.id?'No job # yet':'')}</div>`:''}<h3>${v.id?'Visit':'Schedule'}${p?` <span class="note" style="margin:0">${esc(p.client||'')}${p.property?' · '+esc(p.property):''} · ${esc(p.num)}</span>`:v.kind==='event'?' · event':''}${ser?` <span class="flag">${esc(ruleText(ser))}</span>`:''}</h3>
     ${v.kind==='event'?`<label class="f">What<input name="title" value="${esc(v.title||'')}" placeholder="e.g. Site walk, lift delivery" ${dis}></label>`
       :`<label class="f">Job<select name="num" ${dis||(v.id?'disabled':'')}><option value="">Pick a job…</option>${jobOptions(v.num)}</select></label><div id="vScope">${scopeBox(p)}</div>`}
     <div class="grid2">
@@ -3819,12 +3886,12 @@ function visEdit(v, opts={}){
       <label class="f">Work days<input type="number" name="workdays" min="1" value="${wd0}" ${dis}></label><label class="f" style="align-self:end;font-weight:400"><span><input type="checkbox" name="skip_weekends" ${v.skip_weekends?'checked':''} ${dis}> Weekdays only (skip Sat &amp; Sun)</span></label>
       <label class="f">Start time<input type="time" name="start_time" value="${esc(v.start_time||'')}" ${dis}></label><label class="f">End time<input type="time" name="end_time" value="${esc(v.end_time||'')}" ${dis}></label>
     </div>
-    <div class="f"><b>Techs</b> <select name="capf" style="width:auto;margin-left:8px" aria-label="Show techs who can do"><option value="">All techs</option>${skillList().map(x=>`<option>${esc(x)}</option>`).join('')}</select>
+    <div class="f"><b>Techs</b> <select name="capf" style="width:auto;margin-left:8px" aria-label="Show techs who can do"><option value="">Show everyone</option>${skillList().map(x=>`<option>${esc(x)}</option>`).join('')}</select>
       <div class="vchecks vtechs">${[...new Set([...allTechs(), ...(v.techs||[])])].map(t=>`<label data-tech="${esc(t)}"><input type="checkbox" name="techs" value="${esc(t)}" ${(v.techs||[]).includes(t)?'checked':''} ${dis}> ${esc(t)}${skillsOf(t).length?` <span class="note" style="margin:0">(${esc(skillsOf(t).join(', '))})</span>`:''} <span class="vbusy flag warn" hidden>busy</span></label>`).join('')}</div>
       <div class="note vgap" style="margin:2px 0 0;color:var(--warn)" hidden></div></div>
 
     <div class="f"><b>Equipment</b>${checks('equipment', [...new Set([...equipList(), ...(v.equipment||[])])], v.equipment||[])}</div>
-    <div class="grid2">${(S.vehicles||[]).length||v.vehicle?`<label class="f">Vehicle<select name="vehicle" ${dis}><option value="">—</option>${[...new Set([...(S.vehicles||[]), ...(v.vehicle?[v.vehicle]:[])])].map(x=>`<option ${x===v.vehicle?'selected':''}>${esc(x)}</option>`).join('')}</select></label>`:''}
+    <div class="grid2">${(S.vehicles||[]).length||v.vehicle?`<label class="f">Vehicle<select name="vehicle" ${dis}><option value="">—</option>${[...new Set([...vehList(), ...(v.vehicle?[v.vehicle]:[])])].map(x=>`<option ${x===v.vehicle?'selected':''}>${esc(x)}</option>`).join('')}</select></label>`:''}
       <label class="f">Status<select name="status" ${dis}>${['Scheduled','Done','Skipped','Cancelled'].map(x=>`<option ${x===v.status?'selected':''}>${x}</option>`).join('')}</select></label></div>
     <label class="f">Notes for the crew <span class="note" style="margin:0;font-weight:400">go in their email</span><textarea name="notes" rows="2" ${dis}>${esc(v.notes||'')}</textarea></label>
     <label class="f">Office notes<textarea name="office_notes" rows="2" ${dis}>${esc(v.office_notes||'')}</textarea></label>
@@ -3957,7 +4024,6 @@ function tsMatch(j){
   const k=streetKey(j.address); if(k){ const L=won.filter(p=>streetKey(p.siteAddress)===k || streetKey(p.property)===k).sort((a,b)=>(['Approved','Scheduled'].includes(a.status)?0:1)-(['Approved','Scheduled'].includes(b.status)?0:1) || String(b.num).localeCompare(String(a.num))); if(L.length) return [L[0],'address']; }
   return [null,''];
 }
-const crewName = t => { const names=crew().map(c=>c[0]), low=String(t).trim().toLowerCase(); return names.find(n=>n.toLowerCase()===low) || (names.filter(n=>n.toLowerCase().split(' ')[0]===low.split(' ')[0]).length===1 ? names.find(n=>n.toLowerCase().split(' ')[0]===low.split(' ')[0]) : String(t).trim()); };
 // TechSched's team: names, emails, capabilities, capability list, vehicles, equipment → merged into Settings (nothing removed)
 async function tsTeam(){
   try{ const r=await fetch(TS_URL.replace(/\/jobs$/,'/settings/main')+`?key=${TS_KEY}`); if(!r.ok) return null; const f=(await r.json()).fields||{}, g=k=>tsVal(f[k]);
@@ -3966,11 +4032,11 @@ async function tsTeam(){
     return {techs, emails:typeof emails==='object'?emails:{}, skills:typeof skills==='object'?skills:{}, skillOptions:[].concat(g('skillOptions')||[]).filter(Boolean), vehicles:veh, equipment:[].concat(g('customEquipList')||[]).filter(Boolean)};
   }catch(_){ return null; } }
 function teamMerge(T){
-  const cur=crew().map(c=>[c[0], c[1]||'', c[2]||'es', [...(c[3]||[])]]), out={added:[], updated:[]};
-  for(const t of T.techs){ const em=String(T.emails[t]||'').trim(), sk=[].concat(T.skills[t]||[]).filter(Boolean);
-    let c=cur.find(x=>x[0].toLowerCase()===t.toLowerCase()) || cur.find(x=>x[0].split(' ')[0].toLowerCase()===t.split(' ')[0].toLowerCase() && (!t.includes(' ') || !x[0].includes(' ')));
-    if(!c){ cur.push([t, em, 'es', sk]); out.added.push(t); continue; }
-    if(t.includes(' ') && !c[0].includes(' ')) c[0]=t;   // "Rolando" in the CRM, "Rolando Olivera" in TechSched: keep the full name
+  const cur=crew().map(c=>[c[0], c[1]||'', c[2]||'es', [...(c[3]||[])], [...(c[4]||[])], !!c[5]]), out={added:[], updated:[]};
+  for(const t0 of T.techs){ const t=String(t0).trim().replace(/\s+/g,' '); if(!t) continue; const em=String(T.emails[t0]||'').trim(), sk=[].concat(T.skills[t0]||[]).filter(Boolean);
+    let c=cur.find(x=>x[0].toLowerCase()===t.toLowerCase() || x[4].some(a=>a.toLowerCase()===t.toLowerCase())) || (cur.filter(x=>x[0].split(' ')[0].toLowerCase()===t.split(' ')[0].toLowerCase()).length===1 ? cur.find(x=>x[0].split(' ')[0].toLowerCase()===t.split(' ')[0].toLowerCase() && (!t.includes(' ') || !x[0].includes(' '))) : null);
+    if(!c){ cur.push([t, em, 'es', sk, [], false]); out.added.push(t); continue; }
+    if(t.includes(' ') && !c[0].includes(' ')){ c[4].push(c[0]); c[0]=t; } else if(t.toLowerCase()!==c[0].toLowerCase() && !c[4].some(a=>a.toLowerCase()===t.toLowerCase())) c[4].push(t);   // "Rolando" in the CRM, "Rolando Olivera" in TechSched: keep the full name
     const before=JSON.stringify(c); if(!c[1] && em) c[1]=em; c[3]=[...new Set([...(c[3]||[]), ...sk])]; if(JSON.stringify(c)!==before) out.updated.push(c[0]); }
   out.crew=cur; out.skillOptions=[...new Set([...skillList(), ...T.skillOptions])]; out.vehicles=[...new Set([...(S.vehicles||[]), ...T.vehicles])]; out.equipment=[...new Set([...equipList(), ...T.equipment])];
   return out; }
@@ -4043,7 +4109,7 @@ function toEs(text){
 }
 window.pfbsToEs=toEs;   // used by the tests
 // ---- crew emails (same wording as TechSched) ----
-const crewOf = n => crew().find(c=>c[0]===n) || [n,'','en'];
+const crewOf = n => crew().find(c=>c[0]===crewName(n)) || [crewName(n),'','es'];
 function visMailText(v, tech, lang){ const t=I18[lang], dts=dLong(v.visit_date,lang)+(v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang)+(v.skip_weekends?` (${t.weekdays})`:''):'');
   const team=(v.techs||[]).filter(x=>x!==tech), addr=String(v.address||'').replace(/\n/g,', ');
   const L=[...(v.job_no?[`${t.job}: ${v.job_no}`]:[]), `${t.when}: ${dts}`, `${t.time}: ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)}`, `${t.address}: ${addr}`];
@@ -4084,7 +4150,7 @@ async function weekEmails(){
   if(!r) return; const m=parse(r.mon); m.setDate(m.getDate()-((m.getDay()+6)%7)); const monday=iso(m);
   const d=document.createElement('dialog'); d.className='ask';
   d.innerHTML=`<h3>Week of ${fmtD(monday)}</h3><div class="note" style="margin:0 0 8px">One email per tech, in their language (set in Settings → Crew).</div>
-    ${crew().map(c=>{ const x=weekText(c[0],monday,c[2]||'en'); return `<div class="toolbar" style="margin:4px 0;justify-content:space-between"><span>${esc(c[0])} <span class="note" style="margin:0">${x.n?x.n+' visit'+(x.n===1?'':'s'):'no work'}${c[1]?'':' · no email'}</span></span><button type="button" class="btn small ${x.n?'':'ghost'}" data-t="${esc(c[0])}">Draft</button></div>`; }).join('')}
+    ${allTechs().map(t=>crewOf(t)).map(c=>{ const x=weekText(c[0],monday,c[2]||'en'); return `<div class="toolbar" style="margin:4px 0;justify-content:space-between"><span>${esc(c[0])} <span class="note" style="margin:0">${x.n?x.n+' visit'+(x.n===1?'':'s'):'no work'}${c[1]?'':' · no email'}</span></span><button type="button" class="btn small ${x.n?'':'ghost'}" data-t="${esc(c[0])}">Draft</button></div>`; }).join('')}
     <div class="toolbar"><span style="flex:1"></span><button type="button" class="btn ghost" data-a="x">Close</button></div>`;
   document.body.appendChild(d); d.addEventListener('click', e=>{ if(e.target.closest('[data-a="x"]')){ d.close(); d.remove(); return; } const t=e.target.closest('[data-t]')?.dataset.t; if(!t) return; const c=crewOf(t);
     mailBox(`Week of ${fmtD(monday)} — ${t}`, c[1]||'', {...weekText(t,monday,c[2]||'en'), lang:c[2]||'en'}, l=>({...weekText(t,monday,l), lang:l})); }); d.addEventListener('cancel', e=>{ e.preventDefault(); d.close(); d.remove(); }); d.showModal(); }

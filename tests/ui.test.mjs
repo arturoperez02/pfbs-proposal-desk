@@ -168,7 +168,9 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort()); await pg.route(/outlook\.office\.com/, r => r.fulfill({ body: 'ok' }));
   await pg.addInitScript(x => { window.MOCK_EXTRA = x; }, [rj, oj]); await pg.goto(BASE); await pg.waitForTimeout(900);
   await pg.click('#tabs [data-tab="settings"]', T); await pg.waitForTimeout(300);
-  await pg.fill('#s-crew', 'Rigo Perez | rigo@example.com | es\nBaldemar Cervantes | bal@example.com | es\nAna Tech | ana@example.com | en'); await pg.click('#saveS'); await pg.waitForTimeout(500);
+  await pg.evaluate(() => { const R = [...document.querySelectorAll('#crewCard tr[data-crew]')]; R[0].querySelector('[data-cf="email"]').value = 'rigo@example.com'; R[1].querySelector('[data-cf="email"]').value = 'bal@example.com'; R[2].remove(); R[3].remove(); });
+  await pg.click('#crewCard [data-crewa="add"]'); await pg.evaluate(() => { const R = [...document.querySelectorAll('#crewCard tr[data-crew]')].pop(); R.querySelector('[data-cf="name"]').value = 'Ana Tech'; R.querySelector('[data-cf="email"]').value = 'ana@example.com'; R.querySelector('[data-cf="lang"]').value = 'en'; });
+  await pg.click('#saveS'); await pg.waitForTimeout(500);
   await pg.click('#tabs [data-tab="orders"]', T); await pg.waitForTimeout(300);
   await pg.click('[data-schnew="PFBS-0980"]', T); await pg.waitForSelector('dialog.inved', T);
   assert.equal(await pg.$eval('[name="preset"]', e => e.value), 'custom', 'recurring job suggests a custom repeat');
@@ -596,6 +598,37 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('[data-cltab="notes"]'); await pg.fill('#cl-notes', 'Gate code 1234'); await pg.click('#clSave'); await pg.waitForTimeout(400);
   assert.equal(await pg.evaluate(() => DBX.clients.find(x => x.id === 'c-pg').notes), 'Gate code 1234', 'notes saved from the Notes tab (other fields untouched)');
   assert.equal(await pg.evaluate(() => DBX.clients.find(x => x.id === 'c-pg').name), 'Page Test Realty');
+  await pg.close();
+}
+
+// 25. Crew: one row per tech with capability checkboxes; other spellings merge into one tech everywhere; inactive techs leave the pickers
+{
+  const d0 = new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10);
+  const crewS = { crew: [['Rigo Perez', 'rigo@example.com', 'es', ['Swing Stage']], ['Baldemar Cervantes', '', 'es', []], ['Old Tech', '', 'es', [], [], true]], skillOptions: ['Swing Stage', 'Pressure Washing'] };
+  const vis = [{ id: 'cr1', kind: 'job', status: 'Scheduled', visit_date: d0, start_time: '08:00', end_time: '12:00', address: '1 Crew St', techs: ['Rigoberto', 'Juan Nuevo'], work: [], equipment: [] },
+               { id: 'cr2', kind: 'job', status: 'Scheduled', visit_date: d0, start_time: '13:00', end_time: '15:00', address: '2 Crew St', techs: ['rigo perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('crew: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(([s, v]) => { window.MOCK_SETTINGS = s; window.MOCK_VIS = v; }, [crewS, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('#crewCard', T);
+  assert.ok(await pg.evaluate(() => !!document.querySelector('.savebar #saveS') && !!document.querySelector('.setnav a')), 'Save is always in reach and sections have jump links');
+  assert.equal(await pg.$$eval('#crewCard tr[data-crew="0"] [data-cap]', L => L.map(x => x.checked).join()), 'true,false', 'a checkbox per capability');
+  assert.ok(await pg.evaluate(() => [...document.querySelectorAll('#crewCard [data-crewadd]')].map(x => x.dataset.crewadd).join() === 'Rigoberto,Juan Nuevo'), 'names on the schedule but not in the crew are offered');
+  await pg.evaluate(() => { const R = document.querySelector('#crewCard tr[data-crew="0"]'); R.querySelector('[data-cf="aka"]').value = 'Rigoberto'; R.querySelector('[data-cap="Pressure Washing"]').checked = true; });
+  await pg.click('#crewCard [data-crewa="cap"]'); await pg.fill('dialog [name="k"]', 'Rope Access'); await pg.click('dialog .btn:not(.ghost)'); await pg.waitForTimeout(150);
+  assert.equal(await pg.$eval('#crewCard tr[data-crew="0"] [data-cf="aka"]', e => e.value), 'Rigoberto', 'typing is kept when a capability is added');
+  await pg.click('#crewCard [data-crewadd="Juan Nuevo"]'); await pg.waitForTimeout(100);
+  await pg.evaluate(() => { const R = [...document.querySelectorAll('#crewCard tr[data-crew]')].pop(); R.querySelector('[data-cap="Rope Access"]').checked = true; });
+  await pg.click('#saveS'); await pg.waitForTimeout(800);
+  const saved = await pg.evaluate(() => DBX.settings[0].data);
+  assert.deepEqual(saved.crew[0], ['Rigo Perez', 'rigo@example.com', 'es', ['Swing Stage', 'Pressure Washing'], ['Rigoberto']]);
+  assert.deepEqual(saved.crew[3], ['Juan Nuevo', '', 'es', ['Rope Access']]); assert.deepEqual(saved.skillOptions, ['Swing Stage', 'Pressure Washing', 'Rope Access']);
+  assert.deepEqual(await pg.evaluate(() => DBX.visits.filter(v => v.id.startsWith('cr')).map(v => v.techs)), [['Rigo Perez', 'Juan Nuevo'], ['Rigo Perez']], 'other spellings fixed on the visits');
+  await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('#schTech', T);
+  assert.deepEqual(await pg.$$eval('#schTech option', L => L.map(o => o.textContent)), ['All techs', 'Rigo Perez', 'Baldemar Cervantes', 'Juan Nuevo'], 'each tech once; inactive left out');
+  await pg.click('#schWeek'); await pg.waitForSelector('dialog [name="mon"]', T); await pg.click('dialog .btn:not(.ghost)'); await pg.waitForTimeout(200);
+  assert.match(await pg.textContent('dialog.ask:last-of-type'), /Juan Nuevo/, 'weekly crew emails include every tech');
   await pg.close();
 }
 
