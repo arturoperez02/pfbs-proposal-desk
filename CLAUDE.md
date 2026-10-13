@@ -35,7 +35,7 @@ Hosting: GitHub Pages from `main` (custom domain via `CNAME`). Pushing to `main`
   Approved → Scheduled → Invoiced → Paid; or Declined / Expired / Withdrawn. (Follow-up status is retired.)
 - Others: `team_members` (roles: Owner, Admin, Senior Estimator, Estimator, BD Rep), `settings` (one row, `data` jsonb),
   `proposal_activity`, `proposal_history`, `prospects`, `commission_payouts`, `admin_log`, `deleted_proposals`,
-  `service_reports`, `private_settings`, `integration_keys`.
+  `service_reports`, `private_settings`, `integration_keys`, `invoices`, `invoice_payments`.
 - Security is row level security plus `security definer` functions. `is_manager()` = Owner, Admin, Senior Estimator.
 - Zapier calls `rpc/<function>` with the anon key + a `token` checked by `zap_check()`. Single-jsonb functions need the
   header `Prefer: params=single-object`.
@@ -52,7 +52,13 @@ Hosting: GitHub Pages from `main` (custom domain via `CNAME`). Pushing to `main`
   Its Zapier trigger sends no job number, description or dates, so service reports link to CRM jobs by
   PFBS number, HCP job #, or **street address** (`zap_report_job`), and use the finish day as the service date.
   The CRM stores the HCP **Job #** clients see, not HCP's internal Job ID.
-- Clients pay by check or bank ACH; Oscar marks jobs Paid from Jobs → Waiting on payment.
+- Clients pay by check or bank ACH (no cards). Invoices (update 018) are built from the job's accepted scope (one visit
+  per invoice for recurring lines) plus approved change orders. Numbers continue from HousecallPro (`set_next_invoice_no`).
+  Bill to = billing address + **billing (AP) email**; service reports go to the site contact instead. Clients flagged
+  "requires a PO#" cannot be invoiced without one. PO# and billing typed on an invoice are saved back to the job.
+  Payments (partial allowed) are recorded once and voided, never edited or deleted; paid in full → job Paid with the
+  last payment's date (commission starts). Sending an invoice moves the job to Invoiced. Invoice email: no signature.
+- During the switch from HCP, jobs invoiced in HousecallPro are still marked Paid from Jobs → "Invoiced in HousecallPro".
 
 ## Testing (run before every push)
 ```
@@ -66,7 +72,7 @@ npm test                                                      # database + brows
 1. Service reports: built (`reports.html`, update 017). Switch the HCP "Job finished" Zap to `zap_report_job`.
 2. Warehouse: KitTracker (separate Supabase project, repo `pfbs-kittracker`) into the CRM; kit lists from line items.
 3. Schedule: TechSched (Firebase, private repo `pfbs-schedule`) last, with a crew view.
-4. Invoicing + accountant dashboard (invoices, A/R aging, checks/ACH with deposit date, export for her software).
+4. Invoicing: built (update 018). Next: accountant dashboard (A/R aging, deposits, export for her software, her own login).
 5. Import HousecallPro history (its Excel export), run both for 1–2 billing cycles, cancel HCP.
 
 Pending on Arturo's side: Supabase Pro (daily backups), Entra app for SharePoint (send client ID + tenant ID only).

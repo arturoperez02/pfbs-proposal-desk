@@ -42,3 +42,46 @@ assert.equal((await one(`select count(*)::int c from service_reports`)).c, 0, 'e
 await db.exec(`reset role; set role anon; select set_config('request.jwt.claims','{}',false)`);
 await assert.rejects(db.query(`select * from service_reports`), undefined, 'anonymous blocked');
 console.log(`db: all ${files.length} updates ran twice; service report checks passed`);
+
+// ---------- invoicing (update 018) ----------
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role; select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  await db.query(`select set_next_invoice_no(1525)`);
+  assert.equal(Number((await q1(`select next_invoice_no() n`)).n), 1525, 'numbering continues from HCP');
+  await db.exec(`reset role`); await db.exec(`update proposals set status='Scheduled', date_paid=null where num='PFBS-0778'`);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  const inv = await q1(`insert into invoices(num, items, bill_to) values ('PFBS-0778', '[{"description":"Window cleaning","amount":1000},{"description":"Lift","amount":"500.50"}]', '{"name":"Demo"}') returning id, inv_no, total, due_date, invoice_date, status`);
+  assert.equal(Number(inv.inv_no), 1525); assert.equal(Number(inv.total), 1500.5, 'total from line items'); assert.equal(inv.status, 'Draft');
+  assert.equal((inv.due_date - inv.invoice_date) / 864e5, 30, 'Net 30 due date');
+  await assert.rejects(db.query(`update invoices set paid = 1500.5 where id='${inv.id}'`).then(async () => { if (Number((await q1(`select paid from invoices where id='${inv.id}'`)).paid) !== 0) throw new Error('paid changed'); throw new Error('ok-no-change'); }), /ok-no-change/, 'paid cannot be typed in');
+  await db.query(`update invoices set status='Sent', sent_to='ap@example.com' where id='${inv.id}'`);
+  await db.exec('reset role'); assert.equal((await q1(`select status from proposals where num='PFBS-0778'`)).status, 'Invoiced', 'sending moves the job to Invoiced');
+  await db.exec(`set role authenticated`);
+  await db.query(`insert into invoice_payments(invoice_id, amount, method, received_on) values ('${inv.id}', 1000, 'Check', '2026-10-20')`);
+  let i2 = await q1(`select status, paid from invoices where id='${inv.id}'`); assert.equal(i2.status, 'Sent'); assert.equal(Number(i2.paid), 1000, 'partial payment');
+  await db.exec('reset role'); assert.equal((await q1(`select status from proposals where num='PFBS-0778'`)).status, 'Invoiced', 'partial does not mark Paid');
+  await db.exec(`set role authenticated`);
+  await assert.rejects(db.query(`update invoice_payments set amount=5 where invoice_id='${inv.id}'`), /cannot be edited/);
+  await assert.rejects(db.query(`delete from invoice_payments where invoice_id='${inv.id}'`), undefined, 'payments cannot be deleted');
+  await db.query(`insert into invoice_payments(invoice_id, amount, method, received_on) values ('${inv.id}', 500.50, 'ACH', '2026-10-25')`);
+  i2 = await q1(`select status, paid from invoices where id='${inv.id}'`); assert.equal(i2.status, 'Paid');
+  await db.exec('reset role'); const pr = await q1(`select status, date_paid from proposals where num='PFBS-0778'`);
+  assert.equal(pr.status, 'Paid'); assert.equal(pr.date_paid.toISOString().slice(0, 10), '2026-10-25', 'date paid = last payment received');
+  await db.exec(`set role authenticated`);
+  await assert.rejects(db.query(`update invoices set status='Void', void_reason='x' where id='${inv.id}'`), /Void the payments first/);
+  const pid = (await q1(`select id from invoice_payments where invoice_id='${inv.id}' and amount=500.50`)).id;
+  await assert.rejects(db.query(`update invoice_payments set voided=true where id=${pid}`), /reason/);
+  await db.query(`update invoice_payments set voided=true, void_reason='bounced' where id=${pid}`);
+  i2 = await q1(`select status, paid from invoices where id='${inv.id}'`); assert.equal(i2.status, 'Sent'); assert.equal(Number(i2.paid), 1000, 'void payment reopens balance');
+  await assert.rejects(db.query(`delete from invoices where id='${inv.id}'`), undefined, 'invoices cannot be deleted');
+  await assert.rejects(db.query(`select set_next_invoice_no(1000)`), /higher than 1525/);
+  const n2 = await q1(`insert into invoices(num, items) values ('PFBS-0778','[{"amount":10}]') returning id, inv_no`); assert.equal(Number(n2.inv_no), 1526);
+  await db.query(`update invoices set status='Void', void_reason='duplicate' where id='${n2.id}'`);
+  await assert.rejects(db.query(`update invoices set status='Draft' where id='${n2.id}'`), /cannot be reopened/);
+  await db.exec(`reset role; select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000002","email":"e@x.com"}',false); set role authenticated;`);
+  assert.equal((await q1(`select count(*)::int c from invoices`)).c, 0, 'estimators cannot see invoices');
+  await db.exec('reset role');
+  const bk = await q1(`select backup_json() b`); assert.ok(bk.b.invoices.length === 2 && bk.b.invoice_payments.length === 2, 'backup has invoices');
+  console.log('db: invoicing checks passed');
+}

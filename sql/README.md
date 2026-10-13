@@ -19,5 +19,6 @@
 | 015_lost_to_and_backup.sql | Run once: competitor and their price on lost proposals; weekly backup through Zapier and a Download backup button. Needs 014. |
 | 016_hcp_paid.sql | Run once: HousecallPro "paid" events mark the job Paid and fill in Date paid. Needs 014. |
 | 017_service_reports.sql | Run once: service reports move into the CRM (reports.html). Reports, photos and PDFs stored privately in Supabase; HousecallPro "Job finished" starts a report; approving one marks the job's report sent. The old report app keeps working until you switch the Zap. Needs 016. |
+| 018_invoicing.sql | Run once: invoices built from the job (numbered, PDF, emailed), billing (AP) email and PO# on jobs, checks/ACH payments including partial payments, paid in full marks the job Paid. Invoices and payments are voided, never deleted. Needs 017. |
 
 Client data is never stored in this repository.

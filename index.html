@@ -68,6 +68,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 #drawer .dtabs button{border:0;background:none;padding:10px 16px;font-weight:600;color:var(--muted,#666);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
 #drawer .dtabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 h3.setsec{margin:28px 0 10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#666)} h3.setsec:first-child{margin-top:4px}
+dialog.ask.inved{max-width:760px} .invrow{display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid var(--line)} .invrow textarea{grid-column:1/-1;min-height:34px;font-size:13px} .invhead{display:flex;justify-content:space-between;margin:10px 0 6px;font-size:13px;color:var(--mut,#666)} .flag.ok{background:#e3f4e8;color:#1e6b3a}
 dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px} tr.voided td{color:var(--muted,#888)}
 .btn.small{padding:5px 10px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -382,11 +383,11 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt',budget_year:'budgetYear',budget_check:'budgetCheck',lost_to:'lostTo',lost_price:'lostPrice'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt',budget_year:'budgetYear',budget_check:'budgetCheck',lost_to:'lostTo',lost_price:'lostPrice',billing_email:'billingEmail',po_number:'poNumber',po_required:'poRequired'};
 const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp',report_sent_on:'reportSentOn',report_url:'reportUrl',est_comm_rate:'estCommRate',bd_comm_rate:'bdCommRate'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt','budget_year','lost_price'].includes(c)) v=num(v); o[c]=v; } return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(c==='po_required'){ o[c]=(v===true||v==='true'); continue; } if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt','budget_year','lost_price'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -622,6 +623,7 @@ async function openDrawer(id, opts={}){
   draft = orig ? structuredClone(orig) : newLead ? {num:'', dateSent:null, sentBy: role()==='Estimator'?me.name:'', bdRep: role()==='BD Rep'?me.name:'', leadSource: role()==='BD Rep'?'BD rep':'', status:'Lead', items:[]} : {num:'', dateSent:iso(today()), sentBy: me.name, status:'Estimating', items:[{type:'Service',service:'',qty:1,frequency:'',amount:'',description:'',note:''}]};
   hist=[]; drawDrawer();
   $('#scrim').hidden=false; $('#drawer').hidden=false; $('#closeD')?.focus();
+  if(id && outcome(draft)==='Won' && isManager()) loadInvoices(id);
   if(id) await loadActivity(id);
 }
 let ACT=[], actOK=true;
@@ -773,6 +775,8 @@ function drawDrawer(){
       ${field('Contact name','contactName')}
       ${field('Contact phone','contactPhone','tel')}
       ${field('Contact email','contactEmail','email','full')}
+      ${field('Billing (AP) email for invoices','billingEmail','email','','placeholder="Leave blank to use the contact email"')}
+      <label class="f">Client requires a PO# on invoices<select data-k="poRequired" id="f-poRequired" ${dis}><option value="">No</option><option value="true" ${p.poRequired===true||p.poRequired==='true'?'selected':''}>Yes</option></select></label>
       <label class="f">Billing address<textarea data-k="billAddress" id="f-billAddress" rows="2" ${dis}>${esc(p.billAddress??'')}</textarea></label>
       <label class="f">Job site address<textarea data-k="siteAddress" id="f-siteAddress" rows="2" ${dis}>${esc(p.siteAddress??'')}</textarea></label>
     </div></fieldset>
@@ -800,6 +804,9 @@ function drawDrawer(){
     </fieldset>
     </div>
     <div class="dpane" data-pane="job" ${tab==='job'?'':'hidden'}>
+    ${outcome(p)==='Won' && !isNew ? `<fieldset><legend>Invoices</legend>
+      <div class="grid2" style="margin-bottom:8px">${field('PO # / customer reference'+(p.poRequired===true||p.poRequired==='true'?' (required)':''),'poNumber')}</div>
+      <div id="invBox">${invoicesHTML(p)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Payment &amp; commission</legend><div class="grid2">
       ${field(isRecurring(p)?'First HCP job #':'HCP job #','hcpJob')}
       ${field('Date paid','datePaid','date')}
@@ -921,6 +928,10 @@ function itemEvent(e, final){
 }
 $('#drawer').addEventListener('change', e=>{ if(e.target.id!=='budChk' || !draft) return; draft.budgetYear = e.target.checked ? today().getFullYear()+1 : null; if(!e.target.checked) draft.budgetCheck=null; drawDrawer(); $('#dmsg').textContent = e.target.checked ? 'Budget proposal: the PDF and email say so. Save to keep it.' : 'Normal proposal again. Save to keep it.'; });
 $('#drawer').addEventListener('click', e=>{ const m=e.target.closest('[data-stmore]'); if(m){ const r=m.nextElementSibling; r.hidden=!r.hidden; m.textContent=r.hidden?'More ▾':'Less ▴'; } });
+$('#drawer').addEventListener('click', e=>{ if(!draft) return; const t=e.target;
+  if(t.closest('#invNew')){ invOpenNew(draft); return; }
+  const o=t.closest('[data-inv]'); if(o){ invOpen(draft, o.dataset.inv); return; }
+  const py=t.closest('[data-invpay]'); if(py){ const v=(INV[draft.num]||[]).find(x=>x.id===py.dataset.invpay); if(v) invPay(v).then(ok=>{ if(ok) invRefresh(v.num); }); } });
 $('#drawer').addEventListener('click', e=>{ const dt=e.target.closest('[data-dtab]'); if(!dt) return; DTAB=dt.dataset.dtab;
   for(const b of document.querySelectorAll('#drawer [data-dtab]')) b.setAttribute('aria-selected', b===dt);
   for(const x of document.querySelectorAll('#drawer .dpane')) x.hidden = x.dataset.pane!==DTAB; });
@@ -1137,14 +1148,15 @@ function renderJobs(){
     return n.join('<br>') || '<span class="note" style="margin:0">Ready</span>'; };
   const dcell=(p,k)=>`<input class="qa qd" data-qa="${k}" type="date" aria-label="${k==='start'?'Start date':'Finish date'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
   const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='techs'?'Techs':k==='hpt'?'Hours each':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
-  const inv=P.filter(p=>p.status==='Invoiced').sort((a,b)=>String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
+  const OI=(OPENINV||[]).slice().sort((a,b)=>String(invDue(a)).localeCompare(String(invDue(b)))), oiDue=OI.reduce((s,v)=>s+invBal(v),0);
+  const inv=P.filter(p=>p.status==='Invoiced' && !OI.some(v=>v.num===p.num) && !(INV[p.num]||[]).some(v=>v.status!=='Void')).sort((a,b)=>String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
   const nsr=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !p.reportSentOn && !isRecurring(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   const nsr2=nsr.filter(p=>!SR.some(r=>r.num===p.num));
   const chk=P.map(p=>({p,h:contractHealth(p)})).filter(x=>x.h && x.h.kind!=='ok').sort((a,b)=>(a.h.kind==='low'?0:1)-(b.h.kind==='low'?0:1));
   $('#jobsBody').innerHTML = `<div class="cards">
   <div class="card"><h3>Approved &amp; scheduled (${up.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>Job</th><th>Status</th><th class="hide-sm">Approved</th><th class="hide-sm">Estimator</th><th class="r">Amount</th><th>Needs</th></tr></thead><tbody>
-    ${up.length?up.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm num">${fmtD(p.dateResolved)}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${money(wonAmt(p))}</td><td>${needs(p)}</td></tr>`).join('')
+    ${up.length?up.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td><span class="pill ${pillClass(p.status)}">${esc(p.status)}</span></td><td class="hide-sm num">${fmtD(p.dateResolved)}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${money(wonAmt(p))}</td><td>${needs(p)}${p.status==='Scheduled'&&isManager()&&OPENINV?`<div style="margin-top:4px"><button type="button" class="btn small" data-invnew="${esc(p.num)}">Invoice</button></div>`:''}</td></tr>`).join('')
       : '<tr><td colspan="6" class="empty">No approved or scheduled jobs right now.</td></tr>'}</tbody></table></div>
     <div class="note">Change the status to Scheduled once the job is on the calendar, and to Invoiced when it's done.</div></div>
   <div class="card"><h3>Log actual hours (${hrs.length})</h3>
@@ -1159,7 +1171,14 @@ function renderJobs(){
     <div class="tablewrap"><table><thead><tr><th>Job</th><th class="r">Per month</th><th class="hide-sm">Estimator</th><th class="r">Margin</th><th>Issue</th></tr></thead><tbody>
     ${chk.length?chk.map(({p,h})=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="r num">${money(monthlyValue(p))}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${h.m!=null?`<b class="${h.kind==='low'?'down':''}">${pct(h.m)}</b>`:'—'}</td><td class="wrap"><span class="flag ${h.cls}">${esc(h.text)}</span></td></tr>`).join('')
       : '<tr><td colspan="5" class="empty">All recurring contracts look healthy.</td></tr>'}</tbody></table></div></div>
-  <div class="card"><h3>Waiting on payment (${inv.length})</h3>
+  ${OPENINV?`<div class="card"><h3>Open invoices (${OI.length})${OI.length?` · ${usd(oiDue)} due`:''}</h3>
+    <div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Job</th><th class="hide-sm">Bill to</th><th>Due</th><th class="r">Balance</th><th></th></tr></thead><tbody>
+    ${OI.length?OI.map(v=>{ const p=P.find(x=>x.num===v.num), [lab,cls]=invLabel(v); return `<tr><td class="num"><b>#${esc(v.inv_no)}</b><div><span class="flag ${cls}">${esc(lab)}</span></div></td>
+      <td class="wrap">${p?`<a href="#" data-open="${esc(p.num)}">${job(p)}</a>`:esc(v.num||'')}</td><td class="hide-sm wrap">${esc(v.bill_to?.name||'')}</td><td class="num">${fmtD(invDue(v))}</td>
+      <td class="r num">${usd(invBal(v))}${num(v.paid)>0?`<div class="note" style="margin:0">of ${usd(v.total)}</div>`:''}</td><td>${isManager()?`<button type="button" class="btn small" data-oipay="${esc(v.id)}">Record payment</button>`:''}</td></tr>`; }).join('')
+      : '<tr><td colspan="6" class="empty">No open invoices.</td></tr>'}</tbody></table></div>
+    <div class="note">Sent invoices with money still due, oldest due date first. Paid in full marks the job Paid with its date paid, so commission starts.</div></div>`:''}
+  <div class="card"><h3>${OPENINV?'Invoiced in HousecallPro':'Waiting on payment'} (${inv.length})</h3>
     <div class="note" style="margin:0 0 8px">Invoiced jobs. Match them to paid invoices in HousecallPro by the <b>HCP job #</b>, then click Paid. Commission starts from the date paid.</div>
     <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th>HCP job #</th><th class="r">Amount</th><th class="hide-sm">Estimator</th><th>Date paid</th><th></th></tr></thead><tbody>
     ${inv.length?inv.map(p=>`<tr data-prow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="num"><b>${esc(p.hcpJob||'—')}</b></td><td class="r num">${money(isRecurring(p)?monthlyValue(p):p.amount)}${isRecurring(p)?'<div class="note" style="margin:0">first month</div>':''}</td><td class="hide-sm">${esc(p.sentBy||'')}</td>
@@ -1175,6 +1194,8 @@ function renderJobs(){
   </div>`;
 }
 $('#jobsBody').addEventListener('click', async e=>{
+  const ni=e.target.closest('[data-invnew]'); if(ni){ await openDrawer(ni.dataset.invnew); await loadInvoices(ni.dataset.invnew); if(draft) invOpenNew(draft); return; }
+  const op=e.target.closest('[data-oipay]'); if(op){ const v=(OPENINV||[]).find(x=>x.id===op.dataset.oipay); if(v && await invPay(v)) invRefresh(v.num); return; }
   const o=e.target.closest('[data-open]'); if(o){ e.preventDefault(); openDrawer(o.dataset.open); return; }
   const pb=e.target.closest('[data-paid]');
   if(pb){ const p=P.find(x=>x.num===pb.dataset.paid); if(!p) return; const d=pb.closest('tr').querySelector('[data-pd]').value||iso(today());
@@ -1349,7 +1370,7 @@ const norm = v => String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
 function clientNames(){ const m=new Map(); for(const x of P){ const k=norm(x.client); if(k && !m.has(k)) m.set(k, String(x.client).trim()); } return [...m.values()].sort((a,b)=>a.localeCompare(b)); }
 function propsFor(client){ const c=norm(client), m=new Map(); for(const x of P){ if(c && norm(x.client)!==c) continue; const k=norm(x.property); if(k && !m.has(k)) m.set(k, String(x.property).trim()); } return [...m.values()].sort((a,b)=>a.localeCompare(b)); }
 function latest(pred){ return P.filter(x=>x.num!==draft.num && pred(x)).sort((a,b)=>String(b.num).localeCompare(String(a.num))); }
-const CONTACT_KEYS=['contactName','contactPhone','contactEmail','billAddress'];
+const CONTACT_KEYS=['contactName','contactPhone','contactEmail','billAddress','billingEmail','poRequired'];
 function fillEmpty(src, keys){ let n=0; for(const k of keys){ if(src && src[k] && !String(draft[k]||'').trim()){ draft[k]=src[k]; const el=document.getElementById('f-'+k); if(el) el.value=src[k]; n++; } } return n; }
 function checkDup(){ const box=$('#dupWarn'); if(!box || !draft) return; if(!isNew){ box.innerHTML=''; return; }
   const c=norm(draft.client), pr=norm(draft.property); if(!c || !pr){ box.innerHTML=''; return; }
@@ -1870,6 +1891,225 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#est').hidd
 let LOGO=null;
 async function logoData(){ if(LOGO) return LOGO; try{ const b=await (await fetch('logo.jpg')).blob(); LOGO=await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(b); }); }catch(_){ LOGO=''; } return LOGO; }
 const usd = v => (num(v)==null?'':'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
+// ---------- invoices (update 018): numbered invoices from the job, payments, never deleted (void instead) ----------
+let INV={}, INVOK=true, OPENINV=null;
+const INV_DEF={ terms:30, message:'Window Washing • Janitorial • Pressure Washing • Solar Cleaning • Banner Installations • Holiday Lighting & More',
+  footer:'Payment terms: Net 30 unless otherwise agreed. Late payments may incur 1.5% monthly interest. Client is responsible for any collection or legal fees.',
+  address:'7172 Calais Pl\nNewark, CA 94560', phone:'(510) 359-5181', email:'aperez@pfbuildingservices.com', website:'https://pfbservices.com/', license:'114036' };
+const invS = k => (S.invoice && S.invoice[k]!=null && S.invoice[k]!=='') ? S.invoice[k] : INV_DEF[k];
+const invBal = v => Math.round(((num(v.total)||0)-(num(v.paid)||0))*100)/100;
+const invMissing = e => /relation|does not exist|schema cache|Could not find/i.test(e?.message||'');
+function invLabel(v){ if(v.status==='Void') return ['Void','']; if(v.status==='Paid') return ['Paid','ok']; if(v.status==='Draft') return ['Draft',''];
+  const od=v.due_date && parse(v.due_date)<today(); return [num(v.paid)>0?(od?'Partly paid · overdue':'Partly paid'):(od?'Overdue':'Sent'), od?'bad':'warn']; }
+const fmtInv = s => { const d=parse(s); return d ? d.toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'}) : ''; };
+const invDue = v => v.due_date || (v.invoice_date ? iso(new Date(parse(v.invoice_date).getTime()+(num(v.terms_days)||0)*864e5)) : '');
+async function loadInvoices(n){
+  const {data,error}=await sb.from('invoices').select('*').eq('num',n).order('inv_no');
+  if(error){ if(invMissing(error)) INVOK=false; INV[n]=[]; }
+  else { INVOK=true; const L=data||[]; const ids=L.map(v=>v.id); const pays=ids.length ? ((await sb.from('invoice_payments').select('*').in('invoice_id',ids).order('id')).data||[]) : [];
+    for(const v of L) v.payments=pays.filter(x=>x.invoice_id===v.id); INV[n]=L; }
+  if(draft && draft.num===n){ const b=$('#invBox'); if(b) b.innerHTML=invoicesHTML(draft); }
+}
+async function loadOpenInvoices(){
+  const {data,error}=await sb.from('invoices').select('*').eq('status','Sent').order('inv_no');
+  OPENINV = error ? null : (data||[]); if(current()==='orders') renderJobs();
+}
+function invoicesHTML(p){
+  if(!INVOK) return '<div class="note" style="margin:0">Run database update 018 in Supabase to turn on invoicing.</div>';
+  const L=INV[p.num]; if(!L) return '<div class="note" style="margin:0">Loading…</div>';
+  const can=isManager(), live=L.filter(v=>v.status!=='Void'), billed=live.reduce((s,v)=>s+(num(v.total)||0),0), due=live.reduce((s,v)=>s+invBal(v),0);
+  return `${L.length?`<div class="tablewrap"><table><thead><tr><th>Invoice</th><th class="r">Amount</th><th class="r">Balance</th><th>Status</th><th></th></tr></thead><tbody>
+    ${L.map(v=>{ const [lab,cls]=invLabel(v); return `<tr><td class="num"><b>#${esc(v.inv_no)}</b><div class="note" style="margin:0">${fmtD(v.invoice_date)}</div></td><td class="r num">${usd(v.total)}</td><td class="r num">${v.status==='Void'?'—':usd(invBal(v))}</td>
+      <td><span class="flag ${cls}">${esc(lab)}</span></td><td class="r" style="white-space:nowrap">${can?`<button type="button" class="btn ghost small" data-inv="${esc(v.id)}">Open</button>${v.status==='Sent'?` <button type="button" class="btn small" data-invpay="${esc(v.id)}">Payment</button>`:''}`:''}</td></tr>`; }).join('')}</tbody></table></div>
+    <div class="gpline">Invoiced ${usd(billed)}${due>0.004?` · <b>${usd(due)} still due</b>`:billed?' · all paid':''}${!isRecurring(p)&&num(p.amount)&&billed&&Math.abs(billed-(num(p.amount)||0))>0.5?` · job price ${usd(p.amount)}`:''}</div>`
+    : '<div class="note" style="margin:0 0 6px">No invoices yet.</div>'}
+    ${can?`<div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn small" id="invNew">${isRecurring(p)?'Invoice a visit':'Create invoice'}</button></div>`:''}`;
+}
+// lines from the job: accepted scope (one visit for recurring lines) + approved change orders on one-time jobs
+function invLinesFrom(p){
+  const lines=countedItems(p).filter(i=>num(i.amount)).map(i=>{ const rec=visitsOf(i.frequency)>1, parts=String(i.description||i.service||'Services').split('\n');
+    const amt=rec ? num(i.amount) : (num(i.qty)||1)*num(i.amount);
+    return {description:(rec&&i.frequency?`(${i.frequency}) `:'')+parts[0].trim(), notes:parts.slice(1).map(s=>s.trim()).filter(Boolean).join('\n'), amount:Math.round(amt*100)/100}; });
+  if(!lines.length && num(p.amount)) lines.push({description:p.service||'Services', notes:'', amount:num(p.amount)});
+  if(!isRecurring(p)) for(const c of (p.changeOrders||[])) if(c.status==='Approved' && num(c.amount)) lines.push({description:`Change order ${p.num}-CO${c.no}${c.description?': '+String(c.description).split('\n')[0]:''}`, notes:'', amount:num(c.amount)});
+  return lines;
+}
+function invBlank(p){ const a=(p.actuals||[])[0]||{};
+  return {id:null, inv_no:null, num:p.num, job_no:p.hcpJob||'', status:'Draft', invoice_date:iso(today()), service_date:a.finish||a.start||iso(today()), terms_days:num(invS('terms'))??30,
+    po_number:p.poNumber||'', bill_to:{name:p.client||'', address:p.billAddress||p.siteAddress||'', email:p.billingEmail||p.contactEmail||''},
+    service_address:p.siteAddress||p.property||'', items:invLinesFrom(p), message:invS('message'), total:0, paid:0, payments:[]}; }
+const invPlace = (v,p) => (p&&p.property) || String(v.service_address||'').split('\n')[0] || (p&&p.client) || '';
+function invEmail(v,p){ const n=v.inv_no, place=invPlace(v,p), em=String(v.bill_to?.email||'').toLowerCase(), c=p&&p.contactEmail&&em.includes(String(p.contactEmail).toLowerCase());
+  const first=c?(p.contactName||'').trim().split(/\s+/)[0]:'';
+  return { to:String(v.bill_to?.email||'').split(/[;,\s]+/).filter(Boolean).join('; '),
+    subject:`Invoice #${n} from PF Building Services – ${place}${v.po_number?` (PO ${v.po_number})`:''}`,
+    body:`${first?`Hi ${first},`:'Hello,'}\n\nAttached is invoice #${n} for ${place}. Please let me know if you have any questions.\n\nThank you for your business.` }; }
+async function makeInvoicePdf(v, p){
+  if(!window.jspdf){ toast('PDF tools did not load. Check your connection and reload.'); return null; }
+  const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter'}), L0=56, R0=556, logo=await logoData(), GRAY=[110,110,110];
+  if(logo) doc.addImage(logo,'JPEG',L0,40,150,35);
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0); doc.text('PF Building Services',L0,92);
+  // summary box
+  const bx=340, rows=[['JOB','#'+(v.job_no||p?.num||'')], ...(v.job_no&&p?.num?[['PFBS #',p.num]]:[]), ['INVOICE','#'+v.inv_no], ...(v.po_number?[['PO #',v.po_number]]:[]),
+    ['SERVICE DATE',fmtInv(v.service_date)], ['INVOICE DATE',fmtInv(v.invoice_date)], ['PAYMENT TERMS',`Net ${num(v.terms_days)??30}`], ['DUE DATE',fmtInv(invDue(v))]];
+  let y=58; doc.setDrawColor(150); doc.setLineWidth(0.6);
+  const boxH=rows.length*17+38; doc.rect(bx,44,R0-bx,boxH);
+  doc.setFontSize(8); rows.forEach(([a,b])=>{ doc.setFont('helvetica','normal'); doc.setTextColor(...GRAY); doc.text(a,bx+10,y); doc.setTextColor(0); doc.setFontSize(9); doc.text(String(b),R0-10,y,{align:'right'}); doc.setFontSize(8); y+=17; });
+  doc.line(bx,y-8,R0,y-8); y+=10; doc.setTextColor(...GRAY); doc.text('AMOUNT DUE',bx+10,y); doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(usd(invBal(v)),R0-10,y+1,{align:'right'});
+  if(v.status==='Paid'){ doc.setTextColor(30,130,60); doc.setFontSize(20); doc.text('PAID',bx-14,70,{align:'right'}); doc.setTextColor(0); }
+  // bill to (left), service address + contact (right)
+  let ly=Math.max(150, 44+boxH+24), ry=ly; doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+  const bill=[v.bill_to?.name, ...String(v.bill_to?.address||'').split('\n')].map(s=>(s||'').trim()).filter(Boolean);
+  bill.forEach(t=>{ doc.text(doc.splitTextToSize(t,250)[0],L0,ly); ly+=14; });
+  if(v.bill_to?.email){ ly+=8; doc.setTextColor(...GRAY); doc.text(String(v.bill_to.email).split(/[;,\s]+/).filter(Boolean).join(', '),L0,ly,{maxWidth:260}); doc.setTextColor(0); ly+=14; }
+  const sect=(title, lines)=>{ doc.setFontSize(7.5); doc.setTextColor(...GRAY); doc.text(title,bx,ry); doc.setDrawColor(190); doc.line(bx,ry+3,R0,ry+3); ry+=16; doc.setTextColor(0); doc.setFontSize(9.5);
+    lines.filter(Boolean).forEach(t=>{ doc.text(doc.splitTextToSize(String(t),R0-bx)[0],bx,ry); ry+=13; }); ry+=10; };
+  if(v.service_address) sect('SERVICE ADDRESS', String(v.service_address).split('\n').map(s=>s.trim()));
+  sect('CONTACT US', [...String(invS('address')).split('\n'), '', invS('phone'), invS('email')]);
+  y=Math.max(ly,ry)+14;
+  // services
+  doc.setFontSize(11); doc.setTextColor(...GRAY); doc.text('INVOICE',L0,y); y+=10;
+  doc.setFillColor(178,178,178); doc.rect(L0,y,R0-L0,18,'F'); doc.setTextColor(255); doc.setFontSize(9); doc.text('Services',L0+8,y+12); doc.text('Amount',R0-8,y+12,{align:'right'}); y+=32; doc.setTextColor(0);
+  const brk=need=>{ if(y+need>720){ doc.addPage(); y=60; } };
+  for(const it of (v.items||[])){
+    const d=doc.splitTextToSize(String(it.description||''),R0-L0-110), nn=String(it.notes||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    brk(d.length*12+nn.length*11+14); doc.setFontSize(9.5); doc.text(d,L0+8,y); if(num(it.amount)!=null) doc.text(usd(it.amount),R0-8,y,{align:'right'}); y+=d.length*12;
+    doc.setFontSize(8); doc.setTextColor(...GRAY); for(const n of nn){ const t=doc.splitTextToSize(/^[-–•]/.test(n)?n:'- '+n,R0-L0-120); doc.text(t,L0+8,y); y+=t.length*10.5; } doc.setTextColor(0); y+=8;
+  }
+  doc.setDrawColor(190); doc.line(L0,y,R0,y); y+=22; brk(100);
+  const tl=[['Subtotal',usd(v.total)],['Job Total',usd(v.total)]]; if(num(v.paid)>0) tl.push(['Payments received','-'+usd(v.paid)]);
+  doc.setFontSize(9.5); tl.forEach(([a,b])=>{ doc.text(a,360,y); doc.text(b,R0-8,y,{align:'right'}); y+=20; });
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Amount Due',360,y+2); doc.text(usd(invBal(v)),R0-8,y+2,{align:'right'}); doc.setFont('helvetica','normal'); y+=40;
+  brk(60); doc.setFontSize(8.5);
+  if(v.message){ const t=doc.splitTextToSize(String(v.message),R0-L0); doc.text(t,L0,y); y+=t.length*11+12; }
+  if(invS('footer')){ doc.setTextColor(...GRAY); const t=doc.splitTextToSize(String(invS('footer')),R0-L0); doc.text(t,L0,y); doc.setTextColor(0); }
+  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setDrawColor(200); doc.line(40,752,572,752); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
+    doc.text(`PF Building Services | License #${invS('license')}`,L0,765); doc.text(String(invS('website')),306,765,{align:'center'}); if(pages>1) doc.text(`Page ${i} of ${pages}`,R0,765,{align:'right'}); }
+  doc.setTextColor(0); return doc;
+}
+const invFile = (v,p) => `Invoice ${v.inv_no} - ${invPlace(v,p).replace(/[\\/:*?"<>|]+/g,' ').trim()}.pdf`;
+// the editor: everything in one place, filled from the job; saving writes PO# and billing back to the job so it is typed once
+function invEdit(p, v){
+  const ro=v.status==='Paid'||v.status==='Void', dis=ro?'disabled':'', prior=(INV[p.num]||[]).filter(x=>x.status!=='Void'&&x.id!==v.id).reduce((s,x)=>s+(num(x.total)||0),0);
+  const d=document.createElement('dialog'); d.className='ask inved';
+  const row=it=>`<div class="invrow"><input data-f="description" value="${esc(it.description||'')}" placeholder="Service" aria-label="Service" ${dis}><input data-f="amount" type="number" step="0.01" inputmode="decimal" value="${esc(it.amount??'')}" placeholder="$" aria-label="Amount" ${dis}>${ro?'':'<button type="button" class="btn ghost small" data-a="rm" aria-label="Remove line">✕</button>'}<textarea data-f="notes" rows="1" placeholder="Notes under the line (one per line), e.g. Includes boom rental" aria-label="Notes under the line" ${dis}>${esc(it.notes||'')}</textarea></div>`;
+  const pays=(v.payments||[]).map(x=>`<div class="${x.voided?'note':''}" style="margin:2px 0">${x.voided?'<s>':''}${usd(x.amount)} · ${esc(x.method)} · received ${fmtD(x.received_on)}${x.deposited_on?' · deposited '+fmtD(x.deposited_on):''}${x.note?' · '+esc(x.note):''} · ${esc(x.recorded_by||'')}${x.voided?'</s> void: '+esc(x.void_reason||''):` <button type="button" class="btn ghost small" data-a="payvoid" data-id="${esc(x.id)}">Void</button>`}</div>`).join('');
+  const [lab]=invLabel(v);
+  d.innerHTML=`<h3>${v.inv_no?`Invoice #${esc(v.inv_no)}`:'New invoice'} · ${esc(p.num)} <span class="flag">${esc(lab)}</span></h3>
+    ${prior?`<div class="note" style="margin:0 0 8px">Already invoiced on this job: ${usd(prior)}${!isRecurring(p)&&num(p.amount)?` of ${usd(p.amount)}`:''}.</div>`:''}
+    ${v.status==='Sent'&&!ro?'<div class="note" style="margin:0 0 8px">Already sent. If you change it, email it again so the client has the right copy.</div>':''}
+    <div class="grid2">
+      <label class="f">Invoice date<input type="date" name="invoice_date" value="${esc(v.invoice_date||'')}" ${dis}></label>
+      <label class="f">Service date<input type="date" name="service_date" value="${esc(v.service_date||'')}" ${dis}></label>
+      <label class="f">Payment terms (days)<input type="number" name="terms_days" value="${esc(v.terms_days??30)}" ${dis}></label>
+      <label class="f">PO # / customer reference${p.poRequired?' <b style="color:var(--bad)">required</b>':''}<input name="po_number" value="${esc(v.po_number||'')}" ${dis}></label>
+      <label class="f">Job #<input name="job_no" value="${esc(v.job_no||'')}" placeholder="${esc(p.num)}" ${dis}></label>
+      <label class="f">Billing email(s)<input name="bill_email" value="${esc(v.bill_to?.email||'')}" placeholder="ap@client.com" ${dis}></label>
+      <label class="f">Bill to<input name="bill_name" value="${esc(v.bill_to?.name||'')}" ${dis}></label>
+      <label class="f">Billing address<textarea name="bill_address" rows="2" ${dis}>${esc(v.bill_to?.address||'')}</textarea></label>
+      <label class="f full">Service address<textarea name="service_address" rows="2" ${dis}>${esc(v.service_address||'')}</textarea></label>
+    </div>
+    <div class="invhead"><b>Services</b><span>Amount</span></div><div id="invItems">${(v.items||[]).map(row).join('')}</div>
+    ${ro?'':'<button type="button" class="btn ghost small" data-a="add">+ Line</button>'}
+    <div class="gpline" style="text-align:right">Total <b id="invTot">${usd(v.total)}</b>${num(v.paid)>0?` · paid ${usd(v.paid)} · <b>due ${usd(invBal(v))}</b>`:''}</div>
+    <label class="f">Message on the invoice<textarea name="message" rows="2" ${dis}>${esc(v.message||'')}</textarea></label>
+    ${pays?`<div style="margin:8px 0"><b>Payments</b>${pays}</div>`:''}
+    <div class="toolbar" style="flex-wrap:wrap">
+      <button type="button" class="btn ghost" data-a="x">Close</button>
+      ${v.id&&!ro&&!(num(v.paid)>0)?'<button type="button" class="btn ghost" data-a="void">Void</button>':''}
+      <span style="flex:1"></span>
+      <button type="button" class="btn ghost" data-a="pdf">${ro?'Download PDF':'Preview PDF'}</button>
+      ${v.status==='Sent'?'<button type="button" class="btn ghost" data-a="pay">Record payment</button>':''}
+      ${ro?'':'<button type="button" class="btn ghost" data-a="save">Save</button>'}
+      ${v.status!=='Void'?`<button type="button" class="btn" data-a="send">${v.status==='Draft'?'Save & email':'Email again'}</button>`:''}
+    </div>`;
+  document.body.appendChild(d);
+  const tot=()=>{ const t=[...d.querySelectorAll('.invrow [data-f="amount"]')].reduce((s,i)=>s+(num(i.value)||0),0); $('#invTot').textContent=usd(Math.round(t*100)/100); };
+  const collect=()=>{ const f=n=>d.querySelector(`[name="${n}"]`).value.trim();
+    return { invoice_date:f('invoice_date')||iso(today()), service_date:f('service_date')||null, terms_days:Math.max(0,Math.round(num(f('terms_days'))??30)), po_number:f('po_number')||null, job_no:f('job_no')||null,
+      bill_to:{name:f('bill_name'), address:f('bill_address'), email:f('bill_email')}, service_address:f('service_address'), message:f('message'),
+      items:[...d.querySelectorAll('.invrow')].map(r=>({description:r.querySelector('[data-f="description"]').value.trim(), notes:r.querySelector('[data-f="notes"]').value.trim(), amount:num(r.querySelector('[data-f="amount"]').value)})).filter(x=>x.description||x.amount!=null) }; };
+  const close=()=>{ d.close(); d.remove(); };
+  async function save(){
+    const row=collect(); if(!row.items.length){ toast('Add at least one line.'); return null; }
+    let res; if(v.id) res=await sb.from('invoices').update(row).eq('id',v.id).select().single(); else res=await sb.from('invoices').insert({...row, num:p.num}).select().single();
+    if(res.error){ toast(invMissing(res.error)?'Run database update 018 in Supabase first.':res.error.message); return null; }
+    Object.assign(v, res.data, {payments:v.payments||[]});
+    // type it once: PO# and billing go back on the job for the next invoice
+    const up={}, o=P.find(x=>x.num===p.num)||p;
+    if(row.po_number && row.po_number!==(o.poNumber||'')) up.po_number=row.po_number;
+    if(row.bill_to.email && row.bill_to.email!==(o.billingEmail||'') && row.bill_to.email!==(o.contactEmail||'')) up.billing_email=row.bill_to.email;
+    if(row.bill_to.address && !String(o.billAddress||'').trim()) up.bill_address=row.bill_to.address;
+    if(Object.keys(up).length && (!COLS||COLS.has('po_number'))){ const r=await sb.from('proposals').update(up).eq('num',p.num); if(!r.error){ for(const t of [o, draft&&draft.num===p.num?draft:null]) if(t){ if(up.po_number) t.poNumber=up.po_number; if(up.billing_email) t.billingEmail=up.billing_email; if(up.bill_address) t.billAddress=up.bill_address; } } }
+    await loadInvoices(p.num); return v;
+  }
+  d.addEventListener('input', e=>{ if(e.target.matches('[data-f="amount"]')) tot(); });
+  d.addEventListener('cancel', e=>{ e.preventDefault(); close(); });
+  d.addEventListener('click', async e=>{ const b=e.target.closest('[data-a]'); if(!b) return; const a=b.dataset.a;
+    if(a==='x') return close();
+    if(a==='add'){ $('#invItems').insertAdjacentHTML('beforeend', row({description:'',notes:'',amount:''})); d.querySelector('.invrow:last-child input').focus(); return; }
+    if(a==='rm'){ b.closest('.invrow').remove(); tot(); return; }
+    b.disabled=true;
+    try{
+      if(a==='save'){ if(await save()){ toast(`Invoice #${v.inv_no} saved`); close(); } }
+      if(a==='pdf'){ const cur=ro?v:{...v, ...collect(), inv_no:v.inv_no||next}; cur.total=cur.items.reduce((s,i)=>s+(num(i.amount)||0),0); const doc=await makeInvoicePdf(cur,p); if(doc){ if(ro) doc.save(invFile(cur,p)); else window.open(doc.output('bloburl'),'_blank'); } }
+      if(a==='void'){ const r=await formDialog(`Void invoice #${esc(v.inv_no)}?`, '<div class="note" style="margin:0 0 8px">The invoice stays on record as void. Its number is not reused.</div><label class="f">Reason<input name="why" required placeholder="e.g. Wrong amount, re-issued as a new invoice"></label>', 'Void invoice');
+        if(r){ const {error}=await sb.from('invoices').update({status:'Void', void_reason:r.why}).eq('id',v.id); if(error) toast(error.message); else { toast(`Invoice #${v.inv_no} voided`); close(); await loadInvoices(p.num); loadOpenInvoices(); } } }
+      if(a==='payvoid'){ const r=await formDialog('Void this payment?', '<div class="note" style="margin:0 0 8px">It stays on record as void and the balance reopens.</div><label class="f">Reason<input name="why" required placeholder="e.g. Check bounced, entered twice"></label>', 'Void payment');
+        if(r){ const {error}=await sb.from('invoice_payments').update({voided:true, void_reason:r.why}).eq('id',b.dataset.id); if(error) toast(error.message); else { toast('Payment voided'); close(); await invRefresh(p.num); } } }
+      if(a==='pay'){ close(); if(await invPay(v)) await invRefresh(p.num); }
+      if(a==='send'){
+        const row=ro?v:collect();
+        if(p.poRequired && !row.po_number){ toast('This client requires a PO# on invoices. Add it first.'); d.querySelector('[name="po_number"]').focus(); return; }
+        if(!String(row.bill_to?.email||'').includes('@')){ toast('Add the billing email first.'); d.querySelector('[name="bill_email"]').focus(); return; }
+        const saved=ro?v:await save(); if(!saved) return;
+        const doc=await makeInvoicePdf(saved,p); if(!doc) return;
+        close(); await deliverPdf(doc, invFile(saved,p), p, `Invoice #${saved.inv_no}`); invSendBox(saved,p);
+      }
+    } finally { b.disabled=false; }
+  });
+  if(!ro) tot();
+  let next=null; if(!v.id) sb.rpc('next_invoice_no').then(r=>{ if(r && r.data) next=r.data; });
+  d.showModal();
+}
+// after the PDF downloads: the email, like proposals (Outlook adds the signature); opening it marks the invoice Sent
+function invSendBox(v,p){
+  const e=invEmail(v,p), d=document.createElement('dialog'); d.className='ask';
+  d.innerHTML=`<h3>Email invoice #${esc(v.inv_no)}</h3><div class="note" style="margin:0 0 8px">The PDF just downloaded. Attach it to the email, then send.</div>
+    <label class="f">To<input id="ivTo" value="${esc(e.to)}"></label><label class="f">Subject<input id="ivSubj" value="${esc(e.subject)}"></label>
+    <label class="f">Message<textarea id="ivBody" rows="7">${esc(e.body)}</textarea></label>
+    <div class="toolbar" style="flex-wrap:wrap"><button type="button" class="btn ghost" data-a="x">Close</button><span style="flex:1"></span><button type="button" class="btn ghost" data-a="copy">Copy</button><button type="button" class="btn ghost" data-a="mailto">Mail app</button><button type="button" class="btn" data-a="owa">Open in Outlook</button></div>`;
+  document.body.appendChild(d); const close=()=>{ d.close(); d.remove(); };
+  d.addEventListener('cancel', ev=>{ ev.preventDefault(); close(); });
+  d.addEventListener('click', async ev=>{ const a=ev.target.closest('[data-a]')?.dataset.a; if(!a) return; if(a==='x') return close();
+    const to=$('#ivTo').value.trim(), s=$('#ivSubj').value, m=$('#ivBody').value, enc=encodeURIComponent;
+    if(a==='copy'){ try{ await navigator.clipboard.writeText(`To: ${to}\nSubject: ${s}\n\n${m}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } }
+    else if(a==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(s)}&body=${enc(m)}`,'_blank','noopener');
+    else location.href=`mailto:${enc(to)}?subject=${enc(s)}&body=${enc(m)}`;
+    if(v.status==='Draft'){ const {error}=await sb.from('invoices').update({status:'Sent', sent_to:to}).eq('id',v.id); if(error){ toast(error.message); return; } v.status='Sent'; }
+    else await addActivity(p.num,'note',`Invoice #${v.inv_no} emailed again to ${to}`);
+    if(a!=='copy'){ close(); toast('Attach the downloaded PDF, then send'); }
+    await invRefresh(p.num);
+  });
+  d.showModal();
+}
+async function invPay(v){
+  const bal=invBal(v);
+  const r=await formDialog(`Payment on invoice #${esc(v.inv_no)}`, `<div class="note" style="margin:0 0 8px">Balance ${usd(bal)}. For a partial payment, type what was received; the rest stays open.</div>
+    <div class="grid2"><label class="f">Amount received<input name="amount" type="number" step="0.01" inputmode="decimal" value="${bal}" required></label>
+    <label class="f">How<select name="method"><option>Check</option><option>ACH</option><option>Cash</option><option>Other</option></select></label>
+    <label class="f">Received on<input type="date" name="received_on" value="${iso(today())}" required></label>
+    <label class="f">Deposited on <span class="note" style="margin:0;font-weight:400">optional</span><input type="date" name="deposited_on"></label></div>
+    <label class="f">Note <span class="note" style="margin:0;font-weight:400">optional</span><input name="note"></label>`, 'Record payment');
+  if(!r) return false; const amt=num(r.amount); if(!(amt>0)){ toast('Type the amount received.'); return false; }
+  if(amt>bal+0.005 && !confirm(`That is more than the balance (${usd(bal)}). Record it anyway?`)) return false;
+  const {error}=await sb.from('invoice_payments').insert({invoice_id:v.id, amount:amt, method:r.method, received_on:r.received_on, deposited_on:r.deposited_on||null, note:r.note||null});
+  if(error){ toast(error.message); return false; }
+  toast(amt>=bal-0.005?`Invoice #${v.inv_no} paid in full`:`Payment recorded · ${usd(Math.round((bal-amt)*100)/100)} still due`); return true;
+}
+async function invRefresh(n){ await loadInvoices(n); loadOpenInvoices(); await loadProposals(); }
+async function invOpen(p, id){ if(!INV[p.num]) await loadInvoices(p.num); const v=(INV[p.num]||[]).find(x=>x.id===id); if(v) invEdit(p, v); }
+function invOpenNew(p){ if(!INVOK){ toast('Run database update 018 in Supabase first.'); return; } invEdit(p, invBlank(p)); }
 // ---------- SharePoint: save PDFs straight into the client's folder ----------
 // Needs SP_CLIENT_ID and SP_TENANT_ID in config.js (an Entra "Single-page application" registration; no secret).
 const SPC = { clientId: window.PFBS_CONFIG?.SP_CLIENT_ID || '', tenant: window.PFBS_CONFIG?.SP_TENANT_ID || '',
@@ -2641,6 +2881,14 @@ function renderSettings(){
       <label class="f">Estimator rate when a BD rep is on the job (% of normal)<input id="s-estbd" type="number" step="any" value="${Math.round((S.estBdShare??1)*1000)/10}" ${ro}></label>
       <label class="f">Proposal valid for (days)<input id="s-exp" type="number" value="${S.expiryDays}" ${ro}></label>
       <label class="f">Old service report app link (clear it once you switch)<input id="s-rpt" type="url" value="${esc(S.reportAppUrl||'')}" ${ro}></label></div>
+    <div class="card listedit"><h3>Invoicing</h3>
+      ${canPay()?`<label class="f">Next invoice #<span style="display:flex;gap:6px"><input id="s-invno" type="number" placeholder="Loading…" style="flex:1"><button type="button" class="btn small" id="invNoSave">Set</button></span><span class="note" style="margin:2px 0 0">On switch-over day, set this to your last HousecallPro invoice # + 1. Saved on its own.</span></label>`:''}
+      <label class="f">Payment terms (days)<input id="s-invterms" type="number" value="${esc(invS('terms'))}" ${ro}></label>
+      <label class="f">Message on every invoice<textarea id="s-invmsg" rows="2" ${ro}>${esc(invS('message'))}</textarea></label>
+      <label class="f">Terms at the bottom<textarea id="s-invfoot" rows="3" ${ro}>${esc(invS('footer'))}</textarea></label>
+      <label class="f">"Contact us" address<textarea id="s-invaddr" rows="2" ${ro}>${esc(invS('address'))}</textarea></label>
+      <div class="grid2"><label class="f">Phone<input id="s-invphone" value="${esc(invS('phone'))}" ${ro}></label><label class="f">Email<input id="s-invemail" value="${esc(invS('email'))}" ${ro}></label>
+      <label class="f">Website<input id="s-invweb" value="${esc(invS('website'))}" ${ro}></label><label class="f">License #<input id="s-invlic" value="${esc(invS('license'))}" ${ro}></label></div></div>
     ${ta('s-svc','Services', lines(S.services), 'One per line.')}
     ${ta('s-freq','Frequencies', lines(S.frequencies), 'Name | visits per year.')}
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
@@ -2681,6 +2929,11 @@ function renderSettings(){
   ${canPay()?'<div class="card" style="margin-top:16px"><h3>Change log</h3><div class="note" style="margin:0 0 8px">Every change to Settings and the team list, and every deleted proposal, with who did it and when. Proposal changes are in each proposal\'s Activity.</div><div id="logBox"><div class="note">Loading…</div></div></div>':''}`;
   organizeSettings();
   if(canPay()) loadAdminLog();
+  if($('#invNoSave')){
+    sb.rpc('next_invoice_no').then(({data,error})=>{ const i=$('#s-invno'); if(!i) return; if(error){ i.placeholder='Run database update 018 first'; i.disabled=true; $('#invNoSave').disabled=true; } else i.value=data??''; });
+    $('#invNoSave').onclick=async ()=>{ const n=Math.round(num($('#s-invno').value)||0); if(!n){ toast('Type a number.'); return; }
+      const {error}=await sb.rpc('set_next_invoice_no',{n}); toast(error?error.message:`Next invoice will be #${n}`); if(!error) loadAdminLog(); };
+  }
 }
 // group the settings cards under a few headings (cards keep their fields, so saving is unchanged)
 function organizeSettings(){
@@ -2695,6 +2948,7 @@ function organizeSettings(){
     ['Estimating', ['Margins & guardrails','Estimate defaults','Labor roles','Solar panel rates','Gates & doors tasks','Material presets']],
     ['Lists', ['Services','Frequencies','Lead sources','Lost reasons','Add-on suggestions','BD email templates']],
     ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
+    ['Invoicing', ['Invoicing']],
     ['Change log', ['Change log']],
     ['Data', ['Backup','Clean up old proposals']]];
   const save=root.querySelector('#saveS')?.parentElement, frag=document.createDocumentFragment();
@@ -2757,7 +3011,8 @@ $('#settingsBody').addEventListener('click', async e=>{
       frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
       estTiers:pair('s-tiers',(a,b)=>[(Number(a)||0)/100,(Number(b)||0)/100]).sort((x,y)=>x[0]-y[0]),
-      reportAppUrl:/hooks\.zapier\.com/i.test($('#s-rpt').value)?'':$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, priceIncrease:(num($('#s-pinc').value)??5)/100, expiryDays:Number($('#s-exp').value)||90 };
+      reportAppUrl:/hooks\.zapier\.com/i.test($('#s-rpt').value)?'':$('#s-rpt').value.trim(), marginFloor:(Number($('#s-floor').value)||0)/100, belowFloorShare:(Number($('#s-share').value)||0)/100, estBdShare:(num($('#s-estbd').value)??100)/100, priceIncrease:(num($('#s-pinc').value)??5)/100, expiryDays:Number($('#s-exp').value)||90,
+      invoice:{ terms:Math.max(0,Math.round(num($('#s-invterms').value)??30)), message:$('#s-invmsg').value.trim(), footer:$('#s-invfoot').value.trim(), address:$('#s-invaddr').value.trim(), phone:$('#s-invphone').value.trim(), email:$('#s-invemail').value.trim(), website:$('#s-invweb').value.trim(), license:$('#s-invlic').value.trim() } };
     const {error}=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
     if(error){ toast(error.message); return; } S=Object.assign(structuredClone(DEFAULTS),data); toast('Settings saved'); renderAll();
   }
@@ -2820,7 +3075,7 @@ async function start(session){
   $('#salesTab').textContent = ['BD Rep','Estimator'].includes(m.role) ? 'My Sales' : 'Sales';
   const home = ['BD Rep','Estimator'].includes(m.role) ? 'sales' : m.role==='Admin' ? 'orders' : 'pipeline';
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===home); show(home);
-  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports();
+  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); if(isManager()) loadOpenInvoices();
   window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })

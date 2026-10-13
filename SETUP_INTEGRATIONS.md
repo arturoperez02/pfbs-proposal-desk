@@ -107,6 +107,16 @@ The old Cloudflare app keeps working until step 3, so nothing breaks while you t
    The report links itself to the PFBS job by the PFBS number in the HCP job description, or by the HCP job # (or job ID).
 4. After a week with no problems: clear "Old service report app link" in Settings. Turn off the "report approved → Outlook draft" Zap; the CRM opens the email itself now. Keep the Cloudflare app for a while as a read-only archive of old reports.
 
+## Invoicing in the CRM (update 018)
+
+1. Run `sql/018_invoicing.sql` in Supabase.
+2. Settings → **Invoicing**: check the message, terms, address, phone, email, website and license #.
+3. On the day you stop invoicing in HousecallPro: Settings → Invoicing → **Next invoice #** = your last HCP invoice # + 1 → **Set**.
+4. For clients whose AP needs a PO#, open one of their jobs → Proposal tab → "Client requires a PO# on invoices" = Yes,
+   and fill in "Billing (AP) email". New proposals for that client copy both automatically.
+5. To invoice: Jobs → **Invoice** on a scheduled job (or the job's Job tab → Create invoice) → check the lines → **Save & email**.
+   The PDF downloads and Outlook opens to the AP email; attach and send. Payments: Jobs → Open invoices → **Record payment**.
+
 ## SharePoint auto-save
 
 1. entra.microsoft.com → App registrations → **New registration**: name `PFBS Proposal Desk`, accounts in this organization only.
