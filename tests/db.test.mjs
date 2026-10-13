@@ -115,3 +115,21 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: clients checks passed');
 }
+
+// ---------- schedule (update 020) ----------
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role; update proposals set status='Approved' where num='PFBS-0779'`);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  const s = await q1(`insert into visit_series(num, rule, starts) values ('PFBS-0779','{"every":3,"unit":"month","mode":"nth","nth":1,"weekday":2}','2026-11-03') returning id, created_by`);
+  assert.equal(s.created_by, 'Arturo');
+  await db.query(`insert into visits(num, series_id, occ_date, visit_date, techs) values ('PFBS-0779','${s.id}','2026-11-03','2026-11-03','{Rigo,Baldemar}')`);
+  await db.exec('reset role'); assert.equal((await q1(`select status from proposals where num='PFBS-0779'`)).status, 'Scheduled', 'first visit schedules an approved job');
+  await assert.rejects(db.query(`insert into visits(visit_date, end_date) values ('2026-11-05','2026-11-04')`), /check/i, 'end after start');
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000002","email":"e@x.com"}',false); set role authenticated;`);
+  assert.equal((await q1(`select count(*)::int c from visits`)).c, 1, 'everyone can see the schedule');
+  await assert.rejects(db.query(`insert into visits(visit_date) values ('2026-11-10')`), /row-level security|policy/i, 'only the office schedules');
+  await db.exec('reset role');
+  assert.equal((await q1(`select jsonb_array_length(backup_json()->'visits') n`)).n, 1);
+  console.log('db: schedule checks passed');
+}
