@@ -311,6 +311,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.match(await pg.textContent('.dhead .sub'), /Job for Board Unsched Co/, 'drawer says Job for client');
   assert.match(await pg.textContent('.jflow'), /Approved.*Scheduled.*not yet.*Done.*Invoiced.*Paid/s, 'progress steps');
   assert.ok(await pg.$('#jfSched'), 'Schedule is the next step');
+  assert.equal(await pg.$('#jfJobNo'), null, 'job with a # has no Give-a-number button');
   await pg.click('#jfHold'); await pg.fill('dialog.ask [name="why"]', 'Client paused'); await pg.click('dialog.ask [data-a="ok"]');
   await pg.waitForSelector('.holdline', T);
   const h = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-0996'));
@@ -318,6 +319,21 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('#closeD'); await pg.waitForTimeout(200);
   const held = await pg.$$eval('.bcol', cs => cs.find(c => /^On hold/.test(c.querySelector('h4').textContent)).textContent);
   assert.match(held, /Board Unsched Co/, 'held job moves to On hold column');
+  await pg.close();
+}
+
+// 13. "Give it a job #" for a job approved before the CRM numbered jobs
+{
+  const nj = { num: 'PFBS-0997', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'No Number Co', property: '8 Test Way', amount: 500, status: 'Approved', date_resolved: '2026-10-12', items: [{ type: 'Service', qty: 1, description: 'Test', amount: 500 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('give job #: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; window.MOCK_RPC = { crm_job_numbers: () => ({ data: true, error: null }),
+    assign_job_no: ({ p_num }) => { const p = DBX.proposals.find(y => y.num === p_num); p.hcp_job = '10301'; return { data: '10301', error: null }; } }; }, nj);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('[data-hopen="PFBS-0997"]'); await pg.waitForSelector('#jfJobNo', T);
+  await pg.click('#jfJobNo'); await pg.waitForSelector('.dhead .jobno', T);
+  assert.match(await pg.textContent('.dhead .jobno'), /Job #10301/, 'job # shows big at the top');
+  assert.equal(await pg.$('#jfJobNo'), null, 'button goes away');
   await pg.close();
 }
 

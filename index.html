@@ -893,6 +893,22 @@ async function requote(src, {pct=0, budget=false}={}){
   if(res.error){ toast(res.error.message); return null; }
   toast(`Created ${res.data.num} from ${src.num}${pct?` (+${Math.round(pct*1000)/10}%)`:''}`); return res.data.num;
 }
+async function turnOnJobNumbers(){
+  const r=await formDialog('Let the CRM number jobs', '<label class="f">HousecallPro\'s latest job #<input name="last" type="number" required placeholder="e.g. 10234"></label><div class="note" style="margin:0">In HousecallPro: Pipeline → Jobs, the highest Job #. The next CRM job will be that + 1. From now on, create jobs here, not in HousecallPro.</div>', 'Start numbering');
+  if(!r) return null; const n=Math.round(Number(r.last)||0)+1; if(n<2){ toast('Type the last HCP job #.'); return null; }
+  const {error}=await sb.rpc('set_next_job_no',{n}); if(error){ toast(invMissing(error)?'Run database updates 022 and 023 in Supabase first.':error.message); return null; }
+  JOBNO_ON=true; return n;
+}
+// an approved job with no job # (approved before the CRM numbered jobs): give it the next one
+async function giveJobNo(){
+  if(!draft) return; const n=draft.num;
+  if(!JOBNO_ON){ if(!canPay()){ toast('Ask the owner to turn on CRM job numbers (Settings → Job numbers).'); return; } if(!await turnOnJobNumbers()) return; }
+  const {data,error}=await sb.rpc('assign_job_no',{p_num:n});
+  if(error){ toast(invMissing(error)?'Run database update 024 in Supabase first.':error.message); return; }
+  toast(`Job #${data} given to ${n}`);
+  for(const o of [draft, orig, P.find(x=>x.num===n)]) if(o) o.hcpJob=String(data);
+  await loadSchedule(); drawDrawer(); loadActivity(n); renderAll();
+}
 function askJobNo(p){
   return new Promise(res=>{
     const d=document.createElement('dialog'); d.className='ask'; const rec=isRecurring(p);
@@ -904,10 +920,7 @@ function askJobNo(p){
     document.body.appendChild(d);
     const done=v=>{ d.close(); d.remove(); res(v); };
     d.addEventListener('click', async e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='skip') done(null); if(a==='ok') done(d.querySelector('#askJob').value.trim()||null);
-      if(a==='crm'){ const r=await formDialog('Let the CRM number jobs', '<label class="f">HousecallPro\'s latest job #<input name="last" type="number" required placeholder="e.g. 10234"></label><div class="note" style="margin:0">In HousecallPro: Pipeline → Jobs, the highest Job #. The next CRM job will be that + 1. From now on, create jobs here, not in HousecallPro.</div>', 'Start numbering');
-        if(!r) return; const n=Math.round(Number(r.last)||0)+1; if(n<2){ toast('Type the last HCP job #.'); return; }
-        const {error}=await sb.rpc('set_next_job_no',{n}); if(error){ toast(invMissing(error)?'Run database updates 022 and 023 in Supabase first.':error.message); return; }
-        JOBNO_ON=true; toast(`Done. This job gets #${n}; the next ones follow.`); done(null); } });
+      if(a==='crm'){ const n=await turnOnJobNumbers(); if(n){ toast(`Done. This job gets #${n}; the next ones follow.`); done(null); } } });
     d.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); done(d.querySelector('#askJob').value.trim()||null); } });
     d.addEventListener('cancel', e=>{ e.preventDefault(); done(null); });
     d.showModal(); d.querySelector('#askJob').focus();
@@ -1176,6 +1189,7 @@ function jobFlowHTML(p){
     step('Invoiced', inv.length>0 || after(2), st.col==='To invoice', lastInv?`#${esc(lastInv.inv_no)} · ${fmtD(lastInv.invoice_date)}`:after(2)?'in HousecallPro':''),
     step('Paid', S0==='Paid', S0==='Invoiced', p.datePaid?fmtD(p.datePaid):openInv?`${usd(invBal(openInv))} due`:'')];
   const m=isManager(), b=[];
+  if(m && !jobNoOf(p)) b.push('<button type="button" class="btn small" id="jfJobNo">Give it a job #</button>');
   if(m && !p.onHoldSince){
     if(!st.vs.length && VISOK) b.push('<button type="button" class="btn small" id="jfSched">Schedule</button>');
     if((st.toInv.length || (S0==='Scheduled' && !isRecurring(p) && !inv.length)) && INVOK) b.push(`<button type="button" class="btn small" id="jfInv">${isRecurring(p)?'Invoice a visit':'Create invoice'}</button>`);
@@ -1202,6 +1216,7 @@ $('#drawer').addEventListener('click', async e=>{
   if(t.id==='jfSched'){ const p=P.find(x=>x.num===draft.num); if(p) visNewFor(p); return; }
   if(t.id==='jfInv'){ invOpenNew(draft); return; }
   if(t.id==='jfHold'){ toggleHold(); return; }
+  if(t.id==='jfJobNo'){ t.disabled=true; await giveJobNo(); t.disabled=false; return; }
 });
 
 // ---------- Home: HCP's home + pipeline board, to our liking ----------

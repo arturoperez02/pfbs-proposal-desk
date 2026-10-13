@@ -203,3 +203,23 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.equal(r.on_hold_reason, 'Client paused'); assert.equal(r.status, 'Scheduled', 'hold keeps the status');
   console.log('db: on hold passed');
 }
+// ---------- give an old approved job its job # (update 024) ----------
+{
+  const q1 = async x => (await db.query(x)).rows[0];
+  await db.exec(`reset role; update private_settings set value='off' where key='crm_job_numbers'; update proposals set status='Approved', hcp_job=null where num='PFBS-0784'`);
+  await db.exec(`insert into visits(num, visit_date) values ('PFBS-0784','2026-12-02'), ('PFBS-0784','2027-01-02')`);
+  assert.equal((await q1(`select hcp_job from proposals where num='PFBS-0784'`)).hcp_job, null, 'no number while numbering is off');
+  await db.exec(`update private_settings set value='on' where key='crm_job_numbers'`);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  const jn = (await q1(`select assign_job_no('PFBS-0784') j`)).j;
+  assert.ok(/^\d+$/.test(jn), 'gets a number: ' + jn);
+  assert.equal((await q1(`select assign_job_no('PFBS-0784') j`)).j, jn, 'asking twice keeps the same number');
+  await db.exec(`reset role`);
+  const vs = (await db.query(`select job_no from visits where num='PFBS-0784' order by visit_date`)).rows.map(r => r.job_no);
+  assert.equal(vs[0], jn, 'first visit gets the job #'); assert.ok(vs[1] && vs[1] !== jn, 'later visit gets its own');
+  await db.exec(`update proposals set status='Sent', hcp_job=null where num='PFBS-0785'`);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  await assert.rejects(db.query(`select assign_job_no('PFBS-0785')`), /Approve the proposal first/, 'not approved: refused');
+  await db.exec('reset role');
+  console.log('db: give a job its # passed');
+}
