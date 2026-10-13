@@ -296,7 +296,7 @@ td input,td select{padding:5px 8px}
     <div class="gsearch"><input type="search" id="gq" placeholder="Search jobs, clients, invoices…  ( / )" autocomplete="off" aria-label="Search everything"><div class="gpop" id="gres" hidden></div></div>
     <div class="gnew"><button type="button" class="btn small gnewbtn" id="gNew" aria-haspopup="true" aria-expanded="false">+ New</button><div class="gpop gmenu" id="gMenu" hidden></div></div>
   </div>
-  <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
+  <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Service reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
 </div></header>
 
 <main>
@@ -877,7 +877,7 @@ function drawDrawer(){
     </div>
     <div class="dpane" data-pane="job" ${tab==='job'?'':'hidden'}>
     ${outcome(p)==='Won' && !isNew ? `<fieldset><legend>Invoices</legend>
-      <div class="grid2" style="margin-bottom:8px">${field('PO # / customer reference'+(p.poRequired===true||p.poRequired==='true'?' (required)':''),'poNumber')}</div>
+      <div class="grid2" style="margin-bottom:8px">${field('PO # / client reference'+(p.poRequired===true||p.poRequired==='true'?' (required)':''),'poNumber')}</div>
       <div id="invBox">${invoicesHTML(p)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' && !isNew ? `<fieldset><legend>Schedule</legend><div id="visBox">${visitsHTML(p)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Payment &amp; commission</legend><div class="grid2">
@@ -901,7 +901,7 @@ function drawDrawer(){
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Job actuals</legend>
       <div id="actBox">${actualsHTML(p, ed)}</div></fieldset>` : ''}
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Service report</legend>
-      <div class="gpline" style="margin:0 0 8px">${p.reportSentOn?`<b style="color:var(--good)">Sent to the client ${fmtD(p.reportSentOn)}</b>${safeLink(p.reportUrl)?` · <a href="${esc(safeLink(p.reportUrl))}" target="_blank" rel="noopener">open the report</a>`:''}`:`Not sent yet.${p.hcpJob?' HCP job '+esc(p.hcpJob)+'.':''}`}</div>
+      <div class="gpline" style="margin:0 0 8px">${p.reportSentOn?`<b style="color:var(--good)">Sent to the client ${fmtD(p.reportSentOn)}</b>${safeLink(p.reportUrl)?` · <a href="${esc(safeLink(p.reportUrl))}" target="_blank" rel="noopener">open the report</a>`:''}`:`Not sent yet.`}</div>
       <div class="toolbar" style="margin:0">${isManager()?`<a class="btn small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">${p.reportSentOn?'Open service reports':'Write service report'}</a>`:''}
       ${safeLink(S.reportAppUrl)?`<a class="btn ghost small" href="${esc(safeLink(S.reportAppUrl))}" target="_blank" rel="noopener">Old report app ↗</a>`:''}</div>
       <div class="note">Starts from this job: client, contact email, address and scope are filled in for you. Reports also start on their own when the crew taps FINISH in HousecallPro. When the report is approved, it shows here as sent.</div></fieldset>` : ''}
@@ -1261,7 +1261,7 @@ function newJobPage(recurring, o={}){
       <label style="font-size:13px;display:block"><input type="checkbox" name="skipwk"> Weekdays only (skip Sat &amp; Sun)</label>
       <label class="f" style="margin-top:6px">Repeats<select name="rep">${presetsFor(td).filter(x=>x[0]!=='custom').map(([k,t])=>`<option value="${k}" ${recurring&&k==='month'?'selected':''}>${esc(t)}</option>`).join('')}</select></label>
       <label style="font-size:13px;display:block"><input type="checkbox" name="nosched"> Don't schedule yet</label>
-      <div class="f" style="margin-top:6px"><b>Team</b> <select name="jcap" style="width:auto;margin-left:6px" aria-label="Show techs who can do"><option value="">Show everyone</option>${skillList().map(x=>`<option>${esc(x)}</option>`).join('')}</select> <input name="jtq" placeholder="Find a tech" style="width:140px;margin-left:4px" aria-label="Find a tech" autocomplete="off"><div class="vchecks jpteam">${crewOpts.map(t=>`<label data-tech="${esc(t)}"><input type="checkbox" name="techs" value="${esc(t)}"> ${esc(t)}${skillsOf(t).length?` <span class="note" style="margin:0">(${esc(skillsOf(t).join(', '))})</span>`:''} <span class="vbusy flag warn" hidden>busy</span></label>`).join('')||'<span class="note" style="margin:0">Add your crew in Settings → Crew.</span>'}</div></div>
+      <div class="f" style="margin-top:6px"><b>Techs</b> <select name="jcap" style="width:auto;margin-left:6px" aria-label="Show techs who can do"><option value="">Show everyone</option>${skillList().map(x=>`<option>${esc(x)}</option>`).join('')}</select> <input name="jtq" placeholder="Find a tech" style="width:140px;margin-left:4px" aria-label="Find a tech" autocomplete="off"><div class="vchecks jpteam">${crewOpts.map(t=>`<label data-tech="${esc(t)}"><input type="checkbox" name="techs" value="${esc(t)}"> ${esc(t)}${skillsOf(t).length?` <span class="note" style="margin:0">(${esc(skillsOf(t).join(', '))})</span>`:''} <span class="vbusy flag warn" hidden>busy</span></label>`).join('')||'<span class="note" style="margin:0">Add your crew in Settings → Crew.</span>'}</div></div>
     </div>
     <div class="card"><h4>Job type</h4><select name="jtype"><option value="">—</option>${(S.services||[]).map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
   </div><div>
@@ -1506,7 +1506,7 @@ async function loadPendingReports(){
   if(!isManager()) return;
   const {data,error}=await sb.from('service_reports').select('id,num,client,address,service_dates,created_at').eq('status','pending').order('created_at',{ascending:false}).limit(100);
   SR=error?[]:(data||[]);
-  const l=$('#rptLink'); if(l) l.textContent=SR.length?`Reports · ${SR.length}`:'Reports';
+  const l=$('#rptLink'); if(l) l.textContent=SR.length?`Service reports · ${SR.length}`:'Service reports';
   if(current()==='orders') renderJobs(); if(current()==='home') renderHome();
 }
 function renderOrders(){
@@ -1589,7 +1589,7 @@ function renderJobs(){
   <div class="card"><h3>Service reports to send (${SR.length+nsr2.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>Job</th><th>Report</th><th class="hide-sm">Service dates</th><th></th></tr></thead><tbody>
     ${SR.map(r=>{ const p=r.num&&P.find(x=>x.num===r.num); return `<tr><td class="wrap">${p?job(p):`<span class="note" style="margin:0">${esc(r.client||'No client yet')}${r.address?' · '+esc(r.address):''}</span>`}</td><td><span class="flag warn">Ready to review</span></td><td class="hide-sm num">${esc(r.service_dates||'')}</td><td><a class="btn small" href="reports.html#/r/${encodeURIComponent(r.id)}" target="_blank" rel="noopener">Review</a></td></tr>`; }).join('')}
-    ${nsr2.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td><span class="flag">No report yet</span></td><td class="hide-sm">${esc(p.hcpJob?'HCP '+p.hcpJob:'')}</td><td>${isManager()?`<a class="btn small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">Write report</a>`:''}</td></tr>`).join('')}
+    ${nsr2.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td><span class="flag">No report yet</span></td><td class="hide-sm num">${(()=>{ const L=VIS.filter(v=>v.num===p.num && v.kind==='job' && visEnd(v)<=iso(today())); return L.length?fmtD(visEnd(L[L.length-1])):''; })()}</td><td>${isManager()?`<a class="btn small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">Write report</a>`:''}</td></tr>`).join('')}
     ${SR.length+nsr2.length?'':'<tr><td colspan="4" class="empty">Every finished job has its service report.</td></tr>'}</tbody></table></div>
     <div class="note">Reports start here on their own when the crew taps FINISH in HousecallPro. Each one clears when it's approved and sent.</div></div>
   </div>`;
@@ -2437,7 +2437,7 @@ function invEdit(p, v){
       <label class="f">Invoice date<input type="date" name="invoice_date" value="${esc(v.invoice_date||'')}" ${dis}></label>
       <label class="f">Service date<input type="date" name="service_date" value="${esc(v.service_date||'')}" ${dis}></label>
       <label class="f">Payment terms (days)<input type="number" name="terms_days" value="${esc(v.terms_days??30)}" ${dis}></label>
-      <label class="f">PO # / customer reference${p.poRequired?' <b style="color:var(--bad)">required</b>':''}<input name="po_number" value="${esc(v.po_number||'')}" ${dis}></label>
+      <label class="f">PO # / client reference${p.poRequired?' <b style="color:var(--bad)">required</b>':''}<input name="po_number" value="${esc(v.po_number||'')}" ${dis}></label>
       <label class="f">Job #<input name="job_no" value="${esc(v.job_no||'')}" placeholder="${esc(p.num)}" ${dis}></label>
       <label class="f">Billing email(s)<input name="bill_email" value="${esc(v.bill_to?.email||'')}" placeholder="ap@client.com" ${dis}></label>
       <label class="f">Bill to<input name="bill_name" value="${esc(v.bill_to?.name||'')}" ${dis}></label>
@@ -3215,9 +3215,9 @@ function renderLeads(){
       </tbody></table></div></div>`;
   }
   const activeP=PROS.filter(x=>!['Converted','Not now'].includes(x.stage)).length, estN=P.filter(p=>PRE.includes(p.status)).length, outN=P.filter(p=>outcome(p)==='Open').length;
-  const steps=[['Prospect','BD works the building: calls, visits, next touch.', canProspect()?activeP:null],['Lead','They ask for a price. BD converts it and assigns an estimator.', leads.length],['Estimate','The estimator walks the site and prices it.', estN],['Proposal','Review, send, follow up, win.', outN]];
+  const steps=[['Prospect','BD works the building: calls, visits, next touch.', canProspect()?activeP:null],['Lead','They ask for a price. BD converts it and assigns an estimator.', leads.length],['Pricing','The estimator walks the site and prices it.', estN],['Proposal','Review, send, follow up, win.', outN]];
   $('#leadsBody').innerHTML = `<ol class="flow">${steps.map(([t,d,n],i)=>`<li><div class="fnum">${i+1}</div><div><b>${t}</b>${n!=null?` <span class="fcount">${n}</span>`:''}<div class="note" style="margin:2px 0 0">${d}</div></div></li>`).join('')}</ol>
-  <div class="card"><h3>Leads waiting for an estimate (${leads.length})</h3>
+  <div class="card"><h3>Leads waiting to be priced (${leads.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>PFBS #</th><th>Client</th><th class="hide-sm">Property</th><th class="hide-sm">Services</th><th class="hide-sm">Walkthrough</th><th class="hide-sm">BD rep</th><th>Estimator</th><th class="r">Days waiting</th></tr></thead><tbody>${leadRows}</tbody></table></div>
     <div class="note">Red after 3 days. The estimator opens the lead and clicks <b>Start estimate</b>, which turns it into a proposal with these services as lines.</div></div>${pros}`;
 }
@@ -3526,8 +3526,8 @@ function renderSettings(){
       <div class="toolbar" style="margin:0"><label class="btn">Import HousecallPro customers…<input type="file" id="clImport" accept=".csv,text/csv" hidden></label><button type="button" class="btn ghost" id="clLink">Link proposals to clients</button></div></div>`:''}
     ${canPay()?`<div class="card listedit"><h3>Job numbers</h3><label class="f">Next job #<span style="display:flex;gap:6px"><input id="s-jobno" type="number" placeholder="Using HousecallPro job #s" style="flex:1"><button type="button" class="btn small" id="jobNoSave">Set</button></span></label>
       <div class="note">Until this is set, each visit uses the HCP job # typed on the job. On switch-over day, set it to HousecallPro's last job # + 1: from then on every visit gets the next number, like HCP.</div></div>`:''}
-    ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Warehouse (KitTracker)</h3><div id="whList" class="note" style="margin:0 0 6px">Loading…</div>
-      <label class="f">Add a KitTracker login<span style="display:flex;gap:6px"><input id="s-wh" type="email" placeholder="warehouse@pfbuildingservices.com" style="flex:1"><button type="button" class="btn small" id="whAdd">Add</button></span></label>
+    ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Warehouse</h3><div id="whList" class="note" style="margin:0 0 6px">Loading…</div>
+      <label class="f">Add a warehouse login<span style="display:flex;gap:6px"><input id="s-wh" type="email" placeholder="warehouse@pfbuildingservices.com" style="flex:1"><button type="button" class="btn small" id="whAdd">Add</button></span></label>
       <div class="note">The warehouse tablet signs in to the <b>Warehouse</b> tab with this email and its password (create it once in Supabase → Authentication → Add user). It can use the warehouse and read upcoming jobs: no prices, proposals, clients or money. The office team doesn't need to be listed here.</div>
       ${role()==='Owner'?`<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" id="whCopy">Copy data from the old KitTracker</button></div><div id="whCopyMsg" class="note" style="margin:4px 0 0"></div>`:''}</div>`:''}
     ${crewCardHTML(crew(), skillList(), ro)}
@@ -3584,7 +3584,7 @@ function renderSettings(){
   if($('#whAdd')){
     const whLoad=async()=>{ const {data,error}=await sb.from('warehouse_logins').select('email').order('email'); const b=$('#whList'); if(!b) return;
       if(error){ b.textContent='Run database update 025 in Supabase first.'; $('#whAdd').disabled=true; return; }
-      b.innerHTML=(data||[]).length?data.map(r=>`<div>${esc(r.email)} <button type="button" class="btn ghost small" data-whdel="${esc(r.email)}">Remove</button></div>`).join(''):'No KitTracker login yet.'; };
+      b.innerHTML=(data||[]).length?data.map(r=>`<div>${esc(r.email)} <button type="button" class="btn ghost small" data-whdel="${esc(r.email)}">Remove</button></div>`).join(''):'No warehouse login yet.'; };
     whLoad();
     $('#whAdd').onclick=async()=>{ const e=$('#s-wh').value.trim().toLowerCase(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){ toast('Type the email KitTracker signs in with.'); return; }
       const {error}=await sb.from('warehouse_logins').insert({email:e, added_by:me.name}); if(error){ toast(error.message); return; }
@@ -3623,6 +3623,7 @@ function organizeSettings(){
     const got=names.map(n=> n==='Proposal & links' ? extra : find(n)).filter(Boolean); if(!got.length) continue;
     const h=document.createElement('h3'); h.className='setsec'; h.textContent=title; frag.appendChild(h);
     const g=document.createElement('div'); g.className='settings-grid'; got.forEach(c=>{ c.style.marginTop=''; g.appendChild(c); }); frag.appendChild(g);
+    if(got.length===1){ const h3=got[0].querySelector('h3'); if(h3 && h3.textContent.trim()===title) h3.hidden=true; }   // no "Team" over "Team"
   }
   const left=cards.filter(c=>!frag.contains(c));   // anything not listed stays, at the end
   if(left.length){ const g=document.createElement('div'); g.className='settings-grid'; left.forEach(c=>g.appendChild(c)); frag.appendChild(g); }
