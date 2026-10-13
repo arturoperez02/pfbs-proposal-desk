@@ -720,6 +720,29 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 29. A lift in the pricing follows the job: rental to reserve on approval, LIFT on the schedule, the visit editor, Home and the crew email
+{
+  const est = { sheet: 'SP', units: [{ desc: 'Solar panels', qty: 1000, rate: 2 }], labor: [{ role: 'Expert', hours: 8, rate: 0, wage: 32 }], materials: [], taxRate: 0, rentals: [{ desc: "40' Boom Lift", unit: 1900, qty: 1, markup: 0.25 }], equipment: [], misc: [] };
+  const pr = { num: 'PFBS-1015', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Lift Co', status: 'Sent', items: [{ type: 'Base', qty: 1, description: 'Carport solar', amount: 4375, estimate: est }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('lift: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; }, pr);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.click('tr[data-id="PFBS-1015"]'); await pg.waitForSelector('#convJob', T);
+  await pg.click('#convJob'); await pg.waitForSelector('#askJob', T); await pg.fill('#askJob', '10270'); await pg.click('dialog.ask [data-a="ok"]');
+  await pg.waitForSelector('dialog.inved [name="visit_date"]', T);
+  const parts = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1015').parts || []);
+  assert.ok(parts.some(x => x.kind === 'rental' && x.status === 'To reserve' && /Boom Lift/.test(x.desc)), 'approval puts the lift on the job as To reserve');
+  assert.match(await pg.textContent('dialog.inved'), /Lift \/ rental[\s\S]*Boom Lift: To reserve[\s\S]*Not reserved yet/, 'visit editor shows the lift to reserve');
+  await pg.fill('dialog.inved [name="visit_date"]', new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10));
+  await pg.check('dialog.inved [name="techs"] >> nth=0'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(800);
+  await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForTimeout(300);
+  if (!(await pg.$('.vchip .clift.todo'))) { await pg.click('#schNext'); await pg.waitForTimeout(200); }
+  assert.ok(await pg.$('.vchip .clift.todo'), 'LIFT tag on the schedule chip');
+  await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(200); assert.match(await pg.textContent('#homeBody'), /Lifts \/ rentals to handle/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
