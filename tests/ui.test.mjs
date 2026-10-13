@@ -431,6 +431,9 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.selectOption('dialog.inved [name="capf"]', 'Swing Stage'); await pg.waitForTimeout(100);
   const shown = await pg.$$eval('dialog.inved .vtechs [data-tech]', L => L.filter(l => !l.hidden).map(l => l.dataset.tech));
   assert.ok(shown.includes('Luis Aldana') && !shown.includes('Israel Hernandez'), 'only techs who can do it (plus ones already picked): ' + shown.join(','));
+  await pg.selectOption('dialog.inved [name="capf"]', ''); await pg.waitForTimeout(50);
+  const all = await pg.$$eval('dialog.inved .vtechs [data-tech]', L => L.map(l => l.dataset.tech));
+  assert.ok(all.includes('Israel Hernandez') && all.includes('Luis Aldana'), 'every tech on any job is listed');
   await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
   // run again: no duplicates
   await pg.click('#schTs'); await pg.waitForSelector('[data-tsi]', T); assert.match(await pg.textContent('dialog.inved'), /already imported: will update/);

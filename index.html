@@ -3443,6 +3443,7 @@ const EQUIP_DEF=['Boom Lift','Scissor Lift','Swing Stage','Pressure Washer','Wat
 const crew = () => (S.crew&&S.crew.length?S.crew:CREW_DEF).filter(c=>c[0]);
 const SKILL_DEF=['Chair Work','Swing Stage','Solar Panel Cleaning','Lift Cleaning (Boom/Scissor)','Ground Floor Window Washing','Pressure Washing','Interior Cleaning','Janitorial'];
 const skillList = () => S.skillOptions&&S.skillOptions.length?S.skillOptions:SKILL_DEF;
+const allTechs = () => [...new Set([...crew().map(c=>c[0]), ...VIS.flatMap(v=>v.techs||[])])].filter(t=>t&&t!=='N/A');
 const skillsOf = n => (crew().find(c=>c[0]===n)||[])[3]||[];
 const EQUIP_SKILL={'Swing Stage':'Swing Stage','Boom Lift':'Lift Cleaning (Boom/Scissor)','Scissor Lift':'Lift Cleaning (Boom/Scissor)','Bosun Chair':'Chair Work'};
 const workTypes = () => S.workTypes&&S.workTypes.length?S.workTypes:WORK_DEF;
@@ -3540,8 +3541,12 @@ function renderSchedule(){
     <div class="note">Click a visit to change it, or an empty spot on a day to schedule a job there. Grey = done; red outline = no techs yet.</div>`;
 }
 // ---- the visit editor ----
+function equipFromJob(p){ if(!p) return [];
+  let R=[]; try{ R=[...(p.parts||[]), ...buildParts(p)].filter(isRent).map(x=>String(x.desc||'').toLowerCase()); }catch(_){ R=(p.parts||[]).filter(isRent).map(x=>String(x.desc||'').toLowerCase()); }
+  const txt=R.join(' | ')+' | '+scopeLines(p).join(' | ').toLowerCase();
+  return equipList().filter(e=>{ const k=e.toLowerCase(); return txt.includes(k) || (k.includes('boom')&&/boom|articulat|telescop/.test(txt)) || (k.includes('scissor')&&/scissor/.test(txt)) || (k.includes('swing')&&/swing stage/.test(txt)) || (k.includes('pressure washer')&&/pressure wash/.test(txt)); }); }
 function visitDraft(p, date){ const svc=String(p?.service||''); const w=workTypes().filter(x=>svc && (x.toLowerCase().includes(svc.toLowerCase().split(' ')[0])));
-  return {id:null, num:p?p.num:null, kind:p?'job':'event', visit_date:date||iso(today()), end_date:null, start_time:'08:00', end_time:'16:30', techs:[], work:w.slice(0,1), equipment:[], vehicle:null, notes:'', office_notes:'', status:'Scheduled',
+  return {id:null, num:p?p.num:null, kind:p?'job':'event', visit_date:date||iso(today()), end_date:null, start_time:'08:00', end_time:'16:30', techs:[], work:w.slice(0,1), equipment:equipFromJob(p), vehicle:null, notes:'', office_notes:'', status:'Scheduled',
     address:p?(p.siteAddress||p.property||''):'', client:p?p.client:'', title:p?p.property:'', series_id:null}; }
 function jobOptions(sel){ const L=P.filter(p=>['Approved','Scheduled','Invoiced','Paid'].includes(p.status)).sort((a,b)=>(a.status==='Approved'?0:1)-(b.status==='Approved'?0:1)||String(b.num).localeCompare(String(a.num))).slice(0,400);
   return L.map(p=>`<option value="${esc(p.num)}" ${p.num===sel?'selected':''}>${esc(jobLabel(p))}</option>`).join(''); }
@@ -3562,7 +3567,7 @@ function visEdit(v, opts={}){
       <label class="f">Start time<input type="time" name="start_time" value="${esc(v.start_time||'')}" ${dis}></label><label class="f">End time<input type="time" name="end_time" value="${esc(v.end_time||'')}" ${dis}></label>
     </div>
     <div class="f"><b>Techs</b> <select name="capf" style="width:auto;margin-left:8px" aria-label="Show techs who can do"><option value="">All techs</option>${skillList().map(x=>`<option>${esc(x)}</option>`).join('')}</select>
-      <div class="vchecks vtechs">${[...new Set([...crew().map(c=>c[0]), ...(v.techs||[])])].map(t=>`<label data-tech="${esc(t)}"><input type="checkbox" name="techs" value="${esc(t)}" ${(v.techs||[]).includes(t)?'checked':''} ${dis}> ${esc(t)}${skillsOf(t).length?` <span class="note" style="margin:0">(${esc(skillsOf(t).join(', '))})</span>`:''} <span class="vbusy flag warn" hidden>busy</span></label>`).join('')}</div>
+      <div class="vchecks vtechs">${[...new Set([...allTechs(), ...(v.techs||[])])].map(t=>`<label data-tech="${esc(t)}"><input type="checkbox" name="techs" value="${esc(t)}" ${(v.techs||[]).includes(t)?'checked':''} ${dis}> ${esc(t)}${skillsOf(t).length?` <span class="note" style="margin:0">(${esc(skillsOf(t).join(', '))})</span>`:''} <span class="vbusy flag warn" hidden>busy</span></label>`).join('')}</div>
       <div class="note vgap" style="margin:2px 0 0;color:var(--warn)" hidden></div></div>
 
     <div class="f"><b>Equipment</b>${checks('equipment', [...new Set([...equipList(), ...(v.equipment||[])])], v.equipment||[])}</div>
@@ -3595,7 +3600,7 @@ function visEdit(v, opts={}){
       start_time:d.querySelector('[name="start_time"]').value, end_time:d.querySelector('[name="end_time"]').value, skip_weekends:!!d.querySelector('[name="skip_weekends"]')?.checked, kind:v.kind};
     for(const l of d.querySelectorAll('.vtechs [data-tech]')){ const t=l.dataset.tech, on=l.querySelector('input').checked;
       l.hidden=!!cap && !on && !skillsOf(t).includes(cap);
-      l.querySelector('.vbusy').hidden=!row.visit_date || !techConflicts({...row, techs:[t]}, v.id).length; }
+      const cf=row.visit_date?techConflicts({...row, techs:[t]}, v.id):[], b=l.querySelector('.vbusy'); b.hidden=!cf.length; b.title=cf.map(c=>`${fmtD(c.day)} ${t12(c.v.start_time)} ${c.v.job_no?'#'+c.v.job_no+' ':''}${visLabel(c.v)}`).join('\n'); b.textContent=cf.length?`busy: ${visLabel(cf[0].v).split(' · ')[0]}${cf[0].v.start_time?' '+t12(cf[0].v.start_time).replace(':00',''):''}`:'busy'; }
     const picked=[...d.querySelectorAll('[name="techs"]:checked')].map(x=>x.value), need=[...new Set([...d.querySelectorAll('[name="equipment"]:checked')].map(x=>EQUIP_SKILL[x.value]).filter(Boolean))];
     const gaps=need.filter(k=>picked.length && !picked.some(t=>skillsOf(t).includes(k))), g=d.querySelector('.vgap');
     if(g){ g.hidden=!gaps.length; g.textContent=gaps.length?`⚠ Nobody picked is tagged for: ${gaps.join(', ')}`:''; } };
@@ -3605,7 +3610,7 @@ function visEdit(v, opts={}){
     if(n==='unit') d.querySelector('.vmon').hidden=e.target.value!=='month';
     if(n==='workdays'||n==='skip_weekends') syncEnd(); if(n==='end_date') syncDays(); if(n==='visit_date'){ syncEnd(); relabel(); }
     if(n==='num' && !v.id){ const j=P.find(x=>x.num===e.target.value); $('#vScope').innerHTML=scopeBox(j); if(j){ const dd=visitDraft(j, f('visit_date').value); Object.assign(v,{num:j.num, address:dd.address, client:dd.client, title:dd.title});
-      for(const c of d.querySelectorAll('[name="work"]')) c.checked=dd.work.includes(c.value);
+      for(const c of d.querySelectorAll('[name="equipment"]')) c.checked=dd.equipment.includes(c.value);
       if(isRecurring(j) && f('preset')){ const r=ruleFromJob(j, f('visit_date').value); f('preset').value='custom'; d.querySelector('.vcustom').hidden=false; d.querySelector('.vends').hidden=false; f('every').value=r.every; f('unit').value=r.unit; d.querySelector('.vmon').hidden=r.unit!=='month'; } } } });
   const collect=()=>{ const row={visit_date:f('visit_date').value, end_date:f('end_date').value||null, start_time:f('start_time').value||null, end_time:f('end_time').value||null, techs:all('techs'), equipment:all('equipment'),
       notes:f('notes').value.trim()||null, office_notes:f('office_notes').value.trim()||null, status:f('status').value, vehicle:f('vehicle')?.value||null, skip_weekends:f('skip_weekends').checked};
@@ -3626,7 +3631,7 @@ function visEdit(v, opts={}){
         else await endSeriesFrom(ser, v.occ_date||v.visit_date);
         toast('Deleted'); close(); await loadSchedule(); return; }
       if(a==='save'){
-        const row=collect(); if(v.kind==='job' && !row.num){ toast('Pick the job.'); return; } if(v.kind==='event' && !row.title){ toast('Say what the event is.'); return; } if(!row.visit_date){ toast('Pick a date.'); return; }
+        const row=collect(); if(v.kind==='job' && !row.num && !(v.client||v.title||v.ext_id)){ toast('Pick the job.'); return; } if(v.kind==='event' && !row.title){ toast('Say what the event is.'); return; } if(!row.visit_date){ toast('Pick a date.'); return; }
         const repeat=repeatOf();
         const clash=techConflicts({...row, kind:v.kind}, v.id); if(clash.length && !(await confirmConflicts(clash))) return;
         if(!v.id && !repeat){ const r=await sb.from('visits').insert(row); if(r.error) return toast(invMissing(r.error)?'Run database update 020 in Supabase first.':r.error.message); toast('Scheduled'); }
@@ -3720,7 +3725,7 @@ async function techSchedImport(o={}){
   try{ for(let i=0;i<20;i++){ const r=await fetch(`${TS_URL}?key=${TS_KEY}&pageSize=300${tok?'&pageToken='+encodeURIComponent(tok):''}`); if(!r.ok) throw new Error('TechSched answered '+r.status); const d=await r.json(); docs.push(...(d.documents||[])); if(!d.nextPageToken) break; tok=d.nextPageToken; } }
   catch(e){ toast('Could not read TechSched: '+e.message); return; }
   const td=iso(today()), L=docs.map(tsParse).filter(j=>j.date && (o.past || (!/^complete/i.test(j.status) && (j.endDate||j.date)>=td))).sort((a,b)=>(a.date+(a.start||'')).localeCompare(b.date+(b.start||'')));
-  const T=await tsTeam(), TM=T&&teamMerge(T);
+  const T=await tsTeam(); if(T){ T.techs=[...new Set([...T.techs, ...docs.map(tsParse).flatMap(j=>j.techs)])].filter(t=>t && t!=='N/A'); } const TM=T&&teamMerge(T);
   const ex=await sb.from('visits').select('id,ext_id,status').not('ext_id','is',null);
   if(ex.error){ toast(invMissing(ex.error)||/ext_id/.test(ex.error.message)?'Run database update 027 in Supabase first.':ex.error.message); return; }
   const had=new Map((ex.data||[]).map(v=>[v.ext_id,v]));
@@ -3747,10 +3752,12 @@ async function techSchedImport(o={}){
       if(r.error) toast('Team not saved: '+r.error.message); else { Object.assign(S, {crew:TM.crew, skillOptions:TM.skillOptions, vehicles:TM.vehicles, equipment:TM.equipment}); team=` · team: ${TM.added.length} added, ${TM.updated.length} updated`; } }
     for(const c of d.querySelectorAll('[data-tsi]:checked')){ const r=rows[+c.dataset.tsi], j=r.j, num=d.querySelector(`[data-tsp="${c.dataset.tsi}"]`).value||null, p=num&&P.find(x=>x.num===num);
       const n=String(j.jobNum||'').replace(/\D/g,''), rental=[j.rentalCo, j.pickupDate&&('pickup '+fmtD(j.pickupDate)+(j.pickupTime?' '+t12(j.pickupTime):''))].filter(Boolean).join(', ');
-      const row={visit_date:j.date, end_date:j.endDate&&j.endDate>j.date?j.endDate:null, start_time:j.start||null, end_time:j.end||null, techs:[...new Set(j.techs.map(crewName))], equipment:j.equipment, vehicle:j.vehicle||null,
+      const row={visit_date:j.date, end_date:j.endDate&&j.endDate>j.date?j.endDate:null, start_time:j.start||null, end_time:j.end||null, techs:[...new Set(j.techs.filter(t=>t&&t!=='N/A').map(crewName))], equipment:j.equipment, vehicle:j.vehicle||null,
         notes:j.notes||null, office_notes:[j.adminNotes, rental?'Rental: '+rental:'', j.map?'Map: '+j.map:'', 'From TechSched'].filter(Boolean).join('\n'), address:j.address||null, client:p?p.client:(j.client||null), title:p?p.property:(String(j.address||'').split(',')[0]||null), work:j.types};
       let res;
+      const same=!r.old && num ? VIS.find(x=>x.num===num && x.visit_date===j.date && !x.ext_id && x.kind==='job') : null;
       if(r.old) res=await sb.from('visits').update(row).eq('id', r.old.id);
+      else if(same) res=await sb.from('visits').update({...row, ext_id:'techsched:'+j.id}).eq('id', same.id);
       else { const ins={...row, kind:'job', num, ext_id:'techsched:'+j.id, status:(/^complete/i.test(j.status) || (j.endDate||j.date)<iso(today()))?'Done':'Scheduled'}; if(n && n.length<=6) ins.job_no=n; res=await sb.from('visits').insert(ins); }
       if(res.error){ nErr++; console.warn(res.error.message); } else if(r.old) nUpd++; else nNew++; }
     d.close(); d.remove();
