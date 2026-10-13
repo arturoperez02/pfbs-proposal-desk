@@ -512,6 +512,20 @@ function spHint(){ const u=(E?.units||[])[0]; const q=num(u?.qty)||0; if(!q) ret
   const pph=num(S.est.spPph)||250, crew=q/pph, techs=(E.labor||[]).filter(r=>roleKind(r.role)!=='admin').length||2;
   return `At ${fmtH(pph)} panels/hr: about <b>${fmtH(crew)} crew hours</b>.`
 ; }
+// ---- price book: ONE list. Services: Settings → Price book. Materials: the estimating Material presets, priced at cost + material markup (no second list) ----
+function priceBook(){
+  const svc=(S.priceBook&&S.priceBook.length?S.priceBook:(S.services||[]).filter(x=>x!=='Multiple services').map(n=>[n,'','',''])).map(r=>({kind:'svc', name:String(r[0]||'').trim(), price:num(r[1]), unit:r[2]||'', desc:r[3]||''})).filter(x=>x.name);
+  const mk=Number(S.est?.matMarkup)||0, mat=(S.est?.materials||[]).map(m=>({kind:'mat', name:String(m[0]||'').trim(), price:num(m[1])!=null?Math.round(num(m[1])*(1+mk)*100)/100:null, cost:num(m[1]), unit:'ea', desc:''})).filter(x=>x.name);
+  return [...svc, ...mat]; }
+const pbFind = (name, kind) => { const n=norm(name); return n ? priceBook().find(x=>norm(x.name)===n && (!kind || x.kind===kind)) : null; };
+function pbDatalists(){ const B=priceBook(); return `<datalist id="pbSvc">${B.filter(x=>x.kind==='svc').map(x=>`<option value="${esc(x.name)}">${x.price!=null?usd(x.price)+(x.unit?' / '+esc(x.unit):''):''}</option>`).join('')}</datalist><datalist id="pbMat">${B.filter(x=>x.kind==='mat').map(x=>`<option value="${esc(x.name)}">${x.price!=null?usd(x.price):''}</option>`).join('')}</datalist>`; }
+function pbPick(kind){ return new Promise(res=>{ const d=document.createElement('dialog'); d.className='ask'; const B=priceBook().filter(x=>!kind||x.kind===kind);
+  const list=q=>B.filter(x=>!q||norm(x.name+' '+x.desc).includes(norm(q))).map(x=>`<button type="button" class="gitem" data-pb="${esc(x.name)}" data-k="${x.kind}">${esc(x.name)} <b style="float:right">${x.price!=null?usd(x.price)+(x.unit?' / '+esc(x.unit):''):'—'}</b><small>${x.kind==='mat'?'Material':'Service'}${x.desc?' · '+esc(x.desc):''}</small></button>`).join('')||'<div class="note" style="margin:8px">Nothing in the price book yet. Add services in Settings → Price book.</div>';
+  d.innerHTML=`<h3>${kind==='mat'?'Material':'Service'} price book</h3><input id="pbq" type="search" placeholder="Search" style="margin:0 0 6px"><div id="pbl" style="max-height:55vh;overflow:auto">${list('')}</div><div class="toolbar"><span style="flex:1"></span><button type="button" class="btn ghost" data-a="x">Close</button></div>`;
+  document.body.appendChild(d); const done=v=>{ d.close(); d.remove(); res(v); };
+  d.addEventListener('input', e=>{ if(e.target.id==='pbq') d.querySelector('#pbl').innerHTML=list(e.target.value); });
+  d.addEventListener('click', e=>{ const b=e.target.closest('[data-pb]'); if(b) done(B.find(x=>x.name===b.dataset.pb && x.kind===b.dataset.k)); if(e.target.closest('[data-a="x"]')) done(null); });
+  d.addEventListener('cancel', e=>{ e.preventDefault(); done(null); }); d.showModal(); d.querySelector('#pbq').focus(); }); }
 const matFromPreset = m => ({desc:m[0], unit:m[1], qty:0, markup:S.est.matMarkup, ...(m[2]?{supplier:m[2]}:{}), ...(m[3]?{sku:m[3]}:{}), ...(m[4]?{link:m[4]}:{})});
 function newEstimate(sheet='WC'){
   const E=S.est, T=SHEETS[sheet]||SHEETS.WC, adminRate=(E.labor.find(r=>r[0]==='Administration')||[0,45])[1];
@@ -763,7 +777,7 @@ function itemsHTML(p, ed, accEd=ed){
     <div class="svcpick">${groups.map(g=>`<label class="chip ${ch.includes(g)?'on':''}"><input type="checkbox" data-opt="${esc(g)}" ${ch.includes(g)?'checked':''} ${adis}> ${esc(g)}</label>`).join('')}</div></div>` : '';
   return `${items.length?'':'<div class="note" style="margin:0 0 8px">Add one line per service. Add-ons are optional extras the client can accept.</div>'}
     <div class="items">${rows}</div>
-    <datalist id="descList">${[...S.addOns,...S.services].map(d=>`<option value="${esc(d)}">`).join('')}</datalist>
+    <datalist id="descList">${[...new Set([...priceBook().filter(x=>x.kind==='svc').map(x=>x.name), ...S.addOns, ...S.services])].map(d=>`<option value="${esc(d)}">`).join('')}</datalist>
     ${ed?'<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" data-add="Service">+ Add service</button><button type="button" class="btn ghost small" data-add="Add-on">+ Add add-on</button><button type="button" class="btn ghost small" id="raiseBtn" title="Raise every line price by a percentage">Raise prices %</button></div>':''}
     ${pick}
     ${items.length?`<div class="itot" id="itot">${itotText(p)}</div>`:''}`;
@@ -1005,6 +1019,7 @@ function refreshCalcs(){ const a=$('#calc1'), b=$('#calc2'), c=$('#ctBox'); if(a
 function itemEvent(e, final){
   const f=e.target.dataset.it; if(!f) return false; const i=+e.target.closest('[data-i]').dataset.i, it=draft.items[i];
   it[f] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
+  if(f==='description' && final && (it.amount===''||it.amount==null)){ const hit=pbFind(it.description,'svc'); if(hit && hit.price!=null){ it.amount=hit.price; const a=e.target.closest('.item')?.querySelector('[data-it="amount"]'); if(a) a.value=hit.price; } }
   if(final && (e.target.tagName==='SELECT' || e.target.type==='checkbox' || f==='group')) { rerenderItems(); }
   else { syncFromItems(draft); const t=$('#itot'); if(t) t.innerHTML=itotText(draft); if(estimateTotals(draft)) refreshGp(); const sm=e.target.closest('.item')?.querySelector('.estsum'); if(sm && it.estimate) sm.outerHTML=estSummary(it); refreshCalcs(); }
   return true;
@@ -1242,12 +1257,14 @@ function newJobPage(recurring){
   </div><div>
     <div class="card"><h4>Private notes <span class="note" style="margin:0;font-weight:400">office only</span></h4><textarea name="pnotes" rows="2" placeholder="Add a private note here"></textarea></div>
     <div class="card"><h4>Line items</h4>
-      <div class="note" style="margin:0 0 4px">Services</div><div class="jpsvc"></div><button type="button" class="btn ghost small" data-a="addsvc">+ Add service</button>
-      <div class="note" style="margin:10px 0 4px">Materials</div><div class="jpmat"></div><button type="button" class="btn ghost small" data-a="addmat">+ Add material</button>
-      <div class="jptot"></div></div>
+      ${pbDatalists()}
+      <div class="toolbar" style="justify-content:space-between;margin:0 0 4px"><span class="note" style="margin:0">Services</span><button type="button" class="btn ghost small" data-a="pbsvc">Service price book</button></div><div class="jpsvc"></div><button type="button" class="btn ghost small" data-a="addsvc">+ Add service</button>
+      <div class="toolbar" style="justify-content:space-between;margin:10px 0 4px"><span class="note" style="margin:0">Materials</span><button type="button" class="btn ghost small" data-a="pbmat">Material price book</button></div><div class="jpmat"></div><button type="button" class="btn ghost small" data-a="addmat">+ Add material</button>
+      <div class="jptot"></div>
+      <label style="font-size:13px;display:block;margin-top:6px"><input type="checkbox" name="pbsave" checked> Add new services to the price book (so they're never typed twice)</label></div>
   </div></div>`;
   document.body.appendChild(d); const q=n=>d.querySelector(`[name="${n}"]`), close=()=>{ d.close(); d.remove(); };
-  const lineRow=(l,i)=>`<div class="jpline" data-li="${i}"><input data-lf="desc" value="${esc(l.desc)}" placeholder="${l.kind==='svc'?'Service, e.g. Exterior window cleaning':'Material, e.g. Gutter guard'}"><input data-lf="qty" type="number" min="0" step="any" value="${esc(l.qty)}" aria-label="Quantity"><input data-lf="price" type="number" min="0" step="any" value="${esc(l.price)}" placeholder="Price" aria-label="Unit price"><span class="tot">${usd((num(l.qty)||0)*(num(l.price)||0))}</span><button type="button" data-ldel="${i}" aria-label="Remove">×</button></div>`;
+  const lineRow=(l,i)=>`<div class="jpline" data-li="${i}"><input data-lf="desc" list="${l.kind==='svc'?'pbSvc':'pbMat'}" value="${esc(l.desc)}" placeholder="${l.kind==='svc'?'Service, e.g. Exterior window cleaning':'Material, e.g. Gutter guard'}"><input data-lf="qty" type="number" min="0" step="any" value="${esc(l.qty)}" aria-label="Quantity"><input data-lf="price" type="number" min="0" step="any" value="${esc(l.price)}" placeholder="Price" aria-label="Unit price"><span class="tot">${usd((num(l.qty)||0)*(num(l.price)||0))}</span><button type="button" data-ldel="${i}" aria-label="Remove">×</button></div>`;
   const tax=()=>Number(S.est?.taxRate)||0;
   const totals=()=>{ const sv=st.lines.filter(l=>l.kind==='svc').reduce((a,l)=>a+(num(l.qty)||0)*(num(l.price)||0),0), mt=st.lines.filter(l=>l.kind==='mat').reduce((a,l)=>a+(num(l.qty)||0)*(num(l.price)||0),0), tx=Math.round(mt*tax()*100)/100;
     d.querySelector('.jptot').innerHTML=`<span>Subtotal</span><span>${usd(sv+mt)}</span>${mt?`<span>Tax on materials (${Math.round(tax()*10000)/100}%)</span><span>${usd(tx)}</span>`:''}<b>Total</b><b>${usd(sv+mt+tx)}</b>`; return {sv,mt,tx}; };
@@ -1267,7 +1284,8 @@ function newJobPage(recurring){
   drawLines(); busy(); q('cq').focus();
   d.addEventListener('cancel', e=>{ e.preventDefault(); close(); });
   d.addEventListener('input', e=>{ const t=e.target; if(t.name==='cq') results();
-    const li=t.closest('[data-li]'); if(li){ st.lines[+li.dataset.li][t.dataset.lf]=t.value; li.querySelector('.tot').textContent=usd((num(st.lines[+li.dataset.li].qty)||0)*(num(st.lines[+li.dataset.li].price)||0)); totals(); } });
+    const li=t.closest('[data-li]'); if(li && t.dataset.lf==='desc'){ const L=st.lines[+li.dataset.li], hit=pbFind(t.value, L.kind); if(hit && hit.price!=null && !num(L.price)){ L.price=hit.price; li.querySelector('[data-lf="price"]').value=hit.price; } }
+    if(li){ st.lines[+li.dataset.li][t.dataset.lf]=t.value; li.querySelector('.tot').textContent=usd((num(st.lines[+li.dataset.li].qty)||0)*(num(st.lines[+li.dataset.li].price)||0)); totals(); } });
   d.addEventListener('change', e=>{ const n=e.target.name; if(n==='prop') pickProp(); if(['d1','d2','t1','t2','anytime','skipwk'].includes(n)) busy();
     if(n==='d1'){ const sel=q('rep'), v=sel.value; sel.innerHTML=presetsFor(q('d1').value).filter(x=>x[0]!=='custom').map(([k,t])=>`<option value="${k}" ${k===v?'selected':''}>${esc(t)}</option>`).join(''); } });
   d.addEventListener('click', async e=>{ const t=e.target, a=t.closest('[data-a]')?.dataset.a;
@@ -1276,11 +1294,14 @@ function newJobPage(recurring){
     if(a==='x') return close();
     if(a==='chgcl'){ st.client=null; st.prop=null; drawSel(); q('cq').focus(); return; }
     if(a==='newcl'){ st.client=null; st.newClient=true; drawSel(); d.querySelector('.jpsearch').hidden=true; d.querySelector('.jpnew').hidden=false; q('nc_name').value=q('cq').value; q('nc_name').focus(); return; }
+    if(a==='pbsvc'||a==='pbmat'){ const it=await pbPick(a==='pbsvc'?'svc':'mat'); if(!it) return; const kind=it.kind, empty=st.lines.findIndex(l=>l.kind===kind && !l.desc.trim());
+      const ln={kind, desc:it.name, qty:1, price:it.price??''}; if(empty>=0) st.lines[empty]=ln; else st.lines.push(ln); drawLines(); return; }
     if(a==='addsvc'||a==='addmat'){ st.lines.push({kind:a==='addsvc'?'svc':'mat', desc:'', qty:1, price:''}); drawLines(); d.querySelectorAll(`.jp${a==='addsvc'?'svc':'mat'} [data-lf="desc"]`).forEach((x,i,L)=>{ if(i===L.length-1) x.focus(); }); return; }
     if(a==='save'){
       const name=st.client?st.client.name:(st.newClient?q('nc_name').value.trim():''); if(!name){ toast('Pick the customer, or add a new one.'); return; }
       const lines=st.lines.filter(l=>l.desc.trim()); if(!lines.length){ toast('Add at least one service with a description.'); return; }
       const site=q('site').value.trim(); if(!site && !st.prop){ toast('Add the job site address.'); return; }
+      if(!q('jtype').value){ const svcs=(S.services||[]).filter(x=>x!=='Multiple services'), txt=norm(lines.map(l=>l.desc).join(' ')), hit=svcs.find(x=>txt.includes(norm(x))) || svcs.find(x=>norm(x).split(' ').filter(w=>w.length>3).some(w=>txt.includes(w))); if(hit) q('jtype').value=hit; }   // job type from the line items: not picked twice
       const {tx}=totals(), rep=q('rep').value, vpy={day:250,weekday:250,week:52,month:12,year:1}[rep]||1;
       const freq=rep?((S.frequencies||[]).slice().sort((x,y)=>Math.abs(x[1]-vpy)-Math.abs(y[1]-vpy))[0]||[''])[0]:'';
       const items=lines.map(l=>{ const qn=num(l.qty)||1, pr=num(l.price)||0; return {type:'Service', service:q('jtype').value||'', description:(l.kind==='mat'?'Materials: ':'')+l.desc.trim(), qty:1, frequency:freq, amount:Math.round(qn*pr*100)/100, note:qn!==1?`${qn} × ${usd(pr)}`:''}; });
@@ -1295,6 +1316,9 @@ function newJobPage(recurring){
       const res=await sb.from('proposals').insert(row).select().single();
       if(res.error){ t.disabled=false; toast(res.error.message); return; }
       const job=fromRow(res.data); await addActivity(job.num,'note','Created as a job from New job');
+      if(q('pbsave').checked && ['Owner','Admin'].includes(role())){ const fresh=lines.filter(l=>l.kind==='svc' && !pbFind(l.desc,'svc')).map(l=>[l.desc.trim(), num(l.price)??'', '', '']);
+        if(fresh.length){ const pb=[...(S.priceBook&&S.priceBook.length?S.priceBook:priceBook().filter(x=>x.kind==='svc').map(x=>[x.name, x.price??'', x.unit, x.desc])), ...fresh];
+          const r=await sb.from('settings').update({data:{...S, priceBook:pb}, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1); if(!r.error) S.priceBook=pb; } }
       if(!q('nosched').checked && q('d1').value){
         const vr={...row0(), num:job.num, techs:[...d.querySelectorAll('[name="techs"]:checked')].map(x=>x.value), equipment:equipFromJob(job), vehicle:null, notes:null, office_notes:null, status:'Scheduled', address:job.siteAddress||job.property||null, client:job.client, title:job.property, work:[]};
         if(rep){ await newSeries(vr, {rule:presetRule(rep, vr.visit_date), ends:{type:'never'}}); }
@@ -2391,7 +2415,7 @@ const invFile = (v,p) => `Invoice ${v.inv_no} - ${invPlace(v,p).replace(/[\\/:*?
 function invEdit(p, v){
   const ro=v.status==='Paid'||v.status==='Void', dis=ro?'disabled':'', prior=(INV[p.num]||[]).filter(x=>x.status!=='Void'&&x.id!==v.id).reduce((s,x)=>s+(num(x.total)||0),0);
   const d=document.createElement('dialog'); d.className='ask inved'+((v.items||[]).some(i=>i.po)?' linepo':'');
-  const row=it=>`<div class="invrow"><input data-f="description" value="${esc(it.description||'')}" placeholder="Service" aria-label="Service" ${dis}><input data-f="po" value="${esc(it.po||'')}" placeholder="PO #" aria-label="PO # for this service" ${dis}><input data-f="amount" type="number" step="0.01" inputmode="decimal" value="${esc(it.amount??'')}" placeholder="$" aria-label="Amount" ${dis}>${ro?'':'<button type="button" class="btn ghost small" data-a="rm" aria-label="Remove line">✕</button>'}<textarea data-f="notes" rows="1" placeholder="Notes under the line (one per line), e.g. Includes boom rental" aria-label="Notes under the line" ${dis}>${esc(it.notes||'')}</textarea></div>`;
+  const row=it=>`<div class="invrow"><input data-f="description" list="pbSvc" value="${esc(it.description||'')}" placeholder="Service" aria-label="Service" ${dis}><input data-f="po" value="${esc(it.po||'')}" placeholder="PO #" aria-label="PO # for this service" ${dis}><input data-f="amount" type="number" step="0.01" inputmode="decimal" value="${esc(it.amount??'')}" placeholder="$" aria-label="Amount" ${dis}>${ro?'':'<button type="button" class="btn ghost small" data-a="rm" aria-label="Remove line">✕</button>'}<textarea data-f="notes" rows="1" placeholder="Notes under the line (one per line), e.g. Includes boom rental" aria-label="Notes under the line" ${dis}>${esc(it.notes||'')}</textarea></div>`;
   const pays=(v.payments||[]).map(x=>`<div class="${x.voided?'note':''}" style="margin:2px 0">${x.voided?'<s>':''}${usd(x.amount)} · ${esc(x.method)} · received ${fmtD(x.received_on)}${x.deposited_on?' · deposited '+fmtD(x.deposited_on):''}${x.note?' · '+esc(x.note):''} · ${esc(x.recorded_by||'')}${x.voided?'</s> void: '+esc(x.void_reason||''):` <button type="button" class="btn ghost small" data-a="payvoid" data-id="${esc(x.id)}">Void</button>`}</div>`).join('');
   const [lab]=invLabel(v);
   d.innerHTML=`<h3>${v.inv_no?`Invoice #${esc(v.inv_no)}`:'New invoice'} · ${esc(p.num)} <span class="flag">${esc(lab)}</span></h3>
@@ -2442,7 +2466,9 @@ function invEdit(p, v){
     if(Object.keys(up).length && (!COLS||COLS.has('po_number'))){ const r=await sb.from('proposals').update(up).eq('num',p.num); if(!r.error){ for(const t of [o, draft&&draft.num===p.num?draft:null]) if(t){ if(up.po_number) t.poNumber=up.po_number; if(up.billing_email) t.billingEmail=up.billing_email; if(up.bill_address) t.billAddress=up.bill_address; } } }
     await loadInvoices(p.num); return v;
   }
+  d.insertAdjacentHTML('beforeend', pbDatalists());
   d.addEventListener('input', e=>{ if(e.target.matches('[data-f="amount"]')) tot(); });
+  d.addEventListener('change', e=>{ if(!e.target.matches('[data-f="description"]')) return; const r=e.target.closest('.invrow'), a=r&&r.querySelector('[data-f="amount"]'), hit=pbFind(e.target.value); if(a && !a.value && hit && hit.price!=null){ a.value=hit.price; tot(); } });
   d.addEventListener('change', e=>{ if(e.target.id==='invLinePo'){ d.classList.toggle('linepo', e.target.checked); if(e.target.checked) d.querySelector('.invrow [data-f="po"]')?.focus(); } });
   d.addEventListener('cancel', e=>{ e.preventDefault(); close(); });
   d.addEventListener('click', async e=>{ const b=e.target.closest('[data-a]'); if(!b) return; const a=b.dataset.a;
@@ -3476,6 +3502,7 @@ function renderSettings(){
     ${ta('s-equip','Equipment (schedule)', equipList().join('\n'), 'One per line.')}
     ${ta('s-veh','Vehicles', (S.vehicles||[]).join('\n'), 'One per line, e.g. Truck 1 (white F-250). Leave empty if you don\'t assign vehicles.')}
     ${ta('s-svc','Services', lines(S.services), 'One per line.')}
+    ${ta('s-pb','Price book (services)', (S.priceBook&&S.priceBook.length?S.priceBook:(S.services||[]).filter(x=>x!=='Multiple services').map(n=>[n])).map(r=>[r[0], r[1]??'', r[2]||'', r[3]||''].join(' | ').replace(/( \| )+$/,'')).join('\n'), 'Name | price | unit (visit, hour, door…) | description. One per line. Picked on new jobs, proposals and invoices; the price fills in. Materials come from Material presets (Estimating), at cost + material markup.')}
     ${ta('s-freq','Frequencies', lines(S.frequencies), 'Name | visits per year.')}
     ${ta('s-src','Lead sources', lines(S.leadSources), 'One per line.')}
     ${ta('s-lost','Lost reasons', lines(S.lostReasons), 'One per line.')}
@@ -3612,7 +3639,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       spRates:L('s-sprates').map(l=>{ const [a,b]=l.split('|').map(x=>x.trim()); return [a, num(String(b||'').replace('$',''))||0]; }).filter(r=>r[0]),
       matMarkup:(num($('#s-mm').value)||0)/100, taxRate:(num($('#s-tax').value)||0)/100, rentMarkup:(num($('#s-rm').value)||0)/100, equipMarkup:(num($('#s-em').value)||0)/100,
       rentalTax:(num($('#s-rtax').value)||0)/100, misc:S.est.misc, rentalDelivery:num($('#s-rdel').value)||0, rentalPickup:num($('#s-rpu').value)||0, rentalProtection:num($('#s-rpp').value)||0, rentalMisc:num($('#s-rmisc').value)||0, hoursPerDay:num($('#s-hpd').value)||8, targetMargin:(num($('#s-tgt').value)||45)/100, laborCaution:(num($('#s-lc').value)||45)/100, laborMax:Math.max(num($('#s-lm').value)||55, num($('#s-lc').value)||45)/100, burden:(num($('#s-burden').value)||0)/100 };
-    const data={ est, services:L('s-svc'), leadSources:L('s-src'), lostReasons:L('s-lost'), addOns:L('s-addons'), bdTemplates:($('#s-bdt')?.value||'').split(/\n-{3,}\n/).map(b=>b.trim()).filter(Boolean).map(b=>{ const l=b.split('\n'); return [l[0].trim(), (l[1]||'').trim(), l.slice(2).join('\n').trim()]; }).filter(t=>t[0]&&t[2]),
+    const data={ est, services:L('s-svc'), priceBook:L('s-pb').map(l=>{ const [a,b,c,d2]=l.split('|').map(x=>x.trim()); return [a, num(String(b||'').replace(/[$,]/g,''))??'', c||'', d2||'']; }).filter(r=>r[0]), leadSources:L('s-src'), lostReasons:L('s-lost'), addOns:L('s-addons'), bdTemplates:($('#s-bdt')?.value||'').split(/\n-{3,}\n/).map(b=>b.trim()).filter(Boolean).map(b=>{ const l=b.split('\n'); return [l[0].trim(), (l[1]||'').trim(), l.slice(2).join('\n').trim()]; }).filter(t=>t[0]&&t[2]),
       clarifications:L('s-clar').map(splitPair).map(([a,b])=>[a||'All',b]), terms:L('s-terms').map(splitPair), ack:$('#s-ack').value.trim(), gdClarSeeded:true,
       frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),

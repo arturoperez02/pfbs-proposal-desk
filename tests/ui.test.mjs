@@ -555,6 +555,27 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 23. Price book: one list; picking a service or material fills its price (New job, proposals, invoices)
+{
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('price book: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(() => { window.MOCK_SETTINGS = { priceBook: [['Gutter cleaning', 450, 'visit', 'Clean and flush gutters']] }; sessionStorage.clear(); });
+  await pg.goto(BASE); await pg.waitForTimeout(800);
+  await pg.click('#gNew'); await pg.click('[data-gnew="job"]'); await pg.waitForSelector('dialog.jobpage', T);
+  await pg.fill('.jpsvc [data-lf="desc"]', 'Gutter cleaning'); await pg.waitForTimeout(100);
+  assert.equal(await pg.$eval('.jpsvc [data-lf="price"]', e => e.value), '450', 'typed a price book service → price fills in');
+  await pg.click('dialog.jobpage [data-a="pbmat"]'); await pg.waitForSelector('[data-pb]', T);
+  const first = await pg.$eval('[data-pb]', e => e.dataset.pb); await pg.click('[data-pb]'); await pg.waitForTimeout(100);
+  assert.equal(await pg.$eval('.jpmat [data-lf="desc"]', e => e.value), first, 'material picked from the price book (Material presets, no second list)');
+  assert.ok(Number(await pg.$eval('.jpmat [data-lf="price"]', e => e.value)) > 0, 'material priced at cost + markup');
+  await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
+  // proposal line: description from the book fills the empty amount
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.click('#newBtn'); await pg.waitForSelector('[data-it="description"]', T);
+  await pg.fill('[data-it="amount"]', ''); await pg.fill('[data-it="description"]', 'Gutter cleaning'); await pg.dispatchEvent('[data-it="description"]', 'change');
+  assert.equal(await pg.$eval('[data-it="amount"]', e => e.value), '450', 'proposal line priced from the book');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
