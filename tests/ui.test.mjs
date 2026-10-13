@@ -529,12 +529,18 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.match(await pg.textContent('.dhead'), /Job #10420/, 'Enter opens it');
   await pg.click('#closeD'); await pg.waitForTimeout(200);
   await pg.click('#gNew'); assert.deepEqual(await pg.$$eval('#gMenu [data-gnew]', L => L.map(x => x.dataset.gnew)), ['job', 'recurring', 'proposal', 'event', 'customer', 'lead'], 'HCP-style New menu');
-  await pg.click('[data-gnew="job"]'); await pg.waitForSelector('#f-client', T);
-  await pg.fill('#f-client', 'Walk-in Job Co'); await pg.dispatchEvent('#f-client', 'change');
-  await pg.fill('#f-property', '1 Quick St'); await pg.dispatchEvent('#f-property', 'change');
-  await pg.click('#saveD'); await pg.waitForSelector('dialog.inved [name="visit_date"]', T);
-  const made = await pg.evaluate(() => DBX.proposals.find(x => x.client === 'Walk-in Job Co'));
-  assert.equal(made.status, 'Approved', 'saved straight as a job'); assert.match(await pg.$eval('[name="num"] option:checked', e => e.textContent), /Walk-in Job Co/, 'schedule opens on it');
+  await pg.click('[data-gnew="job"]'); await pg.waitForSelector('dialog.jobpage', T);
+  // new customer, address, a service and a material, a tech, then Save job
+  await pg.click('dialog.jobpage [data-a="newcl"]'); await pg.fill('[name="nc_name"]', 'Walk-in Job Co'); await pg.fill('[name="nc_email"]', 'walk@in.example');
+  await pg.fill('[name="site"]', '1 Quick St\nFremont, CA');
+  await pg.fill('.jpsvc [data-lf="desc"]', 'Window cleaning'); await pg.fill('.jpsvc [data-lf="qty"]', '2'); await pg.fill('.jpsvc [data-lf="price"]', '150');
+  await pg.click('dialog.jobpage [data-a="addmat"]'); await pg.fill('.jpmat [data-lf="desc"]', 'Squeegee rubber'); await pg.fill('.jpmat [data-lf="price"]', '20');
+  assert.match(await pg.textContent('.jptot'), /Total\s*\$32\d\.\d\d/, 'running total with tax on materials');
+  const tech = await pg.$('.jpteam [name="techs"]'); if (tech) await tech.check();
+  await pg.click('dialog.jobpage [data-a="save"]'); await pg.waitForSelector('#drawer:not([hidden])', T); await pg.waitForTimeout(300);
+  const made = await pg.evaluate(() => { const p = DBX.proposals.find(x => x.client === 'Walk-in Job Co'); return p && { st: p.status, items: (p.items || []).map(i => [i.description, i.amount]), v: DBX.visits.filter(v => v.num === p.num).length, cl: DBX.clients.some(c => c.name === 'Walk-in Job Co') }; });
+  assert.equal(made.st, 'Scheduled', 'Save job → an official job, already Scheduled'); assert.equal(made.v, 1, 'and it is on the schedule'); assert.ok(made.cl, 'customer created once');
+  assert.deepEqual(made.items.slice(0, 2), [['Window cleaning', 300], ['Materials: Squeegee rubber', 20]], 'line items: qty × price');
   await pg.close();
 }
 
