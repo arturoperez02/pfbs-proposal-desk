@@ -3547,7 +3547,9 @@ function equipFromJob(p){ if(!p) return [];
   return equipList().filter(e=>{ const k=e.toLowerCase(); return txt.includes(k) || (k.includes('boom')&&/boom|articulat|telescop/.test(txt)) || (k.includes('scissor')&&/scissor/.test(txt)) || (k.includes('swing')&&/swing stage/.test(txt)) || (k.includes('pressure washer')&&/pressure wash/.test(txt)); }); }
 function visitDraft(p, date){ const svc=String(p?.service||''); const w=workTypes().filter(x=>svc && (x.toLowerCase().includes(svc.toLowerCase().split(' ')[0])));
   return {id:null, num:p?p.num:null, kind:p?'job':'event', visit_date:date||iso(today()), end_date:null, start_time:'08:00', end_time:'16:30', techs:[], work:w.slice(0,1), equipment:equipFromJob(p), vehicle:null, notes:'', office_notes:'', status:'Scheduled',
-    address:p?(p.siteAddress||p.property||''):'', client:p?p.client:'', title:p?p.property:'', series_id:null}; }
+    address:p?(p.siteAddress||p.property||''):'', client:p?p.client:'', title:p?p.property:'', series_id:null, ...lastVisitBits(p)}; }
+function lastVisitBits(p){ if(!p) return {}; const L=VIS.filter(v=>v.num===p.num && v.kind==='job').sort((a,b)=>String(b.visit_date).localeCompare(String(a.visit_date)));
+  const n=L.find(v=>v.notes), vh=L.find(v=>v.vehicle); const o={}; if(n) o.notes=n.notes; if(vh) o.vehicle=vh.vehicle; return o; }
 function jobOptions(sel){ const L=P.filter(p=>['Approved','Scheduled','Invoiced','Paid'].includes(p.status)).sort((a,b)=>(a.status==='Approved'?0:1)-(b.status==='Approved'?0:1)||String(b.num).localeCompare(String(a.num))).slice(0,400);
   return L.map(p=>`<option value="${esc(p.num)}" ${p.num===sel?'selected':''}>${esc(jobLabel(p))}</option>`).join(''); }
 function visEdit(v, opts={}){
@@ -3555,7 +3557,8 @@ function visEdit(v, opts={}){
   const rep=opts.repeat || (ser ? {...ser.rule, ends:ser.ends} : null);
   const r0=rep || ruleFromJob(p||{items:[]}, v.visit_date), e0=(rep&&rep.ends)||{type:'never'}, pre0=rep?presetOf(rep):opts.suggestRepeat?'custom':'';
   const wd0=workdaysBetween(v.visit_date, v.end_date, v.skip_weekends);
-  const scopeBox=pp=>{ const L=scopeLines(pp); return L.length?`<div class="vscope"><b>Scope of work</b> <span class="note" style="margin:0">from the proposal; goes in the crew email</span><ul>${L.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''; };
+  const scopeBox=pp=>{ const L=scopeLines(pp), jn=String(pp?.notes||'').trim(); return (L.length?`<div class="vscope"><b>Scope of work</b> <span class="note" style="margin:0">from the proposal; goes in the crew email</span><ul>${L.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:'')
+    +(jn?`<div class="vscope"><b>Job notes</b> <span class="note" style="margin:0">from the proposal; office only</span>${mgr?' <button type="button" class="btn ghost small" data-a="usenotes">Add to crew notes</button>':''}<div style="white-space:pre-wrap;margin-top:4px">${esc(jn)}</div></div>`:''); };
   const d=document.createElement('dialog'); d.className='ask inved';
   const checks=(name, list, sel)=>`<div class="vchecks">${list.map(x=>`<label><input type="checkbox" name="${name}" value="${esc(x)}" ${sel.includes(x)?'checked':''} ${dis}> ${esc(x)}</label>`).join('')}</div>`;
   d.innerHTML=`${v.kind==='job'?`<div class="jobno ${v.job_no?'':'none'}">${v.job_no?'Job #'+esc(v.job_no):(v.id?'No job # yet':'')}</div>`:''}<h3>${v.id?'Visit':'Schedule'}${p?` <span class="note" style="margin:0">${esc(p.client||'')}${p.property?' · '+esc(p.property):''} · ${esc(p.num)}</span>`:v.kind==='event'?' · event':''}${ser?` <span class="flag">${esc(ruleText(ser))}</span>`:''}</h3>
@@ -3611,6 +3614,7 @@ function visEdit(v, opts={}){
     if(n==='workdays'||n==='skip_weekends') syncEnd(); if(n==='end_date') syncDays(); if(n==='visit_date'){ syncEnd(); relabel(); }
     if(n==='num' && !v.id){ const j=P.find(x=>x.num===e.target.value); $('#vScope').innerHTML=scopeBox(j); if(j){ const dd=visitDraft(j, f('visit_date').value); Object.assign(v,{num:j.num, address:dd.address, client:dd.client, title:dd.title});
       for(const c of d.querySelectorAll('[name="equipment"]')) c.checked=dd.equipment.includes(c.value);
+      { const nt=d.querySelector('[name="notes"]'); if(nt && !nt.value.trim() && dd.notes) nt.value=dd.notes; const vs=d.querySelector('[name="vehicle"]'); if(vs && !vs.value && dd.vehicle && [...vs.options].some(o=>o.value===dd.vehicle)) vs.value=dd.vehicle; }
       if(isRecurring(j) && f('preset')){ const r=ruleFromJob(j, f('visit_date').value); f('preset').value='custom'; d.querySelector('.vcustom').hidden=false; d.querySelector('.vends').hidden=false; f('every').value=r.every; f('unit').value=r.unit; d.querySelector('.vmon').hidden=r.unit!=='month'; } } } });
   const collect=()=>{ const row={visit_date:f('visit_date').value, end_date:f('end_date').value||null, start_time:f('start_time').value||null, end_time:f('end_time').value||null, techs:all('techs'), equipment:all('equipment'),
       notes:f('notes').value.trim()||null, office_notes:f('office_notes').value.trim()||null, status:f('status').value, vehicle:f('vehicle')?.value||null, skip_weekends:f('skip_weekends').checked};
@@ -3630,6 +3634,7 @@ function visEdit(v, opts={}){
         if(scope==='one'){ const r=await sb.from('visits').delete().eq('id',v.id); if(r.error) return toast(r.error.message); if(ser && v.occ_date) await sb.from('visit_series').update({exceptions:[...(ser.exceptions||[]), v.occ_date]}).eq('id',ser.id); }
         else await endSeriesFrom(ser, v.occ_date||v.visit_date);
         toast('Deleted'); close(); await loadSchedule(); return; }
+      if(a==='usenotes'){ const t=d.querySelector('[name="notes"]'), jn=String((visJob({num:d.querySelector('[name="num"]')?.value||v.num})||{}).notes||'').trim(); if(jn && !t.value.includes(jn)) t.value=(t.value.trim()?t.value.trim()+'\n':'')+jn; return; }
       if(a==='save'){
         const row=collect(); if(v.kind==='job' && !row.num && !(v.client||v.title||v.ext_id)){ toast('Pick the job.'); return; } if(v.kind==='event' && !row.title){ toast('Say what the event is.'); return; } if(!row.visit_date){ toast('Pick a date.'); return; }
         const repeat=repeatOf();

@@ -464,6 +464,23 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 19. Visit: job notes shown (office only) with one click to add them for the crew; a new visit carries the last visit's crew notes
+{
+  const nj = { num: 'PFBS-1002', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Notes Co', property: '8 Note St', amount: 400, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10410', notes: 'Gate code 4321 at the office', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 400 }] };
+  const vis = [{ id: 'm1', num: 'PFBS-1002', kind: 'job', status: 'Done', visit_date: '2026-09-01', start_time: '08:00', end_time: '12:00', techs: [], work: [], equipment: [], notes: 'Park in back' }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('visit notes: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); }, [nj, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(800);
+  await pg.click('[data-hopen="PFBS-1002"]'); await pg.waitForSelector('#jfBox', T);
+  await pg.evaluate(() => document.querySelector('#visNew, #jfSched')?.click()); await pg.waitForSelector('dialog.inved [name="notes"]', T);
+  assert.equal(await pg.$eval('dialog.inved [name="notes"]', e => e.value), 'Park in back', 'crew notes carried from the last visit');
+  assert.match(await pg.textContent('dialog.inved'), /Gate code 4321/, 'job notes shown');
+  await pg.click('dialog.inved [data-a="usenotes"]');
+  assert.match(await pg.$eval('dialog.inved [name="notes"]', e => e.value), /Park in back\nGate code 4321/, 'added to crew notes in one click');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
