@@ -366,6 +366,10 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.addInitScript(v => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [v], error: null }) }; }, vis);
   await pg.goto(BASE + 'warehouse.html'); await pg.waitForTimeout(900);
   assert.equal(await pg.$eval('#device-auth-screen', e => e.style.display), 'none', 'signed-in CRM user goes straight in');
+  await pg.waitForSelector('#scheduled-jobs-list .job-card', { state: 'attached', timeout: 8000 });
+  const tp = await pg.textContent('#scheduled-jobs-card');
+  assert.match(tp, /Jobs to pack/); assert.match(tp, /#10305 — Kit Co/); assert.match(tp, /TODAY/); assert.ok(!/TechSched/.test(tp), 'no TechSched / HCP IDs on the dashboard');
+  assert.ok(!(await pg.evaluate(() => document.body.innerHTML.includes('Import from TechSched Schedule'))), 'TechSched import button gone');
   await pg.evaluate(() => openCrmImport()); await pg.waitForSelector('.sched-job-card', T);
   await pg.click('.sched-job-card');
   assert.equal(await pg.$eval('#co-jobnum', e => e.value), '10305'); assert.equal(await pg.$eval('#co-jobnum', e => e.dataset.visit), 'v-wh-1', 'remembers the CRM visit');

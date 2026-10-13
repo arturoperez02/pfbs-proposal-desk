@@ -519,7 +519,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
           <div id="active-jobs-list"><div class="empty"><div class="ei">📋</div><p>No active jobs</p></div></div>
         </div>
         <div class="card" id="scheduled-jobs-card" style="display:none">
-          <div class="card-title">📅 Confirmed in TechSched</div>
+          <div class="card-title">📋 Jobs to pack (CRM schedule, next 7 days)</div>
           <div id="scheduled-jobs-list"></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -541,9 +541,8 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
           <!-- Step 1: Job details -->
           <div class="wiz-step active" id="s1">
             <div class="card-title">Step 1 — Job Details / Detalles del Trabajo</div>
-            <button class="btn btn-p btn-full" style="margin-bottom:8px" onclick="openCrmImport()">📋 Import from CRM Schedule</button>
-            <button class="btn btn-t btn-full" style="margin-bottom:14px" onclick="openImportModal()">📅 Import from TechSched Schedule</button>
-            <div class="fg"><label>HCP Job # / Número de Trabajo</label><input type="text" id="co-jobnum" placeholder="HCP-2025-0412" oninput="tryHCPLookup()"></div>
+            <button class="btn btn-p btn-full" style="margin-bottom:14px" onclick="openCrmImport()">📋 Import from CRM Schedule</button>
+            <div class="fg"><label>Job # / Número de Trabajo</label><input type="text" id="co-jobnum" placeholder="CRM job #, e.g. 10301" oninput="tryHCPLookup()"></div>
             <div id="hcp-hint" style="display:none" class="info info-b"></div>
             <div class="fg"><label>Project Type / Tipo de Proyecto</label>
               <div id="co-template-picker" style="background:var(--sur2);border:1px solid var(--bdr);border-radius:9px;padding:8px;min-height:44px;cursor:pointer" onclick="toggleTemplatePicker()">
@@ -1216,10 +1215,10 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
 
     <!-- TECHSCHED INTEGRATION -->
     <div style="margin-bottom:18px">
-      <div style="font-size:12px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">📅 TechSched Connection</div>
-      <div class="info-b" style="margin-bottom:10px">Shows today's confirmed TechSched jobs (assigned techs, not yet complete) on the dashboard, read directly — no separate setup needed.</div>
+      <div style="font-size:12px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">📋 CRM Schedule</div>
+      <div class="info-b" style="margin-bottom:10px">Shows the jobs scheduled in the CRM for the next 7 days that don't have a kit yet, with the CRM job #.</div>
       <div class="toggle-wrap">
-        <div><div class="toggle-label">Show TechSched jobs on dashboard</div></div>
+        <div><div class="toggle-label">Show "Jobs to pack" on dashboard</div></div>
         <label class="toggle"><input type="checkbox" id="s-techsched-enabled" onchange="settingsSaveTechSched()"><span class="toggle-slider"></span></label>
       </div>
     </div>
@@ -1297,7 +1296,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
       <div class="fg"><label>Client / Building</label><input type="text" id="km-client" placeholder="Acme Tower..."></div>
     </div>
     <div class="fg"><label>Checked out to (Tech name)</label><input type="text" id="km-tech" placeholder="Mike R..."></div>
-    <div class="fg"><label>Job # (optional)</label><input type="text" id="km-job" placeholder="HCP-2025-0412"></div>
+    <div class="fg"><label>Job # (optional)</label><input type="text" id="km-job" placeholder="CRM job #, e.g. 10301"></div>
     <div class="fg"><label>Notes</label><input type="text" id="km-notes" placeholder="Copy, original, fob..."></div>
     <hr>
     <div style="display:flex;gap:8px">
@@ -1314,7 +1313,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
     <div class="modal-t"><span id="rerun-modal-t">Re-run Job</span><button class="xbtn" onclick="closeModal('rerun-modal')">✕</button></div>
     <div class="info-b" style="margin-bottom:13px">Same site, techs, and kit — just update the job number and date.</div>
     <div id="rerun-summary" style="background:var(--sur2);border-radius:9px;padding:12px;font-size:12px;font-family:var(--mono);line-height:2;margin-bottom:14px"></div>
-    <div class="fg"><label>New Job # / Número de Trabajo</label><input type="text" id="rr-jobnum" placeholder="HCP-2025-0500"></div>
+    <div class="fg"><label>New Job # / Número de Trabajo</label><input type="text" id="rr-jobnum" placeholder="CRM job #, e.g. 10302"></div>
     <div class="fg"><label>New Date / Fecha</label><input type="date" id="rr-date"></div>
     <div class="fg"><label>Tech Names (update if needed)</label><input type="text" id="rr-names"></div>
     <div class="fg"><label>Vehicle (update if needed)</label><input type="text" id="rr-vehicle"></div>
@@ -1332,7 +1331,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
     <div class="modal-handle"></div>
     <div class="modal-t"><span>✏ Edit Active Job</span><button class="xbtn" onclick="closeModal('edit-job-modal')">✕</button></div>
     <div class="info-b" style="margin-bottom:13px">Update job details or add items to an active checkout.</div>
-    <div class="fg"><label>Job # / Número</label><input type="text" id="ej-jobnum" placeholder="HCP-2025-0412"></div>
+    <div class="fg"><label>Job # / Número</label><input type="text" id="ej-jobnum" placeholder="CRM job #, e.g. 10301"></div>
     <div class="fg"><label>Tech Names</label><input type="text" id="ej-names" placeholder="Mike R., Sara L."></div>
     <div class="fg"><label>Vehicle</label><input type="text" id="ej-vehicle" placeholder="Truck #3..."></div>
     <div class="fg"><label>Notes</label><textarea id="ej-notes" rows="2" placeholder="Special instructions..."></textarea></div>
@@ -2157,27 +2156,44 @@ async function renderScheduledJobsPanel() {
   const el = document.getElementById('scheduled-jobs-list');
   if (localStorage.getItem('kt_techsched_enabled') === '0') { card.style.display = 'none'; return; }
   card.style.display = '';
-  el.innerHTML = '<div style="font-size:11px;color:var(--txt2);padding:6px 0">Loading...</div>';
-  scheduledJobsCache = await fetchScheduledJobs();
-  // Don't show jobs already pulled into KitTracker as a checkout job
-  const existingJobNums = new Set(jobs.map(j => (j.hcp_job_number || '').toLowerCase()).filter(Boolean));
-  const remaining = scheduledJobsCache.filter(sj => !existingJobNums.has((sj.jobNum || '').toLowerCase()));
+  if (!el.innerHTML) el.innerHTML = '<div style="font-size:11px;color:var(--txt2);padding:6px 0">Loading...</div>';
+  const { data, error } = await db.rpc('warehouse_jobs', { p_days: 7 });
+  if (error) { el.innerHTML = `<div class="info-a" style="font-size:11px">Could not load the CRM schedule: ${esc(error.message)}</div>`; return; }
+  scheduledJobsCache = (data || []).map(crmJob);
+  // a job already has a kit when one was packed for that visit, or for that job #
+  const vids = new Set(jobs.concat(history || []).map(j => j.visit_id).filter(Boolean));
+  const nums = new Set(jobs.map(j => String(j.hcp_job_number || '').replace(/^#/, '').toLowerCase()).filter(Boolean));
+  const remaining = scheduledJobsCache.filter(sj => !vids.has(sj.visit_id) && !(sj.jobNum && nums.has(String(sj.jobNum).toLowerCase())));
   if (!remaining.length) {
-    el.innerHTML = '<div class="empty" style="padding:16px 8px"><div class="ei" style="font-size:22px">📅</div><p style="font-size:11px">No confirmed jobs pending checklist</p></div>';
+    el.innerHTML = '<div class="empty" style="padding:16px 8px"><div class="ei" style="font-size:22px">📋</div><p style="font-size:11px">Every job in the next 7 days has its kit</p></div>';
     return;
   }
-  el.innerHTML = remaining.map(sj => `
-    <div class="job-card">
+  const t = today(), tm = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  el.innerHTML = remaining.map((sj, idx) => {
+    const soon = sj.date <= tm;
+    return `<div class="job-card" style="${soon ? 'border-left:3px solid var(--red)' : ''}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
         <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:13px">${esc(sj.jobNum||'No Job #')} — ${esc(sj.client||sj.address||'No site')}</div>
-          <div style="font-size:11px;color:var(--txt2);margin-top:3px;font-family:var(--mono)">${esc((sj.techs||[]).join(', ')||'--')}</div>
-          ${sj.vehicle ? `<div style="font-size:11px;color:var(--txt2);font-family:var(--mono)">${esc(sj.vehicle)}</div>` : ''}
+          <div style="font-weight:700;font-size:13px">${sj.jobNum ? '#' + esc(sj.jobNum) + ' — ' : ''}${esc(sj.client || sj.address || 'No site')}</div>
+          <div style="font-size:11px;color:${soon ? 'var(--red)' : 'var(--txt2)'};margin-top:3px;font-weight:${soon ? 700 : 400}">${sj.date === t ? 'TODAY' : sj.date === tm ? 'TOMORROW' : fmtSchedDate(sj.date)}${sj.types.length ? ' · ' + esc(sj.types.join(', ')) : ''}</div>
+          <div style="font-size:11px;color:var(--txt2);font-family:var(--mono)">${esc((sj.techs || []).join(', ') || 'no crew yet')}${sj.vehicle ? ' · ' + esc(sj.vehicle) : ''}</div>
         </div>
-        <button class="btn btn-xs btn-p" onclick='startChecklistFromTechSched(${JSON.stringify(sj).replace(/'/g,"&#39;")})'>+ Start Checklist</button>
+        <button class="btn btn-xs btn-p" onclick="startChecklistFromCrm(${idx})">+ Pack kit</button>
       </div>
-    </div>
-  `).join('');
+    </div>`; }).join('');
+  window._toPack = remaining;
+}
+function crmJob(v) {
+  return { _src: 'CRM', id: v.id, visit_id: v.id,
+    jobNum: v.job_no || '', date: v.visit_date || '', endDate: v.end_date || '', start: v.start_time || '',
+    client: [v.client, v.property].filter(Boolean).join(' · '), address: v.address || '',
+    type: (v.work || [])[0] || '', types: v.work || [], techs: v.techs || [], vehicle: v.vehicle || '',
+    equipment: v.equipment || [], scope: v.scope || [], notes: v.notes || '', jobStatus: 'scheduled' };
+}
+function startChecklistFromCrm(idx) {
+  const sj = (window._toPack || [])[idx]; if (!sj) return;
+  nav('checkout');
+  setTimeout(() => { _schedJobs = [sj]; applyScheduleJob(0); }, 50);
 }
 
 // Prefills the New Job / checkout wizard from a TechSched job. The tech
@@ -7892,13 +7908,7 @@ async function openCrmImport() {
   try {
     const { data, error } = await db.rpc('warehouse_jobs', { p_days: 14 });
     if (error) throw error;
-    _schedJobs = (data || []).map(v => ({
-      _src: 'CRM', id: v.id, visit_id: v.id,
-      jobNum: v.job_no || '', date: v.visit_date || '', endDate: v.end_date || '', start: v.start_time || '',
-      client: [v.client, v.property].filter(Boolean).join(' · '), address: v.address || '',
-      type: (v.work || [])[0] || '', types: v.work || [], techs: v.techs || [], vehicle: v.vehicle || '',
-      equipment: v.equipment || [], scope: v.scope || [], notes: v.notes || '', jobStatus: 'scheduled'
-    }));
+    _schedJobs = (data || []).map(crmJob);
     if (!_schedJobs.length) {
       listEl.innerHTML = '<div class="empty"><div class="ei">📋</div><p>No jobs scheduled in the CRM for the next 2 weeks</p></div>';
       return;
