@@ -668,7 +668,9 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.match(tot, /rentals\/subs markup \$288\.01/, 'only the lift markup is profit');
   assert.match(tot, /materials markup \$64\.00/, 'only the material markup is profit');
   const nums = await pg.$$eval('#estTot dl.key dd', L => L.map(x => Number(x.textContent.replace(/[$,]/g, ''))));
-  assert.ok(Math.abs(nums[0] - nums[1] - nums[2]) < 0.01 && Math.abs(nums[1] - (512 + 80 + 8.6 + 1920.05)) < 0.02, 'job cost = wages + materials + tax + rental: ' + nums.join(','));
+  assert.ok(Math.abs(nums[0] - nums[1] - nums[2] - nums[3]) < 0.01 && Math.abs(nums[1] - (80 + 8.6 + 1920.05)) < 0.02 && Math.abs(nums[2] - 512) < 0.01, 'price = pass-through (lift, resin, tax at cost) + our cost (wages) + profit: ' + nums.join(','));
+  const m = Number((await pg.$eval('#estTot .mrow b', e => e.textContent)).replace('%', '')) / 100;
+  assert.ok(Math.abs(m - nums[3] / (nums[0] - nums[1])) < 0.006, 'margin = profit ÷ (price − pass-through): ' + m);
   await pg.close();
 }
 

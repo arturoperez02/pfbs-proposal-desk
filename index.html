@@ -473,7 +473,8 @@ const FU_STEPS = () => { const a=[3,10,21]; for(let k=35;k<S.expiryDays;k+=14) a
 function followUp(p){ if(p.status==='Budget') return p.budgetCheck ? parse(p.budgetCheck) : null; if(outcome(p)!=='Open' || !p.dateSent) return null; const s=parse(p.dateSent), last=p.lastFollowUp?parse(p.lastFollowUp):s;
   for(const d of FU_STEPS()){ const f=new Date(s); f.setDate(f.getDate()+d); if(f>last) return f; } return null; }
 function fuStep(p){ if(p.status==='Budget') return null; const f=followUp(p); if(!f) return null; const d=days(parse(p.dateSent),f); return d<=3?1:d<=10?2:d<=21?3:4; }
-function gpPct(p){ return (num(p.gp)!=null && num(p.amount)) ? num(p.gp)/num(p.amount) : null; }
+function gpPct(p){ return (num(p.gp)!=null && num(p.amount)) ? num(p.gp)/num(p.amount) : null; }   // commission tiers (unchanged on purpose)
+function marginPct(p){ const t=estimateTotals(p), pc=t?t.passCost:0, b=(num(p.amount)||0)-pc; return (num(p.gp)!=null && b>0) ? num(p.gp)/b : gpPct(p); }   // shown margin + floor check: pass-through left out
 function visits(p){ const f=S.frequencies.find(x=>x[0]===p.frequency); return f?f[1]:1; }
 const hasVal = v => v!=null && v!=='';
 function visitsOf(f){ const x=S.frequencies.find(y=>y[0]===f); return x ? (Number(x[1])||1) : 1; }
@@ -570,19 +571,23 @@ function estCalc(e){
   const techLines=(e.labor||[]).filter(r=>r.role!=='Administration' && n(r.hours)>0), hpd=num(S.est.hoursPerDay)||8;
   const maxHrs=techLines.reduce((m,r)=>Math.max(m,n(r.hours)),0), minHrs=techLines.reduce((m,r)=>Math.min(m,n(r.hours)),Infinity);
   const crew={techs:techLines.length, maxHrs, even: techLines.length && maxHrs===minHrs, days:maxHrs/hpd, techDays:techHours/hpd, hpd};
-  return {unitsPrice,laborPrice,laborCost,techHours,mat,matP,tax,rent,rentP,eq,eqP,misc,miscP,total,cost,gp:total-cost,pass:rentP,byRole,crew,laborProfit:laborPrice-laborCost,wages,burden,burdenCost:wages*burden};
+  const passCost=mat+tax+rent, base=total-passCost;   // lifts/subs, materials and their tax: the client's money passing through; only the markup is ours
+  return {unitsPrice,laborPrice,laborCost,techHours,mat,matP,tax,rent,rentP,eq,eqP,misc,miscP,total,cost,gp:total-cost,pass:rentP,passCost,base,ownCost:cost-passCost,margin:base>0?(total-cost)/base:null,byRole,crew,laborProfit:laborPrice-laborCost,wages,burden,burdenCost:wages*burden};
 }
 function crewText(c){ const k=c.crew; if(!k.techs) return ''; const d=fmtH(k.days);
   return `${k.techs} tech${k.techs===1?'':'s'} × ${k.even?fmtH(k.maxHrs)+' hrs':'up to '+fmtH(k.maxHrs)+' hrs'} = ${d} day${k.days===1?'':'s'} on site (${fmtH(k.techDays)} tech-day${k.techDays===1?'':'s'}, ${k.hpd}-hr days)`; }
 // Every sheet: margin = price − all job costs (wages + burden, materials + tax, rentals/subs, equipment, misc). Only the markup on pass-through costs is profit.
 const laborOnly = e => !!SHEETS[e?.sheet]?.laborOnlyMargin;
+// margin % = profit ÷ (price − pass-through costs). Pass-through (lifts/subs, materials, tax) is left out of both sides; its markup stays in profit.
+const marginAt = (c, price) => { const b=price-c.passCost; return price && b>0 ? (price-c.cost)/b : null; };
+const priceForMargin = (c, m) => c.cost>0 ? Math.ceil((c.cost - m*c.passCost)/(1-m)) : null;
 const marginCost = (e,c) => laborOnly(e) ? c.laborCost : c.cost;
 function estSummary(it){ const c=estCalc(it.estimate), amt=num(it.amount); const lo=laborOnly(it.estimate), g=(amt!=null?amt:c.total)-marginCost(it.estimate,c);
-  return `<span class="estsum">${c.crew.techs?`<span class="crew">Crew: ${crewText(c)}</span><br>`:''}Price <b>${usd(c.total)}</b> · ${lo?'wages':'cost'} ${money(lo?c.laborCost:c.cost)} · ${lo?'profit (labor only)':'GP'} <b>${money(g)}</b>${(amt??c.total)?` <span class="note" style="margin:0">${pct(g/(amt??c.total))}</span>`:''}${amt!=null&&Math.abs(amt-c.total)>=1?` <span class="note" style="margin:0">(line price ${money(amt)})</span>`:''}</span>`; }
+  return `<span class="estsum">${c.crew.techs?`<span class="crew">Crew: ${crewText(c)}</span><br>`:''}Price <b>${usd(c.total)}</b> · ${lo?'wages':'cost'} ${money(lo?c.laborCost:c.cost)} · ${lo?'profit (labor only)':'GP'} <b>${money(g)}</b>${marginAt(c, amt??c.total)!=null?` <span class="note" style="margin:0">${pct(marginAt(c, amt??c.total))}</span>`:''}${amt!=null&&Math.abs(amt-c.total)>=1?` <span class="note" style="margin:0">(line price ${money(amt)})</span>`:''}</span>`; }
 function estimateTotals(p){ // GP + pass-through from estimates, per visit, for counted lines
   const L=countedItems(p); if(!L.length || !L.every(i=>i.estimate)) return null;
-  let gp=0, pass=0; for(const i of L){ const c=estCalc(i.estimate); gp += (num(i.amount)??c.total) - c.cost; pass += c.pass; }
-  return {gp:Math.round(gp*100)/100, pass:Math.round(pass*100)/100};
+  let gp=0, pass=0, passCost=0; for(const i of L){ const c=estCalc(i.estimate); gp += (num(i.amount)??c.total) - c.cost; pass += c.pass; passCost += c.passCost; }
+  return {gp:Math.round(gp*100)/100, pass:Math.round(pass*100)/100, passCost:Math.round(passCost*100)/100};
 }
 function gpBoxHTML(p, ed){
   const auto=estimateTotals(p), dis=(ed&&!auto)?'':'disabled';
@@ -723,7 +728,7 @@ async function addActivity(num, kind, note){
   if(error){ toast(error.message); return false; } return true;
 }
 function closeDrawer(){ try{ sessionStorage.removeItem('pfbs.open'); }catch(_){} $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; PR=null; }
-function calc1(p){ const g=gpPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
+function calc1(p){ const g=marginPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
 function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null){ const o=outcome(p); return (o==='Won'||o==='Lost') && p.dateResolved ? `<div class="gpline">${o} on ${fmtD(p.dateResolved)}${p.datePaid?' · paid '+fmtD(p.datePaid):''}</div>` : ''; } const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
 // renewal price check: last price, real margin, and what to charge next
 function priceCheckHTML(p){
@@ -2071,12 +2076,12 @@ function renderEstInner(){
 function lightOf(v, goodTest, warnTest){ return v==null?'none': goodTest(v)?'good': warnTest(v)?'warn':'bad'; }
 function marginCheckHTML(c, price){
   const E2=S.est, tgt=num(E2.targetMargin)||0.45, floor=S.marginFloor, lc=num(E2.laborCaution)||0.45, lm=Math.max(num(E2.laborMax)||0.55, lc); // max can never sit below caution
-  const lo=laborOnly(E), mc=lo?c.laborCost:c.cost;
-  const gp = price ? (price-mc)/price : null, lab = price ? c.laborCost/price : null;
+  const lo=false, base=price-c.passCost;
+  const gp = marginAt(c, price), lab = price && base>0 ? c.laborCost/base : null;
   const gL=lightOf(gp, v=>v>=tgt, v=>v>=floor), lL=lightOf(lab, v=>v<=lc, v=>v<=lm);
   const word={good:'Healthy',warn:'Getting thin',bad:'Too low',none:'—'}, lword={good:'Healthy',warn:'Getting high',bad:'Too high',none:'—'};
   const bar=(v,max,marks,inv)=>{ const w=v==null?0:Math.max(0,Math.min(1,v/max))*100; return `<div class="mbar"><span style="width:${w}%"></span>${marks.map(m=>`<i style="left:${m/max*100}%"></i>`).join('')}</div>`; };
-  const need = mc>0 ? Math.ceil(mc/(1-tgt)) : null;
+  const need = priceForMargin(c, tgt);
   const tips=[];
   if(gL==='bad'||gL==='warn') tips.push(`Price for ${pct(tgt)} margin: <b>${money(need)}</b>`);
   if(lL==='bad' && !lo) tips.push('Wages are eating the margin: check hours, crew size or the hourly bill rate.');
@@ -2084,7 +2089,7 @@ function marginCheckHTML(c, price){
   if(gL==='bad') tips.push(`Below the ${pct(floor)} floor: needs owner approval before it goes out.`);
   return `<div class="mcheck">
     <div class="mrow m-${gL}"><div class="mtop"><span>${lo?'Profit margin (price − wages)':'Gross profit margin'}</span><b>${gp==null?'—':pct(gp)}</b></div>${bar(gp,0.7,[floor,tgt])}<div class="mlab">${word[gL]} · target ${pct(tgt)}+, floor ${pct(floor)}</div></div>
-    ${lo ? '' : `<div class="mrow m-${lL}"><div class="mtop"><span>Wages as % of price</span><b>${lab==null?'—':pct(lab)}</b></div>${bar(lab,0.7,[lc,lm])}<div class="mlab">${lword[lL]} · aim ≤ ${pct(lc)}, max ${pct(lm)}</div></div>`}
+    ${lo ? '' : `<div class="mrow m-${lL}"><div class="mtop"><span>Wages as % of price${c.passCost?' (without pass-through)':''}</span><b>${lab==null?'—':pct(lab)}</b></div>${bar(lab,0.7,[lc,lm])}<div class="mlab">${lword[lL]} · aim ≤ ${pct(lc)}, max ${pct(lm)}</div></div>`}
     ${tips.length?`<div class="mtips">${tips.map(t=>`<div>${t}</div>`).join('')}</div>`:''}
     ${(gL==='bad'||gL==='warn') && need ? `<button class="btn small" id="estTarget" data-price="${need}">Use ${money(need)} (${pct(tgt)} margin)</button>`:''}
   </div>`;
@@ -2098,15 +2103,16 @@ function updateEstTotals(){
   for(const [sec] of SECS){ (E[sec]||[]).forEach((r,i)=>{ const el=$(`#et-${sec}-${i}`); if(el) el.textContent=usd(n(r.unit)*n(r.qty)*(1+n(r.markup))); }); const st=$('#st-'+sec); if(st) st.innerHTML=secTotal(sec); }
   const rnd=Math.floor(c.total), floor=S.marginFloor, gpp=c.total?c.gp/c.total:null;
   const roles=Object.entries(c.byRole);
-  const lo=laborOnly(E), profit=c.total-(lo?c.laborCost:c.cost);
-  const mini=$('#estMini'); if(mini){ const m=c.total?profit/c.total:null; mini.innerHTML=`<span>Price <b>${usd(c.total)}</b></span><span>Margin <b class="${m!=null&&m<floor?'down':''}">${m==null?'—':pct(m)}</b></span><span class="go">Totals ↓</span>`; }
+  const lo=false, profit=c.total-c.cost;
+  const mini=$('#estMini'); if(mini){ const m=marginAt(c, c.total); mini.innerHTML=`<span>Price <b>${usd(c.total)}</b></span><span>Margin <b class="${m!=null&&m<floor?'down':''}">${m==null?'—':pct(m)}</b></span><span class="go">Totals ↓</span>`; }
   $('#estTot').innerHTML = `${marginCheckHTML(c, rnd)}
     <dl class="tots key">
       <dt>Price</dt><dd>${usd(c.total)}</dd>
-      <dt>${lo?'Wages':'Job cost'}</dt><dd>${usd(lo?c.laborCost:c.cost)}</dd>
-      <dt>Profit</dt><dd style="color:${c.total&&profit/c.total<floor?'var(--bad)':'inherit'}">${usd(profit)}</dd>
+      ${c.passCost?`<dt>Pass-through <span class="note" style="margin:0;font-weight:400">(${[c.rent?'lifts/subs':'',c.mat?'materials':'',c.tax?'tax':''].filter(Boolean).join(', ')} at cost; the client pays it)</span></dt><dd>${usd(c.passCost)}</dd>`:''}
+      <dt>${c.passCost?'Our cost':'Job cost'} <span class="note" style="margin:0;font-weight:400">(wages${c.burden?' + burden':''}${c.eq?', equipment':''}${c.misc?', misc':''})</span></dt><dd>${usd(c.ownCost)}</dd>
+      <dt>Profit</dt><dd style="color:${(marginAt(c,c.total)??1)<floor?'var(--bad)':'inherit'}">${usd(profit)}</dd>
     </dl>
-    <div class="note" style="margin:-4px 0 10px">Profit from: labor ${usd(c.laborPrice-c.laborCost)}${c.matP?` · materials markup ${usd(c.matP-c.mat)}`:''}${c.rentP?` · rentals/subs markup ${usd(c.rentP-c.rent)}`:''}${c.eqP?` · equipment ${usd(c.eqP-c.eq)}`:''}${c.miscP?` · misc ${usd(c.miscP-c.misc)}`:''}. Rentals, materials and tax are costs: only their markup counts.</div>
+    <div class="note" style="margin:-4px 0 10px">Profit from: labor ${usd(c.laborPrice-c.laborCost)}${c.matP?` · materials markup ${usd(c.matP-c.mat)}`:''}${c.rentP?` · rentals/subs markup ${usd(c.rentP-c.rent)}`:''}${c.eqP?` · equipment ${usd(c.eqP-c.eq)}`:''}${c.miscP?` · misc ${usd(c.miscP-c.misc)}`:''}. Margin = profit ÷ (price − pass-through)${c.passCost?` = ${usd(profit)} ÷ ${usd(c.base)}`:''}.</div>
     ${c.crew.techs ? `<div class="crewbox">${crewText(c)}</div>` : ''}
     ${SHEETS[E.sheet]?.monthly ? `<h4>Monthly billing (quarterly service)</h4><dl class="tots"><dt>Basic (× 1.5 ÷ 3)</dt><dd>${usd(c.total*1.5/3)}</dd><dt>Standard (× 2 ÷ 3)</dt><dd>${usd(c.total*2/3)}</dd><dt>Premium (× 2.25 ÷ 3)</dt><dd>${usd(c.total*2.25/3)}</dd></dl>` : ''}
     <details class="breakdown" ${EST_BD?'open':''}><summary>Full breakdown</summary>
