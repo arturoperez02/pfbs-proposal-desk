@@ -272,3 +272,16 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.equal(await snap(), before, 'no job changed');
   console.log('db: paid HCP invoices passed');
 }
+// ---------- HCP invoices with job details (update 030) ----------
+{
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  await db.query(`select import_hcp_invoices($1::jsonb)`, [JSON.stringify({ invoices: [{ inv_no: '905', customer: 'X Co', amount_due: '$300.00', due_date: '2026-11-01', job_no: '777', description: 'Gutter Cleaning', address: '1 Main St, Oakland' }] })]);
+  const u = (await db.query(`select hcp_invoice_details($1::jsonb) j`, [JSON.stringify({ jobs: [{ job_no: '9', description: 'Windows', address: '2 Side St', amount: '$400.00' }, { job_no: '777', description: 'Gutters (new)', amount: '$999' }] })])).rows[0].j;
+  await db.exec('reset role');
+  const r = (await db.query(`select inv_no, status, total::float t, paid::float p, items->0->>'description' d, items->0->>'notes' n from invoices where inv_no in (902,905) order by inv_no`)).rows;
+  assert.equal(u.updated, 2);
+  assert.deepEqual([r[0].status, r[0].t, r[0].p, r[0].d], ['Paid', 400, 400, 'Windows'], 'paid history filled with its job amount');
+  assert.deepEqual([r[1].status, r[1].t, r[1].d], ['Sent', 300, 'Gutters (new)'], 'open invoice keeps its balance, gets the job description');
+  assert.match(r[1].n, /HousecallPro invoice #905, job #777/);
+  console.log('db: HCP invoice details passed');
+}

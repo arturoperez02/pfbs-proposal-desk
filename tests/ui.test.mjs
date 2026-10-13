@@ -250,12 +250,12 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('#tabs [data-tab="settings"]', T); await pg.waitForTimeout(300);
   await pg.setInputFiles('#invImport', path.join(B, 'hcpinv.csv')); await pg.waitForSelector('dialog.ask', T);
   assert.match(await pg.$eval('dialog.ask', e => e.innerText), /1 open invoices, \$720\.00 still owed/);
-  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(400);
-  assert.deepEqual(await pg.evaluate(() => window.__hcpinv.map(x => [x.inv_no, x.job_no, x.amount_due])), [['1500', '10155', '$720.00']], 'only open ones, job # cleaned');
-  // paid ones as history, amounts from the HCP Jobs export
-  fs.writeFileSync(path.join(B, 'hcpjobs.csv'), 'Job #,Customer name,Job description,Job status,Address,Job created date,Job scheduled start date,Assigned employees,Job amount,Due amount\n9000,Demo Co,Windows,Completed,1 Demo St,,,,$1250.00,$0.00\n');
-  await pg.waitForSelector('#pfFile', T); await pg.setInputFiles('#pfFile', path.join(B, 'hcpjobs.csv')); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(400);
-  assert.deepEqual(await pg.evaluate(() => window.__hcppaid.map(x => [x.inv_no, x.job_no, x.amount])), [['1499', '9000', '$1250.00']], 'paid invoice kept with its job amount');
+  fs.writeFileSync(path.join(B, 'hcpjobs.csv'), 'Job #,Customer name,Job description,Job status,Address,Job created date,Job scheduled start date,Assigned employees,Job amount,Due amount\n9000,Demo Co,Windows,Completed,1 Demo St,,,,$1250.00,$0.00\n10155,Demo Co,Gutter Cleaning,Scheduled,"2344 Harrison St\nOakland, CA",,,,$720.00,$720.00\n');
+  pg.on('dialog', d => d.accept());
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForSelector('#pfFile', T);
+  await pg.setInputFiles('#pfFile', path.join(B, 'hcpjobs.csv')); await pg.click('dialog.ask:has(#pfFile) [data-a="ok"]'); await pg.waitForTimeout(500);
+  assert.deepEqual(await pg.evaluate(() => window.__hcpinv.map(x => [x.inv_no, x.job_no, x.amount_due, x.description, x.address])), [['1500', '10155', '$720.00', 'Gutter Cleaning', '2344 Harrison St, Oakland, CA']], 'open ones with what the job was and where');
+  assert.deepEqual(await pg.evaluate(() => window.__hcppaid.map(x => [x.inv_no, x.job_no, x.amount])), [['1499', '9000', '$1250.00']], 'paid invoice kept with its job amount (same Jobs file, asked once)');
   await pg.close();
   const pa = await b.newPage({ viewport: { width: 1300, height: 900 } }); pa.on('pageerror', e => errs.push('accountant: ' + e.message));
   await pa.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
