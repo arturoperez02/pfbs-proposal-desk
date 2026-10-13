@@ -285,3 +285,14 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.match(r[1].n, /HousecallPro invoice #905, job #777/);
   console.log('db: HCP invoice details passed');
 }
+// ---------- proposal numbers start at 0803 (update 031) ----------
+{
+  assert.ok(Number((await one(`select next_proposal_no() n`)).n) >= 803, 'next proposal # is at least 0803');
+  const mx = Number((await one(`select max_proposal_no() n`)).n);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  await assert.rejects(db.query(`select set_next_proposal_no(5)`), /higher than/, 'cannot go back to a used number');
+  await db.query(`select set_next_proposal_no($1)`, [Math.max(mx + 1, 803)]);
+  await db.exec('reset role');
+  assert.equal(Number((await one(`select next_proposal_no() n`)).n), Math.max(mx + 1, 803));
+  console.log('db: proposal numbers passed');
+}

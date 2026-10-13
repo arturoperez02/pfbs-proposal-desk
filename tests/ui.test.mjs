@@ -586,12 +586,15 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const job = { num: 'PFBS-1004', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Page Test Realty', client_id: 'c-pg', property: 'Page Tower', amount: 900, status: 'Scheduled', date_resolved: '2026-10-05', hcp_job: '10430', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 900 }] };
   const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('customer page: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic|maps\.google/, r => r.abort());
-  await pg.addInitScript(([c, pr, k, job]) => { window.MOCK_CLIENTS = [c]; window.MOCK_PROPS = [pr]; window.MOCK_CONTACTS = [k]; window.MOCK_EXTRA = [job]; try { sessionStorage.clear(); } catch (_) {} }, [c, pr, k, job]);
+  await pg.addInitScript(([c, pr, k, job]) => { window.MOCK_CLIENTS = [c]; window.MOCK_PROPS = [pr]; window.MOCK_CONTACTS = [k]; window.MOCK_EXTRA = [job]; try { if (window.name !== 'kept') { sessionStorage.clear(); window.name = 'kept'; } } catch (_) {} }, [c, pr, k, job]);
   await pg.goto(BASE); await pg.waitForTimeout(800);
   await pg.click('#tabs [data-tab="clients"]'); await pg.click('tr[data-cl="c-pg"]'); await pg.waitForSelector('.cltabs', T);
   assert.deepEqual(await pg.$$eval('.cltabs [data-cltab]', L => L.map(x => x.dataset.cltab)), ['profile', 'leads', 'proposals', 'jobs', 'invoices', 'notes'], 'HCP-style tabs');
   assert.match(await pg.textContent('#clientsBody'), /Kris Page/); assert.match(await pg.textContent('#clientsBody'), /Billing/);
   await pg.click('[data-cltab="jobs"]'); assert.match(await pg.textContent('#clientsBody'), /#10430/, 'jobs tab lists the job');
+  await pg.reload(); await pg.waitForSelector('.cltabs', T); await pg.waitForTimeout(300);
+  assert.equal(await pg.$eval('.cltabs [aria-selected="true"]', e => e.dataset.cltab), 'jobs', 'a refresh keeps the client and its tab');
+  assert.match(await pg.textContent('#clientsBody'), /Page Test Realty/);
   await pg.click('[data-clnew="job"]'); await pg.waitForSelector('dialog.jobpage .jpsel:not([hidden])', T);
   assert.match(await pg.textContent('dialog.jobpage .jpsel'), /Page Test Realty/, '+ Job starts with this customer'); assert.match(await pg.$eval('[name="site"]', e => e.value), /2 Page St/, 'its only property fills the address');
   await pg.keyboard.press('Escape'); await pg.waitForTimeout(150);
@@ -657,6 +660,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.deepEqual(await pg.$$eval('#f-propPick option', L => L.map(o => o.textContent)), ['— Choose an address —', '3536 Mendo Ave, Santa Rosa, CA', '39141 Civic Dr, Fremont, CA', 'New address (type it below)'], 'the client\'s addresses in a drop-down');
   await pg.selectOption('#f-propPick', 'pa2'); await pg.waitForTimeout(100);
   assert.equal(await pg.$eval('#f-siteAddress', e => e.value), '39141 Civic Dr\nFremont, CA'); assert.equal(await pg.$eval('#f-contactName', e => e.value), 'Terry Site', 'the site contact comes with the address');
+  await pg.reload(); await pg.waitForSelector('#f-propPick', T); assert.ok(await pg.evaluate(() => !document.getElementById('drawer').hidden && document.getElementById('drawer').innerText.includes('PFBS-1010')), 'a refresh reopens the proposal');
   await pg.click('[data-est="0"]'); await pg.waitForSelector('#estTot', T);
   assert.equal(await pg.textContent('#estTitle'), 'Pricing');
   const tot = await pg.textContent('#estTot');

@@ -688,6 +688,7 @@ function nextSteps(st, p){ const bud=p && !!p.budgetYear && PRE.includes(st);
   return ({'Budget':['Sent','Approved','Declined'], 'Estimating':['Needs Review','Sent'], 'Needs Review':['Sent'], 'Sent':['Approved','Declined','Expired'], 'Follow-up':['Approved','Declined','Expired'],
   'Approved':['Scheduled'], 'Scheduled':['Invoiced'], 'Invoiced':['Paid'], 'Declined':['Sent'], 'Expired':['Sent'], 'Withdrawn':['Estimating']})[st]||[]; }
 async function openDrawer(id, opts={}){
+  try{ sessionStorage.setItem('pfbs.open', id||''); }catch(_){}   // a refresh reopens this proposal / job
   DTAB = (['orders','home','schedule'].includes(current()) || role()==='Admin') ? 'job' : 'prop';
   PR=null; isNew=!id; newLead=!!opts.lead; orig = id ? P.find(p=>p.num===id) : null;
   draft = orig ? structuredClone(orig) : newLead ? {num:'', dateSent:null, sentBy: role()==='Estimator'?me.name:'', bdRep: role()==='BD Rep'?me.name:'', leadSource: role()==='BD Rep'?'BD rep':'', status:'Lead', items:[]} : {num:'', dateSent:iso(today()), sentBy: me.name, status:'Estimating', items:[{type:'Service',service:'',qty:1,frequency:'',amount:'',description:'',note:''}]};
@@ -721,7 +722,7 @@ async function addActivity(num, kind, note){
   const {error}=await sb.from('proposal_activity').insert({num, kind, note});
   if(error){ toast(error.message); return false; } return true;
 }
-function closeDrawer(){ $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; PR=null; }
+function closeDrawer(){ try{ sessionStorage.removeItem('pfbs.open'); }catch(_){} $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; PR=null; }
 function calc1(p){ const g=gpPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
 function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null){ const o=outcome(p); return (o==='Won'||o==='Lost') && p.dateResolved ? `<div class="gpline">${o} on ${fmtD(p.dateResolved)}${p.datePaid?' · paid '+fmtD(p.datePaid):''}</div>` : ''; } const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
 // renewal price check: last price, real margin, and what to charge next
@@ -2558,6 +2559,8 @@ async function loadClients(){
   const [a,b,c]=await Promise.all([sb.from('clients').select('*').order('name'), sb.from('client_contacts').select('*'), sb.from('properties').select('*')]);
   if(a.error){ CLOK=!invMissing(a.error); CL=[]; CC=[]; PROPS=[]; }
   else { CLOK=true; CL=a.data||[]; CC=b.data||[]; PROPS=c.data||[]; }
+  if(CLSEL && !CL.some(x=>x.id===CLSEL)) CLSEL=null;
+  if(draft) refreshPropPick();
   if(current()==='clients') renderClients();
 }
 const clientOf = name => { const n=norm(name); if(!n) return null; return CL.find(c=>c.active!==false && (norm(c.name)===n || (c.aliases||[]).some(a=>norm(a)===n))) || null; };
@@ -2670,7 +2673,8 @@ async function importHcp(file){
 function renderClients(){
   const box=$('#clientsBody'); if(!box) return;
   if(!CLOK){ box.innerHTML='<div class="card"><div class="note" style="margin:0">Run database update 019 in Supabase to turn on clients.</div></div>'; return; }
-  if(CLSEL){ const c=CL.find(x=>x.id===CLSEL); if(c) return renderClient(c); CLSEL=null; }
+  try{ sessionStorage.setItem('pfbs.client', CLSEL||''); sessionStorage.setItem('pfbs.cltab', CLTAB||'profile'); }catch(_){}   // a refresh reopens this client on the same tab
+  if(CLSEL){ const c=CL.find(x=>x.id===CLSEL); if(c) return renderClient(c); if(!CL.length){ box.innerHTML='<div class="card"><div class="note" style="margin:0">Loading…</div></div>'; return; } CLSEL=null; }
   const q=norm(clQuery), mgr=isManager();
   const due={}; for(const v of (OPENINV||[])){ due[v.num]=(due[v.num]||0)+invBal(v); }
   const rows=CL.filter(c=>c.active!==false).map(c=>{ const pp=clientProposals(c); return {c, pp, open:pp.filter(p=>outcome(p)==='Open').length, won:pp.filter(p=>outcome(p)==='Won').length, bal:pp.reduce((s,p)=>s+(due[p.num]||0),0), last:pp.map(p=>p.dateSent||'').sort().pop()||''}; })
@@ -3538,6 +3542,8 @@ function renderSettings(){
     ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Clients</h3>
       <div class="note" style="margin:0 0 8px">Bring in your HousecallPro customers: in HousecallPro go to Customers → Export, then pick that file here. People at the same company become contacts under one client; addresses become properties. Safe to run again: nothing is duplicated or overwritten.</div>
       <div class="toolbar" style="margin:0"><label class="btn">Import HousecallPro customers…<input type="file" id="clImport" accept=".csv,text/csv" hidden></label><button type="button" class="btn ghost" id="clLink">Link proposals to clients</button></div></div>`:''}
+    ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Proposal numbers</h3><label class="f">Next proposal #<span style="display:flex;gap:6px"><span style="align-self:center">PFBS-</span><input id="s-propno" type="number" placeholder="Loading…" style="flex:1"><button type="button" class="btn small" id="propNoSave">Set</button></span></label>
+      <div class="note">Every new proposal and lead takes the next number (0803, 0804…). It can't go back to a number already used. Saved on its own.</div></div>`:''}
     ${canPay()?`<div class="card listedit"><h3>Job numbers</h3><label class="f">Next job #<span style="display:flex;gap:6px"><input id="s-jobno" type="number" placeholder="Using HousecallPro job #s" style="flex:1"><button type="button" class="btn small" id="jobNoSave">Set</button></span></label>
       <div class="note">Until this is set, each visit uses the HCP job # typed on the job. On switch-over day, set it to HousecallPro's last job # + 1: from then on every visit gets the next number, like HCP.</div></div>`:''}
     ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Warehouse</h3><div id="whList" class="note" style="margin:0 0 6px">Loading…</div>
@@ -3608,6 +3614,11 @@ function renderSettings(){
       whLoad(); };
   }
   if($('#whCopy')) $('#whCopy').onclick=()=>copyOldKitTracker();
+  if($('#propNoSave')){
+    sb.rpc('next_proposal_no').then(({data,error})=>{ const i=$('#s-propno'); if(!i) return; if(error){ i.placeholder='Run database update 031 first'; i.disabled=true; $('#propNoSave').disabled=true; } else i.value=data??''; });
+    $('#propNoSave').onclick=async ()=>{ const n=Math.round(num($('#s-propno').value)||0); if(!n){ toast('Type a number.'); return; }
+      const {error}=await sb.rpc('set_next_proposal_no',{n}); toast(error?error.message:`Next proposal will be PFBS-${String(n).padStart(4,'0')}`); if(!error) loadAdminLog(); };
+  }
   if($('#invNoSave')){
     sb.rpc('next_invoice_no').then(({data,error})=>{ const i=$('#s-invno'); if(!i) return; if(error){ i.placeholder='Run database update 018 first'; i.disabled=true; $('#invNoSave').disabled=true; } else i.value=data??''; });
     $('#invNoSave').onclick=async ()=>{ const n=Math.round(num($('#s-invno').value)||0); if(!n){ toast('Type a number.'); return; }
@@ -3623,7 +3634,7 @@ function organizeSettings(){
   for(const id of ['#s-exp','#s-rpt']){ const l=root.querySelector(id)?.closest('label'); if(l) extra.appendChild(l); }
   const groups=[
     ['Team', ['Team']],
-    ['Schedule & crew', ['Crew','Job numbers','Equipment (schedule)','Vehicles','Spanish words','Work types (schedule)']],
+    ['Schedule & crew', ['Crew','Proposal numbers','Job numbers','Equipment (schedule)','Vehicles','Spanish words','Work types (schedule)']],
     ['Price book & lists', ['Price book','Job types','Frequencies','Lead sources','Lost reasons','Add-on suggestions','BD email templates']],
     ['Invoicing', ['Invoicing']],
     ['Proposal text', ['Proposal & links','Standard clarifications','Terms & Conditions']],
@@ -4406,7 +4417,9 @@ async function start(session){
   let last=''; try{ last=sessionStorage.getItem('pfbs.tab')||''; }catch(_){}
   const lb=last && document.querySelector(`#tabs [data-tab="${last}"]`); const startTab = lb && !lb.hidden ? last : home;   // a refresh keeps you where you were
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===startTab); show(startTab);
-  await loadProposals(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); loadKits(); sb.rpc('crm_job_numbers').then(r=>{ JOBNO_ON=!r.error && r.data===true; }); if(isManager()) loadOpenInvoices();
+  if(startTab===last){ try{ CLSEL=sessionStorage.getItem('pfbs.client')||null; CLTAB=sessionStorage.getItem('pfbs.cltab')||'profile'; }catch(_){} }
+  let reopen=''; try{ reopen=sessionStorage.getItem('pfbs.open')||''; }catch(_){}
+  await loadProposals(); if(reopen && P.some(p=>p.num===reopen)) openDrawer(reopen); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); loadKits(); sb.rpc('crm_job_numbers').then(r=>{ JOBNO_ON=!r.error && r.data===true; }); if(isManager()) loadOpenInvoices();
   window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })
