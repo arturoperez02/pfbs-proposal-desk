@@ -889,10 +889,15 @@ function askJobNo(p){
     d.innerHTML=`<h3>${esc(p.num||'Proposal')} approved</h3>
       <label class="f">${rec?'First visit HCP job #':'HCP job #'}<input id="askJob" inputmode="numeric" autocomplete="off" placeholder="from HousecallPro"></label>
       <div class="note">Create the job in HousecallPro and type its number. Tip: put <b>${esc(p.num||'the PFBS #')}</b> in the HCP job description${rec?' (or the recurring job template)':''}, and ${rec?'every visit':'the job'} links here by itself when it's scheduled.</div>
+      ${canPay()?`<div class="lockline" style="margin:8px 0">Done with HousecallPro jobs? <button type="button" class="btn small" data-a="crm">Let the CRM number jobs</button><br><span class="note" style="margin:0">Asks for HCP's last job # once; after that every approved proposal gets the next number automatically and this box stops appearing.</span></div>`:''}
       <div class="toolbar"><button type="button" class="btn ghost" data-a="skip">Skip for now</button><button type="button" class="btn" data-a="ok">Save job #</button></div>`;
     document.body.appendChild(d);
     const done=v=>{ d.close(); d.remove(); res(v); };
-    d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='skip') done(null); if(a==='ok') done(d.querySelector('#askJob').value.trim()||null); });
+    d.addEventListener('click', async e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='skip') done(null); if(a==='ok') done(d.querySelector('#askJob').value.trim()||null);
+      if(a==='crm'){ const r=await formDialog('Let the CRM number jobs', '<label class="f">HousecallPro\'s latest job #<input name="last" type="number" required placeholder="e.g. 10234"></label><div class="note" style="margin:0">In HousecallPro: Pipeline → Jobs, the highest Job #. The next CRM job will be that + 1. From now on, create jobs here, not in HousecallPro.</div>', 'Start numbering');
+        if(!r) return; const n=Math.round(Number(r.last)||0)+1; if(n<2){ toast('Type the last HCP job #.'); return; }
+        const {error}=await sb.rpc('set_next_job_no',{n}); if(error){ toast(invMissing(error)?'Run database updates 022 and 023 in Supabase first.':error.message); return; }
+        JOBNO_ON=true; toast(`Done. This job gets #${n}; the next ones follow.`); done(null); } });
     d.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); done(d.querySelector('#askJob').value.trim()||null); } });
     d.addEventListener('cancel', e=>{ e.preventDefault(); done(null); });
     d.showModal(); d.querySelector('#askJob').focus();
