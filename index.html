@@ -1212,14 +1212,14 @@ async function copyOldKitTracker(){
 // ---------- top bar: "+ New" menu and search everything (like HousecallPro's) ----------
 function newItems(){ const r=role(), mgr=isManager(), L=[];
   if(mgr) L.push(['job','Job','approved work, scheduled next'], ['recurring','Recurring Job','repeats on a schedule']);
-  if(canCreate()) L.push(['estimate','Estimate','a proposal to price and send']);
+  if(canCreate()) L.push(['proposal','Proposal','price it and send it to the client']);
   if(mgr && VISOK) L.push(['event','Event','meeting, training, day off']);
   if(mgr || r==='Accountant') L.push(['customer','Customer','a client with contacts and properties']);
   if(canLead()) L.push(['lead','Lead','someone asking for a quote']);
   return L; }
 async function newThing(k){
   $('#gMenu').hidden=true; $('#gNew').setAttribute('aria-expanded','false');
-  if(k==='estimate') return openDrawer(null);
+  if(k==='proposal') return openDrawer(null);
   if(k==='lead') return openDrawer(null,{lead:true});
   if(k==='job' || k==='recurring'){ await openDrawer(null); draft._job=k; draft.status='Approved'; draft.dateSent=iso(today()); draft.dateResolved=iso(today()); DTAB='prop';
     if(k==='recurring' && draft.items[0]) draft.items[0].frequency=(S.frequencies.find(f=>/month/i.test(f[0]))||S.frequencies.find(f=>f[1]>1)||[''])[0];
@@ -1239,7 +1239,7 @@ function gSearch(q){ q=norm(q); if(q.length<2) return [];
   const won=p=>WON.includes(p.status);
   if(role()!=='Accountant') for(const p of P){ if(out.filter(x=>x.k==='p').length>=8) break;
     const jn=jobNoOf(p); if(has(p.num, p.client, p.property, p.siteAddress, p.contactName, p.contactEmail, jn, p.poNumber, ...(scopeLines(p)||[]).slice(0,2)))
-      out.push({k:'p', id:p.num, t:`${jn?'Job #'+jn+' · ':''}${p.client||''}${p.property?' · '+p.property:''}`, s:`${p.num} · ${p.status}${num(p.amount)?' · '+money(p.amount):''}${scopeLines(p)[0]?' · '+scopeLines(p)[0].slice(0,50):''}`, sec:won(p)?'Jobs':'Estimates & leads'}); }
+      out.push({k:'p', id:p.num, t:`${jn?'Job #'+jn+' · ':''}${p.client||''}${p.property?' · '+p.property:''}`, s:`${p.num} · ${p.status}${num(p.amount)?' · '+money(p.amount):''}${scopeLines(p)[0]?' · '+scopeLines(p)[0].slice(0,50):''}`, sec:won(p)?'Jobs':'Proposals & leads'}); }
   for(const c of (typeof CL!=='undefined'?CL:[])){ if(out.filter(x=>x.k==='c').length>=6) break;
     if(has(c.name, ...(c.aliases||[]), c.billing_email)) out.push({k:'c', id:c.id, t:c.name, s:c.kind||'Client', sec:'Customers'}); }
   if(canMoney()) for(const v of MINV){ if(out.filter(x=>x.k==='i').length>=6) break;

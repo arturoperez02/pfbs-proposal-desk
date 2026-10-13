@@ -527,7 +527,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.keyboard.press('Enter'); await pg.waitForSelector('#drawer:not([hidden]) .jflow', T);
   assert.match(await pg.textContent('.dhead'), /Job #10420/, 'Enter opens it');
   await pg.click('#closeD'); await pg.waitForTimeout(200);
-  await pg.click('#gNew'); assert.deepEqual(await pg.$$eval('#gMenu [data-gnew]', L => L.map(x => x.dataset.gnew)), ['job', 'recurring', 'estimate', 'event', 'customer', 'lead'], 'HCP-style New menu');
+  await pg.click('#gNew'); assert.deepEqual(await pg.$$eval('#gMenu [data-gnew]', L => L.map(x => x.dataset.gnew)), ['job', 'recurring', 'proposal', 'event', 'customer', 'lead'], 'HCP-style New menu');
   await pg.click('[data-gnew="job"]'); await pg.waitForSelector('#f-client', T);
   await pg.fill('#f-client', 'Walk-in Job Co'); await pg.dispatchEvent('#f-client', 'change');
   await pg.fill('#f-property', '1 Quick St'); await pg.dispatchEvent('#f-property', 'change');
