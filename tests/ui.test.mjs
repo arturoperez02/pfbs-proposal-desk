@@ -576,6 +576,29 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 24. Customer page like HousecallPro: summary, tabs, and + Job already set to this customer
+{
+  const c = { id: 'c-pg', name: 'Page Test Realty', kind: 'Business', aliases: [], active: true, billing_address: '1 Bill St\nOakland, CA', created_at: '2026-09-14T10:00:00Z' };
+  const pr = { id: 'p-pg', client_id: 'c-pg', name: 'Page Tower', address: '2 Page St\nOakland, CA', active: true, addr_key: '2 PAGE ST' };
+  const k = { id: 'k-pg', client_id: 'c-pg', name: 'Kris Page', email: 'kris@page.example', phone: '5105550000', is_primary: true, active: true };
+  const job = { num: 'PFBS-1004', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Page Test Realty', client_id: 'c-pg', property: 'Page Tower', amount: 900, status: 'Scheduled', date_resolved: '2026-10-05', hcp_job: '10430', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 900 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('customer page: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|maps\.google/, r => r.abort());
+  await pg.addInitScript(([c, pr, k, job]) => { window.MOCK_CLIENTS = [c]; window.MOCK_PROPS = [pr]; window.MOCK_CONTACTS = [k]; window.MOCK_EXTRA = [job]; try { sessionStorage.clear(); } catch (_) {} }, [c, pr, k, job]);
+  await pg.goto(BASE); await pg.waitForTimeout(800);
+  await pg.click('#tabs [data-tab="clients"]'); await pg.click('tr[data-cl="c-pg"]'); await pg.waitForSelector('.cltabs', T);
+  assert.deepEqual(await pg.$$eval('.cltabs [data-cltab]', L => L.map(x => x.dataset.cltab)), ['profile', 'leads', 'proposals', 'jobs', 'invoices', 'notes'], 'HCP-style tabs');
+  assert.match(await pg.textContent('#clientsBody'), /Kris Page/); assert.match(await pg.textContent('#clientsBody'), /Billing/);
+  await pg.click('[data-cltab="jobs"]'); assert.match(await pg.textContent('#clientsBody'), /#10430/, 'jobs tab lists the job');
+  await pg.click('[data-clnew="job"]'); await pg.waitForSelector('dialog.jobpage .jpsel:not([hidden])', T);
+  assert.match(await pg.textContent('dialog.jobpage .jpsel'), /Page Test Realty/, '+ Job starts with this customer'); assert.match(await pg.$eval('[name="site"]', e => e.value), /2 Page St/, 'its only property fills the address');
+  await pg.keyboard.press('Escape'); await pg.waitForTimeout(150);
+  await pg.click('[data-cltab="notes"]'); await pg.fill('#cl-notes', 'Gate code 1234'); await pg.click('#clSave'); await pg.waitForTimeout(400);
+  assert.equal(await pg.evaluate(() => DBX.clients.find(x => x.id === 'c-pg').notes), 'Gate code 1234', 'notes saved from the Notes tab (other fields untouched)');
+  assert.equal(await pg.evaluate(() => DBX.clients.find(x => x.id === 'c-pg').name), 'Page Test Realty');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
