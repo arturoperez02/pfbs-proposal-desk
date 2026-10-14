@@ -743,6 +743,48 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 30. Click a column heading to sort (biggest first, click again for smallest); stays sorted after a redraw
+{
+  const mk = (n, a) => ({ num: n, date_sent: '2026-10-0' + (a % 9 + 1), sent_by: 'Arturo', client: 'Sort Co ' + n, status: 'Sent', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: a }] });
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('sort: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = x; }, [mk('PFBS-1101', 700), mk('PFBS-1102', 90000), mk('PFBS-1103', 5)]);
+  await pg.goto(BASE); await pg.waitForTimeout(900); await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(300);
+  const th = await pg.evaluateHandle(() => [...document.querySelectorAll('main table thead th')].find(x => x.offsetParent && /^Amount/i.test(x.textContent.trim())));
+  const amounts = () => pg.evaluate(() => { const t = [...document.querySelectorAll('main table')].find(x => x.offsetParent && [...x.querySelectorAll('thead th')].some(h => /^Amount/i.test(h.textContent.trim()))); const c = [...t.querySelectorAll('thead th')].findIndex(h => /^Amount/i.test(h.textContent.trim())); return [...t.tBodies[0].rows].map(r => Number(r.cells[c].textContent.replace(/[$,]/g, ''))).filter(Number.isFinite); });
+  await th.click(); let a = await amounts(); assert.ok(a.every((x, i) => i === 0 || a[i - 1] >= x), 'biggest first: ' + a.slice(0, 6));
+  await th.click(); a = await amounts(); assert.ok(a.every((x, i) => i === 0 || a[i - 1] <= x), 'then smallest first: ' + a.slice(0, 6));
+  await pg.click('#tabs [data-tab="leads"]'); await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(300);
+  a = await amounts(); assert.ok(a.every((x, i) => i === 0 || a[i - 1] <= x), 'still sorted after coming back');
+  await pg.close();
+}
+
+// 30. Click a column heading to sort (biggest first, click again for smallest); reminder plan shown and "client confirmed" skips until due
+{
+  const day = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const inv = [{ id: 's1', inv_no: 1700, num: null, status: 'Sent', invoice_date: day(-28), terms_days: 30, due_date: day(2), total: 800, paid: 0, bill_to: { name: 'Soon Co', email: 'ap@soon.example' }, items: [{ description: 'Windows', amount: 800 }] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('sort/remind: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_INV = x; window.open = () => null; }, inv);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(300);
+  const amts = () => pg.$$eval('#pipeline table tbody tr, main table tbody tr', R => R.filter(r => r.offsetParent && r.cells.length > 3).map(r => [...r.closest('table').querySelectorAll('thead th')].findIndex(th => /amount/i.test(th.textContent))).slice(0, 1));
+  const col = (await amts())[0]; assert.ok(col >= 0, 'pipeline has an Amount column');
+  const vals = () => pg.evaluate(c => { const t = [...document.querySelectorAll('table')].find(t => t.offsetParent && [...t.querySelectorAll('thead th')].some(th => /amount/i.test(th.textContent))); return [...t.tBodies[0].rows].map(r => Number((r.cells[c]?.innerText || '').replace(/[$,]/g, ''))).filter(n => !isNaN(n)); }, col);
+  await pg.evaluate(c => { const t = [...document.querySelectorAll('table')].find(t => t.offsetParent && [...t.querySelectorAll('thead th')].some(th => /amount/i.test(th.textContent))); t.querySelectorAll('thead th')[c].click(); }, col); await pg.waitForTimeout(100);
+  let v = await vals(); assert.ok(v.length > 2 && v.every((x, i) => i === 0 || v[i - 1] >= x), 'biggest first: ' + v.slice(0, 5));
+  await pg.evaluate(c => { const t = [...document.querySelectorAll('table')].find(t => t.offsetParent && [...t.querySelectorAll('thead th')].some(th => /amount/i.test(th.textContent))); t.querySelectorAll('thead th')[c].click(); }, col); await pg.waitForTimeout(100);
+  v = await vals(); assert.ok(v.every((x, i) => i === 0 || v[i - 1] <= x), 'click again: smallest first');
+  await pg.click('#tabs [data-tab="money"]'); await pg.waitForTimeout(300);
+  const dl = pg.waitForEvent('download', T); await pg.click('[data-mrem="s1"]'); await dl; await pg.waitForSelector('#rmBody', T);
+  assert.match(await pg.textContent('dialog.ask'), /Payment reminders[\s\S]*before due[\s\S]*on the due date[\s\S]*days late/, 'reminder plan shown');
+  await pg.click('dialog.ask [data-a="skip"]'); await pg.waitForSelector('dialog [name="why"]', T); await pg.click('dialog:last-of-type .btn:not(.ghost)'); await pg.waitForTimeout(400);
+  const r = await pg.evaluate(() => DBX.invoices.find(x => x.id === 's1').reminders);
+  assert.ok(r.length === 1 && r[0].skipped && r[0].day === 0, 'skipped through the due date: ' + JSON.stringify(r));
+  assert.equal(await pg.evaluate(() => !!document.querySelector('[data-mrem="s1"]')), false, 'no reminder until it is late');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

@@ -152,6 +152,8 @@ legend{font-family:var(--display);font-size:17px;color:var(--ink);margin-bottom:
 @media (max-width:700px){ header.bar{position:static} .crewtbl thead{display:none} .crewtbl,.crewtbl tbody,.crewtbl tr,.crewtbl td{display:block;width:100%} .crewtbl tr{border-bottom:2px solid var(--line);padding:8px 0;position:relative} .crewtbl td{border:0;padding:3px 8px} .crewtbl td:nth-child(6){text-align:left!important} .crewtbl td:nth-child(6)::before{content:'Active ';font-size:13px;color:var(--muted)} .crewtbl td:nth-child(5)::before{content:'Other names';display:block;font-size:12px;color:var(--muted)} .crewtbl td:last-child{position:absolute;top:8px;right:0;width:auto} .crewtbl td:first-child input{width:calc(100% - 48px)} .crewtbl input:not([type=checkbox]),.crewtbl select{width:100%} .capchecks{min-width:0} } .crewtbl td{vertical-align:top} .crewtbl input:not([type=checkbox]),.crewtbl select{min-width:120px} .capchecks{display:flex;flex-wrap:wrap;gap:4px 12px;min-width:260px} .capchecks label{font-size:13px;white-space:nowrap;display:flex;gap:4px;align-items:center}
 .pdfprev{width:min(1000px,96vw);max-width:none;height:92vh;display:flex;flex-direction:column} .pdfprev[open]{display:flex} .pdfprev iframe{flex:1;width:100%;border:1px solid var(--line);border-radius:6px;background:#fff}
 .clift{font-size:9px;font-weight:700;padding:0 3px;border-radius:3px;background:#dfe6f7;color:#1F2A5C} .clift.todo{background:#f0a020;color:#fff} .vscope.rentwarn{border-left:3px solid #f0a020} .vscope.rentbad{border-left:3px solid var(--bad)}
+main table thead th:not(:empty){cursor:pointer;user-select:none} main table thead th:not(:empty):hover{color:var(--ink)} th.sorted{color:var(--ink)!important} th.sorted::after{content:' ' attr(data-dir);font-size:9px}
+thead th{cursor:pointer;user-select:none} thead th:hover{color:var(--ink)} .sarrow{font-size:9px;color:var(--navy,#1F2A5C)}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .listedit{display:grid;gap:6px;align-content:start}
 .listedit textarea{min-height:150px;font-size:14px}
@@ -2387,17 +2389,25 @@ function invEmail(v,p){ const n=v.inv_no, place=invPlace(v,p), em=String(v.bill_
   const first=c?(p.contactName||'').trim().split(/\s+/)[0]:'';
   return { to:String(v.bill_to?.email||'').split(/[;,\s]+/).filter(Boolean).join('; '),
     subject:`Invoice #${n} from PF Building Services – ${place}${(()=>{ const pos=v.po_number?[v.po_number]:[...new Set((v.items||[]).map(i=>i.po).filter(Boolean))]; return pos.length?` (PO ${pos.slice(0,3).join(', ')}${pos.length>3?'…':''})`:''; })()}`,
-    body:`${first?`Hi ${first},`:'Hello,'}\n\nAttached is invoice #${n} for ${place}. Please let me know if you have any questions.\n\nThank you for your business.` }; }
+    body:`${first?`Hi ${first},`:'Hello,'}\n\nAttached is invoice #${n} for ${place}, due net ${num(v.terms_days)??30}. Please let me know if you have any questions.\n\n${invFacts(v,p)}\n\nThank you for your business.` }; }
+// the details block clients are used to from HousecallPro's invoice email
+function invFacts(v,p){ const jn=v.job_no||(p&&p.hcpJob)||'', addr=String(v.service_address||(p&&p.siteAddress)||'').replace(/\n+/g,', ');
+  return [jn?`Job number: #${jn}`:'', `Invoice number: #${v.inv_no}`, v.service_date?`Service date: ${fmtD(v.service_date)}`:'', `Customer: ${(v.bill_to&&v.bill_to.name)||(p&&p.client)||''}`, addr?`Service address: ${addr}`:'', v.po_number?`PO #: ${v.po_number}`:'',
+    `Amount due: ${usd(invBal(v)||v.total)}`, invDue(v)?`Due date: ${fmtD(invDue(v))}`:''].filter(Boolean).join('\n'); }
 // ---- payment reminders (update 029): which one is due today, the email, and a record of what was sent ----
 const remDays = () => { const r=S.invoice&&Array.isArray(S.invoice.reminders)?S.invoice.reminders:null; return r&&r.length?r:[-3,0,7,14,30]; };
 function remDue(v){ if(v.status!=='Sent' || invBal(v)<=0.004 || !invDue(v)) return null;
   const late=daysLate(v), steps=remDays().filter(d=>late>=d); if(!steps.length) return null;
   const cur=steps[steps.length-1], last=Math.max(-Infinity, ...(v.reminders||[]).map(x=>Number(x.day)));
   return last>=cur ? null : cur; }   // only the latest step that's due, and never one already covered
+// the reminder plan for one invoice: which reminder goes out when (shown when sending the invoice and in each reminder)
+function remPlanHTML(v){ const due=invDue(v); if(!due) return ''; const done=new Set((v.reminders||[]).map(x=>Number(x.day))), last=Math.max(-Infinity,...done);
+  const L=remDays().map(dd=>{ const dt=addDays(due, dd), w=dd<0?`${-dd} day${dd===-1?'':'s'} before due`:dd===0?'on the due date':`${dd} day${dd===1?'':'s'} late`; const st=done.has(dd)?' ✓ sent':(dd<=last?' · skipped':''); return `<li>${fmtD(dt)} · ${w}${st}</li>`; }).join('');
+  return `<div class="note" style="margin:6px 0 0"><b>Payment reminders</b> (Settings → Invoicing): the CRM lists each one on Home and Money → <b>Reminder due</b> on its day, already written; you check it and send.<ul style="margin:4px 0 0 18px;padding:0">${L}</ul>Stops by itself once it's paid in full.</div>`; }
 function remEmail(v,p,day){ const e=invEmail(v,p), late=daysLate(v), dd=fmtD(invDue(v)), place=invPlace(v,p);
   const when = late<0 ? `is due on ${dd}` : late===0 ? `is due today (${dd})` : `was due on ${dd} and is now ${late} day${late===1?'':'s'} past due`;
   return {to:e.to, subject:`${late>0?'Past due':'Payment reminder'}: invoice #${v.inv_no} – ${place}`,
-    body:`${e.body.split('\n')[0]}\n\nThis is a friendly reminder that invoice #${v.inv_no} for ${place}, balance ${usd(invBal(v))}, ${when}. A copy is attached.\n\nWe accept checks and ACH. If payment is already on its way, please disregard this message.\n\nThank you.`}; }
+    body:`${e.body.split('\n')[0]}\n\nThis is a friendly reminder that invoice #${v.inv_no} for ${place}, balance ${usd(invBal(v))}, ${when}. A copy is attached.\n\n${invFacts(v,p)}\n\nWe accept checks and ACH. If payment is already on its way, please disregard this message.\n\nThank you.`}; }
 async function remindBox(v, day){
   const p=P.find(x=>x.num===v.num) || moneyPseudo(v), e=remEmail(v,p,day);
   if(!String(e.to).includes('@')){ toast('This invoice has no billing email. Open it and add one.'); return; }
@@ -2406,9 +2416,15 @@ async function remindBox(v, day){
   d.innerHTML=`<h3>Reminder: invoice #${esc(v.inv_no)}</h3><div class="note" style="margin:0 0 8px">The PDF just downloaded. Attach it, then send.</div>
     <label class="f">To<input id="rmTo" value="${esc(e.to)}"></label><label class="f">Subject<input id="rmSubj" value="${esc(e.subject)}"></label>
     <label class="f">Message<textarea id="rmBody" rows="8">${esc(e.body)}</textarea></label>
-    <div class="toolbar" style="flex-wrap:wrap"><button type="button" class="btn ghost" data-a="x">Close</button><span style="flex:1"></span><button type="button" class="btn ghost" data-a="mail">Mail app</button><button type="button" class="btn" data-a="owa">Open in Outlook</button></div>`;
+    ${remPlanHTML(v)}
+    <div class="toolbar" style="flex-wrap:wrap"><button type="button" class="btn ghost" data-a="x">Close</button><button type="button" class="btn ghost" data-a="skip" title="e.g. the client wrote back that it's submitted for payment">Skip: client confirmed</button><span style="flex:1"></span><button type="button" class="btn ghost" data-a="mail">Mail app</button><button type="button" class="btn" data-a="owa">Open in Outlook</button></div>`;
   document.body.appendChild(d); const close=()=>{ d.close(); d.remove(); }; d.addEventListener('cancel', ev=>{ ev.preventDefault(); close(); });
   d.addEventListener('click', async ev=>{ const a=ev.target.closest('[data-a]')?.dataset.a; if(!a) return; if(a==='x') return close();
+    if(a==='skip'){ const r=await formDialog('Skip reminders for now', `<label class="f">Why?<input name="why" value="Client confirmed it's submitted for payment"></label><div class="note" style="margin:0">Skips the reminders up to the due date (${esc(fmtD(invDue(v)))}). If it's still unpaid after that, the late reminders come up as usual.</div>`, 'Skip');
+      if(!r) return; const upto=Math.max(day, 0), rem=[...(v.reminders||[]), {day:upto, at:new Date().toISOString(), skipped:true, note:r.why||'', by:me.name}];
+      const {error}=await sb.from('invoices').update({reminders:rem}).eq('id',v.id); if(error){ toast(error.message); return; }
+      v.reminders=rem; if(v.num) await addActivity(v.num,'note',`Payment reminders for invoice #${v.inv_no} skipped until due: ${r.why||''}`);
+      close(); toast('Skipped until the due date'); renderAll(); return; }
     const to=$('#rmTo').value.trim(), s=$('#rmSubj').value, m=$('#rmBody').value, enc=encodeURIComponent;
     if(a==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(s)}&body=${enc(m)}`,'_blank','noopener'); else location.href=`mailto:${enc(to)}?subject=${enc(s)}&body=${enc(m)}`;
     const rem=[...(v.reminders||[]), {day, at:new Date().toISOString(), to, by:me.name}];
@@ -2557,6 +2573,7 @@ function invSendBox(v,p){
   d.innerHTML=`<h3>Email invoice #${esc(v.inv_no)}</h3><div class="note" style="margin:0 0 8px">The PDF just downloaded. Attach it to the email, then send.</div>
     <label class="f">To<input id="ivTo" value="${esc(e.to)}"></label><label class="f">Subject<input id="ivSubj" value="${esc(e.subject)}"></label>
     <label class="f">Message<textarea id="ivBody" rows="7">${esc(e.body)}</textarea></label>
+    ${remPlanHTML(v)}
     <div class="toolbar" style="flex-wrap:wrap"><button type="button" class="btn ghost" data-a="x">Close</button><span style="flex:1"></span><button type="button" class="btn ghost" data-a="copy">Copy</button><button type="button" class="btn ghost" data-a="mailto">Mail app</button><button type="button" class="btn" data-a="owa">Open in Outlook</button></div>`;
   document.body.appendChild(d); const close=()=>{ d.close(); d.remove(); };
   d.addEventListener('cancel', ev=>{ ev.preventDefault(); close(); });
@@ -4200,6 +4217,26 @@ function toEs(text){
   const out=String(text||'').replace(re, m=>map.get(m.toLowerCase())||m);
   return out.charAt(0).toUpperCase()+out.slice(1);
 }
+
+// ---------- click any column heading to sort the list (smallest ↔ biggest, A–Z, oldest ↔ newest), like HousecallPro ----------
+const TSORT={};   // header signature → [column, 1|-1]; kept while you move around, so a re-drawn list stays sorted
+const tSig = t => [...t.querySelectorAll('thead th')].map(th=>th.textContent.replace(/[▲▼]/g,'').trim()).join('|');
+function cellKey(td){ const t=(td?.textContent||'').trim().split('\n')[0].trim(); if(!t || t==='—' || t==='-') return null;
+  const d=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/); if(d){ const y=+d[3]<100?2000+ +d[3]:+d[3]; return y*10000 + +d[1]*100 + +d[2]; }
+  const n=t.replace(/[$,%\s]/g,'').replace(/^−/,'-').replace(/\/(visit|mo|month|yr|year)$/i,'').replace(/hrs?$/i,''); if(/^-?\d+(\.\d+)?$/.test(n)) return parseFloat(n);
+  return t.toLowerCase(); }
+function sortTable(t, col, dir){ const tb=t.tBodies[0]; if(!tb) return; const rows=[...tb.rows]; if(rows.some(r=>r.querySelector('td[colspan]')) || rows.length<2) return;
+  const k=rows.map((r,i)=>[cellKey(r.cells[col]), i, r]);
+  k.sort((a,b)=>{ if(a[0]==null&&b[0]==null) return a[1]-b[1]; if(a[0]==null) return 1; if(b[0]==null) return -1;
+    const x=(typeof a[0]==='number'&&typeof b[0]==='number') ? a[0]-b[0] : String(a[0]).localeCompare(String(b[0]), undefined, {numeric:true}); return x*dir || a[1]-b[1]; });
+  for(const [, , r] of k) tb.appendChild(r);
+  t.querySelectorAll('thead th').forEach((th,i)=>{ th.classList.toggle('sorted', i===col); th.dataset.dir = i===col ? (dir>0?'▲':'▼') : ''; });
+  tb.dataset.sorted=col+':'+dir; }
+document.addEventListener('click', e=>{ const th=e.target.closest && e.target.closest('main table thead th, .drawer table thead th, #drawer table thead th'); if(!th || !th.textContent.trim()) return;
+  const t=th.closest('table'), col=[...th.parentNode.children].indexOf(th), sig=tSig(t), cur=TSORT[sig];
+  const dir = cur && cur[0]===col ? -cur[1] : (()=>{ const v=[...t.tBodies[0]?.rows||[]].map(r=>cellKey(r.cells[col])).find(x=>x!=null); return typeof v==='number' ? -1 : 1; })();   // numbers & dates start biggest / newest first
+  TSORT[sig]=[col,dir]; sortTable(t,col,dir); });
+new MutationObserver(()=>{ cancelAnimationFrame(TSORT._raf); TSORT._raf=requestAnimationFrame(()=>{ for(const t of document.querySelectorAll('table')){ const s0=TSORT[tSig(t)]; if(s0 && t.tBodies[0] && t.tBodies[0].dataset.sorted!==s0.join(':')) sortTable(t,s0[0],s0[1]); } }); }).observe(document.body,{childList:true, subtree:true});
 window.pfbsToEs=toEs;   // used by the tests
 // ---- crew emails (same wording as TechSched) ----
 const crewOf = n => crew().find(c=>c[0]===crewName(n)) || [crewName(n),'','es'];
@@ -4446,6 +4483,27 @@ $('#emailForm').addEventListener('submit', async e=>{
   $('#loginMsg').textContent = error ? error.message : 'Check your email for the sign-in link.';
 });
 for(const id of ['#signOut','#signOut2']) $(id).addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
+
+// ---------- click any column heading to sort (smallest ↔ biggest, oldest ↔ newest, A ↔ Z); the choice sticks until the page is reloaded ----------
+const SORTS={};
+const tblKey = t => [...t.querySelectorAll('thead th')].map(th=>th.dataset.lbl ?? th.textContent.replace(/[▲▼]/g,'').trim()).join('|');
+function sortVal(td){ if(!td) return null; const t=(td.innerText||'').trim(); if(!t || t==='—' || t==='-') return null;
+  let m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\b/); if(m){ const y=m[3].length===2?2000+Number(m[3]):Number(m[3]); return {k:0, v:Date.UTC(y,m[1]-1,m[2])}; }
+  m=t.replace(/[\s,]/g,'').match(/^(-|−)?\$?(\d+(?:\.\d+)?)(%|k)?/); if(m && /^[-−$\d]/.test(t)) return {k:0, v:(m[1]?-1:1)*Number(m[2])*(m[3]==='k'?1000:1)};
+  return {k:1, v:t.toLowerCase()}; }
+function applySort(t){ const key=tblKey(t), st=SORTS[key]; if(!st) return; const tb=t.tBodies[0]; if(!tb) return; const n=t.querySelectorAll('thead th').length;
+  const rows=[...tb.rows].filter(r=>r.cells.length===n); if(rows.length<2) return;
+  const val=r=>sortVal(r.cells[st.col]), sorted=[...rows].sort((a,b)=>{ const x=val(a), y=val(b); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1;
+    const c = x.k!==y.k ? x.k-y.k : x.k===0 ? x.v-y.v : String(x.v).localeCompare(String(y.v), undefined, {numeric:true}); return st.dir*c; });
+  if(sorted.some((r,i)=>r!==rows[i])){ const tail=[...tb.rows].filter(r=>r.cells.length!==n); for(const r of sorted) tb.appendChild(r); for(const r of tail) tb.appendChild(r); }
+  t.querySelectorAll('thead th').forEach((th,i)=>{ const want=i===st.col?(st.dir>0?' ▲':' ▼'):''; const cur=th.querySelector('.sarrow'); if(want){ if(cur){ if(cur.textContent!==want) cur.textContent=want; } else th.insertAdjacentHTML('beforeend',`<span class="sarrow">${want}</span>`); } else if(cur) cur.remove(); }); }
+document.addEventListener('click', e=>{ const th=e.target.closest && e.target.closest('thead th'); if(!th || th.querySelector('input,select,button') || th.closest('.nosort')) return;
+  const t=th.closest('table'); if(!t || !t.tBodies[0]) return; const ths=[...t.querySelectorAll('thead th')], col=ths.indexOf(th), key=tblKey(t);
+  if(!(th.textContent.replace(/[▲▼]/g,'').trim())) return;
+  const cur=SORTS[key]; const first=sortVal([...t.tBodies[0].rows].map(r=>r.cells[col]).find(c=>sortVal(c)));
+  SORTS[key] = cur && cur.col===col ? {col, dir:-cur.dir} : {col, dir: first&&first.k===0 ? -1 : 1};   // numbers/dates start biggest/newest first, text A→Z
+  applySort(t); });
+new MutationObserver(()=>{ clearTimeout(applySort.t); applySort.t=setTimeout(()=>{ if(!Object.keys(SORTS).length) return; for(const t of document.querySelectorAll('table')) if(SORTS[tblKey(t)]) applySort(t); }, 30); }).observe(document.body, {childList:true, subtree:true});
 
 let started=false;
 async function start(session){
