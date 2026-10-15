@@ -819,10 +819,14 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.addInitScript(([x, c]) => { window.MOCK_EXTRA = x; window.MOCK_CLIENTS = c; }, [rows, cls]);
   await pg.goto(BASE); await pg.waitForTimeout(1000);
   await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(300);
-  if (await pg.$('#todo-home [data-tdtoggle]') && /Show all/.test(await pg.textContent('#todo-home [data-tdtoggle]'))) await pg.click('#todo-home [data-tdtoggle]');
+  assert.ok(await pg.$('#todo-home [data-tdg="Jobs to schedule"]'), 'groups start as counts');
+  await pg.click('#todo-home [data-tdg="Jobs to schedule"]');
   const todo = await pg.textContent('#todo-home');
   assert.match(todo, /My to-do/); assert.match(todo, /Jobs to schedule[\s\S]*PFBS-1021/, 'owner sees the job to schedule');
   assert.ok(!/PFBS-1020/.test(todo), "the estimator's lead is not on the owner's list");
+  await pg.click('#todo-home [data-tdsnooze*="PFBS-1021"]'); assert.ok(!/PFBS-1021/.test(await pg.textContent('#todo-home')), 'snooze hides it');
+  assert.match(await pg.textContent('#todo-home'), /1 hidden/); await pg.click('#todo-home [data-tdunhide]');
+  assert.match(await pg.textContent('#homeBody'), /Last week[\s\S]*Proposals sent[\s\S]*Won/, 'Monday snapshot');
   assert.match(await pg.textContent('#hRenew'), /Renew Co/, 'renewal list'); assert.match(await pg.textContent('#hRenew'), /\$12,600/, 'annual with the 5% increase');
   await pg.click('[data-renew="PFBS-1022"]'); await pg.waitForTimeout(900);
   const ren = await pg.evaluate(() => DBX.proposals.find(x => x.renewal_of === 'PFBS-1022'));
@@ -842,8 +846,16 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const pe = await b.newPage({ viewport: { width: 1300, height: 950 } }); pe.on('pageerror', e => errs.push('todo est: ' + e.message));
   await pe.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort()); await pe.addInitScript(([x]) => { window.MOCK_EXTRA = x; }, [rows]);
   await pe.goto(BASE + '?u=e@x.com'); await pe.waitForTimeout(1000);
+  await pe.click('#todo-sales [data-tdg="Leads to price"]');
   assert.match(await pe.textContent('#todo-sales'), /Leads to price[\s\S]*PFBS-1020/, "estimator sees their lead");
   await pe.close();
+  // CRM start date: older items leave everyone's list
+  const ps = await b.newPage({ viewport: { width: 1300, height: 950 } }); ps.on('pageerror', e => errs.push('todo start: ' + e.message));
+  await ps.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort()); await ps.addInitScript(([x, st]) => { window.MOCK_EXTRA = x; window.MOCK_SETTINGS = { crmStart: st }; }, [rows, d(-1)]);
+  await ps.goto(BASE); await ps.waitForTimeout(1000); await ps.click('#tabs [data-tab="home"]'); await ps.waitForTimeout(300);
+  assert.ok(!(await ps.$('#todo-home [data-tdg="Jobs to schedule"]')) && !(await ps.$('#todo-home [data-tdg="Follow-ups due"]')), 'approved / sent before the start date: not on the list');
+  assert.match(await ps.textContent('#todo-home'), /counting from/);
+  await ps.close();
 }
 
 await b.close(); srv.close();
