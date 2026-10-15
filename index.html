@@ -2409,8 +2409,12 @@ function remEmail(v,p,day){ const e=invEmail(v,p), late=daysLate(v), dd=fmtD(inv
   return {to:e.to, subject:`${late>0?'Past due':'Payment reminder'}: invoice #${v.inv_no} – ${place}`,
     body:`${e.body.split('\n')[0]}\n\nThis is a friendly reminder that invoice #${v.inv_no} for ${place}, balance ${usd(invBal(v))}, ${when}. A copy is attached.\n\n${invFacts(v,p)}\n\nWe accept checks and ACH. If payment is already on its way, please disregard this message.\n\nThank you.`}; }
 async function remindBox(v, day){
-  const p=P.find(x=>x.num===v.num) || moneyPseudo(v), e=remEmail(v,p,day);
-  if(!String(e.to).includes('@')){ toast('This invoice has no billing email. Open it and add one.'); return; }
+  const p=P.find(x=>x.num===v.num) || moneyPseudo(v);
+  if(!String(v.bill_to?.email||'').includes('@')){   // imported HousecallPro invoices: take the email from the client record (AP email, else its main contact) and keep it on the invoice
+    const c=clientOf(v.bill_to?.name), em=c&&(c.billing_email || (contactsOf(c.id).find(k=>k.email)||{}).email);
+    if(em){ v.bill_to={...(v.bill_to||{}), email:em}; await sb.from('invoices').update({bill_to:v.bill_to}).eq('id',v.id); } }
+  const e=remEmail(v,p,day);
+  if(!String(e.to).includes('@')){ toast('No email for this client yet. Add the AP email on their client page (Profile → Billing), then try again.'); return; }
   const doc=await makeInvoicePdf(v,p); if(doc) doc.save(invFile(v,p));
   const d=document.createElement('dialog'); d.className='ask';
   d.innerHTML=`<h3>Reminder: invoice #${esc(v.inv_no)}</h3><div class="note" style="margin:0 0 8px">The PDF just downloaded. Attach it, then send.</div>

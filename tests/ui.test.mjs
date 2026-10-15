@@ -785,6 +785,22 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 31. A reminder for an imported HCP invoice with no email takes it from the client record and keeps it
+{
+  const day = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const inv = [{ id: 'h1', inv_no: 1510, num: null, status: 'Sent', source: 'hcp', invoice_date: day(-40), terms_days: 30, due_date: day(-10), total: 900, paid: 0, bill_to: { name: 'Fire District', email: '' }, items: [{ description: 'Windows', amount: 900 }] }];
+  const c = { id: 'c-fd', name: 'Fire District', kind: 'Business', aliases: [], active: true, billing_email: 'ap@fire.example' };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('hcp reminder: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(([x, c]) => { window.MOCK_INV = x; window.MOCK_CLIENTS = [c]; window.open = () => null; }, [inv, c]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="money"]'); await pg.waitForTimeout(300);
+  const dl = pg.waitForEvent('download', T); await pg.click('[data-mrem="h1"]'); await dl; await pg.waitForSelector('#rmTo', T);
+  assert.equal(await pg.$eval('#rmTo', e => e.value), 'ap@fire.example', 'email from the client record');
+  assert.equal(await pg.evaluate(() => DBX.invoices.find(x => x.id === 'h1').bill_to.email), 'ap@fire.example', 'saved on the invoice');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
