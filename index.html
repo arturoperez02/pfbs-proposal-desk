@@ -2396,7 +2396,7 @@ function invEmail(v,p){ const n=v.inv_no, place=invPlace(v,p), em=String(v.bill_
   const first=c?(p.contactName||'').trim().split(/\s+/)[0]:'';
   return { to:String(v.bill_to?.email||'').split(/[;,\s]+/).filter(Boolean).join('; '),
     subject:`Invoice #${n} from PF Building Services – ${place}${(()=>{ const pos=v.po_number?[v.po_number]:[...new Set((v.items||[]).map(i=>i.po).filter(Boolean))]; return pos.length?` (PO ${pos.slice(0,3).join(', ')}${pos.length>3?'…':''})`:''; })()}`,
-    body:`${first?`Hi ${first},`:'Hello,'}\n\nAttached is invoice #${n} for ${place}, due net ${num(v.terms_days)??30}. Please let me know if you have any questions.\n\n${invFacts(v,p)}\n\nThank you for your business.` }; }
+    body:`${first?`Hi ${first},`:'Hello,'}\n\nAttached is invoice #${n} for ${place}, due net ${num(v.terms_days)??30}. Please let me know if you have any questions.` }; }   // Arturo's wording (10/14): nothing else in the invoice email
 // the details block clients are used to from HousecallPro's invoice email
 function invFacts(v,p){ const jn=v.job_no||(p&&p.hcpJob)||'', addr=String(v.service_address||(p&&p.siteAddress)||'').replace(/\n+/g,', ');
   return [jn?`Job number: #${jn}`:'', `Invoice number: #${v.inv_no}`, v.service_date?`Service date: ${fmtD(v.service_date)}`:'', `Customer: ${(v.bill_to&&v.bill_to.name)||(p&&p.client)||''}`, addr?`Service address: ${addr}`:'', v.po_number?`PO #: ${v.po_number}`:'',
