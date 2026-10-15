@@ -801,6 +801,51 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 32. My to-do (per person), Data check, Profit by client / service, Contracts up for renewal
+{
+  const td = new Date(), y = td.getFullYear(), d = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const start = new Date(y - 1, td.getMonth(), td.getDate() + 30).toISOString().slice(0, 10);
+  const rows = [
+    { num: 'PFBS-1020', date_sent: d(-20), sent_by: 'Test Est', client: 'Todo Co', status: 'Lead', items: [] },
+    { num: 'PFBS-1021', date_sent: d(-10), sent_by: 'Arturo', client: 'Sched Co', status: 'Approved', date_resolved: d(-3), hcp_job: '10601', items: [{ type: 'Base', qty: 1, description: 'Exterior window cleaning', amount: 1000 }], amount: 1000, gp: 600 },
+    { num: 'PFBS-1022', date_sent: start, sent_by: 'Arturo', client: 'Renew Co', status: 'Paid', date_resolved: start, date_paid: start, term_months: 12, hcp_job: '10602',
+      items: [{ type: 'Base', qty: 1, frequency: 'Monthly', description: 'Monthly window washing', amount: 1000 }], amount: 1000, gp: 500 } ];
+  const cls = [{ id: 'c-a', name: 'Glued Address Co', kind: 'Business', aliases: [], active: true, billing_address: '1 Main DrFremont, CA 94538', billing_email: 'ap@glued.example' },
+               { id: 'c-b', name: 'No Email Co', kind: 'Business', aliases: [], active: true, billing_address: '2 Main St\nOakland, CA 94612' },
+               { id: 'c-c', name: 'Renew Co', kind: 'Business', aliases: [], active: true, billing_address: '3 Main St\nOakland, CA 94612', billing_email: 'ap@renew.example' },
+               { id: 'c-d', name: 'Renew Co LLC', kind: 'Business', aliases: [], active: true, billing_address: '3 Main St\nOakland, CA 94612', billing_email: 'ap@renew.example' }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('todo/profit: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(([x, c]) => { window.MOCK_EXTRA = x; window.MOCK_CLIENTS = c; }, [rows, cls]);
+  await pg.goto(BASE); await pg.waitForTimeout(1000);
+  await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(300);
+  if (await pg.$('#todo-home [data-tdtoggle]') && /Show all/.test(await pg.textContent('#todo-home [data-tdtoggle]'))) await pg.click('#todo-home [data-tdtoggle]');
+  const todo = await pg.textContent('#todo-home');
+  assert.match(todo, /My to-do/); assert.match(todo, /Jobs to schedule[\s\S]*PFBS-1021/, 'owner sees the job to schedule');
+  assert.ok(!/PFBS-1020/.test(todo), "the estimator's lead is not on the owner's list");
+  assert.match(await pg.textContent('#hRenew'), /Renew Co/, 'renewal list'); assert.match(await pg.textContent('#hRenew'), /\$12,600/, 'annual with the 5% increase');
+  await pg.click('[data-renew="PFBS-1022"]'); await pg.waitForTimeout(900);
+  const ren = await pg.evaluate(() => DBX.proposals.find(x => x.renewal_of === 'PFBS-1022'));
+  assert.ok(ren && Number(ren.items[0].amount) === 1050, 'renewal proposal at +5%');
+  await pg.keyboard.press('Escape'); await pg.evaluate(() => document.getElementById('closeD')?.click());
+  await pg.click('#tabs [data-tab="clients"]'); await pg.waitForTimeout(300); await pg.click('#clCheck'); await pg.waitForTimeout(150);
+  const dc = await pg.textContent('#clientsBody');
+  assert.match(dc, /No email at all[\s\S]*No Email Co/); assert.match(dc, /Addresses that look wrong[\s\S]*Glued Address Co/); assert.match(dc, /Possible duplicates[\s\S]*Renew Co LLC/);
+  await pg.click('#tabs [data-tab="sales"]'); await pg.waitForTimeout(300);
+  if (!(await pg.$('#profitBox table'))) await pg.evaluate(() => document.querySelector('#salesKind [data-kind="team"]')?.click());
+  await pg.waitForSelector('#profitBox table', T); await pg.click('#profitBox [data-pper="all"]');
+  const pt = await pg.textContent('#profitBox');
+  assert.match(pt, /Sched Co[\s\S]*\$1,000[\s\S]*\$600[\s\S]*60%/, 'planned profit and margin by client');
+  await pg.click('#profitBox [data-pby="service"]'); assert.match(await pg.textContent('#profitBox'), /Window/i, 'by service');
+  await pg.close();
+  // the estimator's own to-do on Sales
+  const pe = await b.newPage({ viewport: { width: 1300, height: 950 } }); pe.on('pageerror', e => errs.push('todo est: ' + e.message));
+  await pe.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort()); await pe.addInitScript(([x]) => { window.MOCK_EXTRA = x; }, [rows]);
+  await pe.goto(BASE + '?u=e@x.com'); await pe.waitForTimeout(1000);
+  assert.match(await pe.textContent('#todo-sales'), /Leads to price[\s\S]*PFBS-1020/, "estimator sees their lead");
+  await pe.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

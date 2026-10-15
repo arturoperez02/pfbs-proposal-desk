@@ -154,6 +154,7 @@ legend{font-family:var(--display);font-size:17px;color:var(--ink);margin-bottom:
 .clift{font-size:9px;font-weight:700;padding:0 3px;border-radius:3px;background:#dfe6f7;color:#1F2A5C} .clift.todo{background:#f0a020;color:#fff} .vscope.rentwarn{border-left:3px solid #f0a020} .vscope.rentbad{border-left:3px solid var(--bad)}
 main table thead th:not(:empty){cursor:pointer;user-select:none} main table thead th:not(:empty):hover{color:var(--ink)} th.sorted{color:var(--ink)!important} th.sorted::after{content:' ' attr(data-dir);font-size:9px}
 thead th{cursor:pointer;user-select:none} thead th:hover{color:var(--ink)} .sarrow{font-size:9px;color:var(--navy,#1F2A5C)}
+.todo{margin:0 0 14px} .todo .c{font-size:12px;background:var(--hover);border-radius:999px;padding:1px 8px;margin-left:4px;font-weight:600} .tdgroups{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px 18px;margin-top:10px} .tdg{display:flex;flex-direction:column;gap:3px;min-width:0} .tdg>b{font-size:13px;margin-bottom:2px} .tdi{display:flex;flex-direction:column;padding:5px 8px;border-radius:6px;border-left:3px solid var(--line);text-decoration:none;color:inherit;background:var(--surface)} .tdi:hover{background:var(--hover)} .tdi span{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .tdi small{color:var(--muted);font-size:12px} .tdi.warn{border-left-color:#f0a020} .tdi.bad{border-left-color:var(--bad)}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .listedit{display:grid;gap:6px;align-content:start}
 .listedit textarea{min-height:150px;font-size:14px}
@@ -357,12 +358,15 @@ td input,td select{padding:5px 8px}
         <button class="btn" id="salesLead">+ New lead</button>
       </div>
     </div>
+    <div class="todoslot" id="todo-sales"></div>
     <div id="salesBody"></div>
     <div class="cards" id="score" hidden></div>
+    <div id="profitBox"></div>
   </section>
 
   <section id="view-home" hidden>
     <div class="toolbar" style="justify-content:space-between"><div><h2>Home</h2><div class="sub">What needs doing today: proposals out, jobs to schedule and invoice, money owed. Click anything to open it.</div></div></div>
+    <div class="todoslot" id="todo-home"></div>
     <div id="homeBody"></div>
   </section>
   <section id="view-orders" hidden>
@@ -389,6 +393,7 @@ td input,td select{padding:5px 8px}
   <section id="view-money" hidden>
     <h2>Money</h2>
     <div class="sub" style="margin-bottom:12px">What clients owe, how late, what came in and what still needs depositing.</div>
+    <div class="todoslot" id="todo-money"></div>
     <div id="moneyBody"></div>
   </section>
 
@@ -1521,6 +1526,7 @@ function renderHome(){
     </div>
     <div class="card" id="hBoard"><h3>Jobs</h3><div class="board">${BOARD.map(k=>{ const L=col(k); return `<div class="bcol"><h4>${k}<span class="c">${L.length}</span></h4>${L.slice(0,12).map(card).join('')||'<div class="bmore">None</div>'}${L.length>12?`<div class="bmore">+${L.length-12} more on the Jobs tab</div>`:''}</div>`; }).join('')}</div>
       <div class="note">Paid jobs leave the board. "To invoice" = a visit has passed and isn't on an invoice yet${OPENINV?'':' (jobs invoiced in HousecallPro show here until marked Invoiced)'}.</div></div>
+    ${renewHTML()}
     <div class="hgrid">
       <div class="card"><h3>This week (${week.length})${nocrew?` <span class="flag bad">${nocrew} with no crew</span>`:''}</h3><div class="hlist">
         ${week.length?week.slice(0,25).map(v=>`<div><a data-hvis="${esc(v.id)}"><b>${esc(new Date(parse(v.visit_date)).toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric'}))}</b>${v.start_time?' '+esc(t12(v.start_time)):''} · ${v.job_no?`<span class="jobtag">#${esc(v.job_no)}</span> `:''}${esc(visLabel(v))}</a>${(v.techs||[]).length?` <span class="note" style="margin:0">— ${esc(v.techs.join(', '))}</span>`:v.kind==='job'?' <span class="flag bad">no crew</span>':''}</div>`).join(''):'<div class="note" style="margin:0">Nothing scheduled in the next 7 days.</div>'}
@@ -2745,14 +2751,34 @@ function renderClients(){
     .filter(x=>!q || [x.c.name,...(x.c.aliases||[]),...contactsOf(x.c.id).map(k=>k.name+' '+(k.email||'')),...propsOf(x.c.id).map(p=>propLabel(p)+' '+(p.address||''))].some(s=>norm(s).includes(q)));
   box.innerHTML=`<div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
       <input id="clQ" type="search" placeholder="Search clients, contacts, properties, addresses" value="${esc(clQuery)}" style="flex:1;min-width:220px" aria-label="Search clients">
+      ${(n=>`<button class="btn ghost" id="clCheck" aria-pressed="${CLCHECK}">Data check${n?` <span class="flag ${CLCHECK?'':'warn'}">${n}</span>`:' ✓'}</button>`)(dataIssues().reduce((s,g)=>s+g.rows.length,0))}
       <button class="btn" id="clNew">+ Client</button></div>
+    ${CLCHECK?dataCheckHTML():''}
     <div class="card" style="margin-top:12px"><h3>${rows.length} client${rows.length===1?'':'s'}</h3>${CL.length?'':'<div class="note">No clients yet. Owner or admin: Settings → Clients → Import HousecallPro customers.</div>'}
     <div class="tablewrap"><table><thead><tr><th>Client</th><th class="hide-sm">Contacts</th><th class="hide-sm">Properties</th><th class="r">Open</th><th class="r">Won</th>${mgr?'<th class="r">Owed</th>':''}<th class="hide-sm">Last proposal</th></tr></thead><tbody>
     ${rows.slice(0,500).map(x=>`<tr data-cl="${esc(x.c.id)}" tabindex="0"><td class="wrap"><b>${esc(x.c.name)}</b>${x.c.kind==='Homeowner'?' <span class="flag">Homeowner</span>':''}${x.c.po_required?' <span class="flag warn">PO#</span>':''}${(x.c.aliases||[]).length?`<div class="note" style="margin:0">${esc(x.c.aliases.slice(0,3).join(' · '))}</div>`:''}</td>
       <td class="hide-sm r num">${contactsOf(x.c.id).length}</td><td class="hide-sm r num">${propsOf(x.c.id).length}</td><td class="r num">${x.open||''}</td><td class="r num">${x.won||''}</td>${mgr?`<td class="r num">${x.bal>0.004?usd(x.bal):''}</td>`:''}<td class="hide-sm num">${fmtD(x.last)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No match.</td></tr>'}
     </tbody></table></div></div>`;
 }
-let CLTAB='profile';
+let CLTAB='profile', CLCHECK=false;
+// Data check: what's missing or broken in the client records (so invoices, reminders and proposals fill in right). Each row opens the client.
+const stuckAddr = a => /[a-z.](?:[A-Z][a-z]+)+,\s*[A-Z]{2}\b/.test(String(a||'').replace(/\n/g,' \n')) || (!!String(a||'').trim() && !/\b\d{5}\b/.test(a) && !/,/.test(a) && !/\n/.test(a));
+function dataIssues(){ const C=CL.filter(c=>c.active!==false), G=[];
+  const add=(title, help, rows)=>{ if(rows.length) G.push({title, help, rows}); };
+  const anyEmail=c=>!!(c.billing_email || contactsOf(c.id).some(k=>k.email));
+  add('No email at all', 'Invoices and reminders have nowhere to go. Add the AP email (Profile → Billing).', C.filter(c=>!anyEmail(c)).map(c=>({c, what:'no AP email and no contact email'})));
+  add('No AP (billing) email', 'Invoices go to the main contact instead. Add the accounts payable email if they have one.', C.filter(c=>!c.billing_email && anyEmail(c) && c.kind!=='Homeowner').map(c=>({c, what:`invoices would go to ${(contactsOf(c.id).find(k=>k.email)||{}).email}`})));
+  add('No billing address', 'Invoices print without a bill-to address.', C.filter(c=>!String(c.billing_address||'').trim()).map(c=>({c, what: propsOf(c.id).length?'add it, or tick Billing on one of its addresses':'no address on file'})));
+  const badA=[]; for(const c of C){ if(stuckAddr(c.billing_address)) badA.push({c, what:`billing: “${String(c.billing_address).replace(/\n/g,', ')}”`}); for(const pr of propsOf(c.id)) if(stuckAddr(pr.address)) badA.push({c, what:`${propLabel(pr)}: “${String(pr.address).replace(/\n/g,', ')}”`}); }
+  add('Addresses that look wrong', 'Street and city run together, or the city / ZIP is missing. Fix them so maps, crew emails and invoices read right.', badA);
+  const noK=[]; for(const c of C){ if(contactsOf(c.id).length<2) continue; for(const pr of propsOf(c.id)) if(!pr.contact_id) noK.push({c, what:`${propLabel(pr)}: no site contact picked`}); }
+  add('Addresses with no site contact', 'The client has several contacts; pick who to call at each address so proposals and service reports go to the right person.', noK);
+  const byK=new Map(); for(const c of C){ const k=coKey(c.name); if(!k) continue; if(!byK.has(k)) byK.set(k,[]); byK.get(k).push(c); }
+  add('Possible duplicates', 'Same company under two names. Keep one: move contacts/addresses over, then Archive the other.', [...byK.values()].filter(L=>L.length>1).flatMap(L=>L.map(c=>({c, what:`same as ${L.filter(x=>x!==c).map(x=>x.name).join(', ')}`}))));
+  return G; }
+function dataCheckHTML(){ const G=dataIssues();
+  return `<div class="card" style="margin-top:12px"><h3>Data check</h3>${G.length?`<div class="note" style="margin:0 0 8px">Click a row to open the client, fix it, Save changes and come back: the list updates.</div>${G.map(g=>`<h4 style="margin:12px 0 2px">${esc(g.title)} <span class="flag">${g.rows.length}</span></h4><div class="note" style="margin:0 0 6px">${esc(g.help)}</div>
+    <div class="tablewrap"><table><thead><tr><th>Client</th><th>What</th></tr></thead><tbody>${g.rows.slice(0,200).map(r=>`<tr data-cl="${esc(r.c.id)}" tabindex="0"><td class="wrap"><b>${esc(r.c.name)}</b></td><td class="wrap">${esc(r.what)}</td></tr>`).join('')}</tbody></table></div>`).join('')}`:'<div class="note" style="margin:0">Everything looks good: every client has an email, a billing address and clean addresses. ✓</div>'}</div>`; }
 const clInvoices = c => { const names=[c.name,...(c.aliases||[])].map(norm), nums=new Set(clientProposals(c).map(p=>p.num)); return (MINV||[]).filter(v=>(v.num && nums.has(v.num)) || names.includes(norm(invName(v)))); };
 function renderClient(c){
   const box=$('#clientsBody'), mgr=isManager(), canM=canMoney(), pp=clientProposals(c).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
@@ -3278,7 +3304,7 @@ function renderScore(){
   <div class="card"><h3>By lead source</h3>${table(['Lead source','Proposals','Won','Win rate','Won $'], src.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt)]), 'Pick a Lead source on new proposals and this fills in.')}</div>
   ${budgetCard()}
   ${lostToCard()}
-  <div class="card"><h3>By service</h3>${table(['Service','Proposals','Won','Win rate','Won $','Open $','Actual margin'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.wonAmt),money(r.openAmt),r.jcN?`${pct(r.actM)} <span class="note" style="margin:0">(${r.jcN} job${r.jcN===1?'':'s'})</span>`:'—']), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
+  <div class="card"><h3>Win rate by service</h3>${table(['Service','Proposals','Won','Win rate','Open $'], svc.map(r=>[esc(r.n),r.mine.length,r.won.length,pct(r.rate),money(r.openAmt)]), 'Add line descriptions on new proposals and this fills in. A proposal with several services counts under each one.')}</div>`;
 }
 
 // ---------- Leads tab: leads waiting for an estimate + BD prospects ----------
@@ -3440,7 +3466,8 @@ function renderSales(){
   $('#salesKind').hidden=!isManager(); $('#repBtn').hidden=!isManager();
   for(const b of document.querySelectorAll('#salesKind [data-kind]')) b.setAttribute('aria-pressed', b.dataset.kind===salesKind);
   const team=salesKind==='team'; $('#score').hidden=!team; $('#salesBody').hidden=team; $('#salesPeriod').hidden=team;
-  if(team){ $('#salesRep').hidden=true; $('#salesLead').hidden=true; $('#salesTitle').textContent='Sales'; $('#salesSub').textContent='Everyone side by side, all time'; return renderScore(); }
+  $('#profitBox').innerHTML='';
+  if(team){ $('#salesRep').hidden=true; $('#salesLead').hidden=true; $('#salesTitle').textContent='Sales'; $('#salesSub').textContent='Everyone side by side, all time'; renderScore(); renderProfit(); return; }
   if(salesKind==='est') return renderEstSales();
   const mgr=isManager(), names=bdNames();
   if(role()==='BD Rep') salesRep=me.name; else if(!names.includes(salesRep)) salesRep=names[0]||null;
@@ -4407,6 +4434,7 @@ $('#clientsBody').addEventListener('input', e=>{ if(e.target.id==='clQ'){ clQuer
 $('#clientsBody').addEventListener('click', async e=>{ const t=e.target, box=$('#clientsBody');
   const row=t.closest('tr[data-cl]'); if(row){ CLSEL=row.dataset.cl; CLTAB='profile'; renderClients(); window.scrollTo(0,0); return; }
   const pr=t.closest('tr[data-id]'); if(pr && !t.closest('input,button,a,textarea,select')){ openDrawer(pr.dataset.id); return; }
+  if(t.closest('#clCheck')){ CLCHECK=!CLCHECK; renderClients(); return; }
   if(t.id==='clBack'){ CLSEL=null; CLTAB='profile'; renderClients(); return; }
   if(t.id==='clKAdd'){ $('#clK').insertAdjacentHTML('beforeend', box._kRow({})); $('#clK tr:last-child input').focus(); return; }
   if(t.id==='clPAdd'){ $('#clP').insertAdjacentHTML('beforeend', box._pRow({})); $('#clP tr:last-child input').focus(); return; }
@@ -4462,7 +4490,100 @@ $('#tabs').addEventListener('click', e=>{
   show(b.dataset.tab); renderAll(); try{ sessionStorage.setItem('pfbs.tab', b.dataset.tab); }catch(_){}
 });
 function current(){ return document.querySelector('#tabs [aria-selected="true"]')?.dataset.tab || 'pipeline'; }
-function renderAll(){ const c=current(); if(c==='home') renderHome(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='clients') renderClients(); if(c==='schedule') renderSchedule(); if(c==='money') renderMoney(); if(c==='settings') renderSettings(); }
+function renderAll(){ const c=current(); if(c==='home') renderHome(); if(c==='pipeline') renderPipeline(); if(c==='sales') renderSales(); if(c==='leads') renderLeads(); if(c==='orders'){ renderJobs(); renderOrders(); } if(c==='comm') renderComm(); if(c==='clients') renderClients(); if(c==='schedule') renderSchedule(); if(c==='money') renderMoney(); if(c==='settings') renderSettings(); renderTodo(); }
+
+// ---------- Profit by client / by service (managers): won work, planned profit from pricing, actual from logged hours ----------
+let PROF_BY='client', PROF_PER='year';
+function profitRows(){ const y=today().getFullYear(), from = PROF_PER==='year' ? `${y}-01-01` : PROF_PER==='12m' ? iso(new Date(y-1, today().getMonth(), today().getDate())) : '';
+  const jobs=P.filter(p=>WON.includes(p.status) && !p.cancelledOn && (!from || String(p.dateResolved||p.dateSent||'')>=from));
+  const M=new Map(), get=k=>{ if(!M.has(k)) M.set(k,{k, jobs:new Set(), rev:0, gp:0, gpKnown:0, pass:0, aRev:0, aGP:0, aJobs:0}); return M.get(k); };
+  for(const p of jobs){ const R=wonAmt(p); if(!(R>0)) continue; const amt=num(p.amount)||0, t=estimateTotals(p);
+    const gpR = num(p.gp)!=null && amt ? num(p.gp)/amt : null, passR = t && amt ? t.passCost/amt : 0, jc=jobCompare(p);
+    const parts = PROF_BY==='client' ? [[(clientOf(p.client)||{}).name || p.client || '—', 1]]
+      : (L=>{ const tot=L.reduce((s,i)=>s+(num(i.amount)||0),0); return tot>0 ? L.map(i=>[i.service||guessService(i.description)||'Other', (num(i.amount)||0)/tot]) : [[p.service||'Other',1]]; })(countedItems(p));
+    for(const [k,f] of parts){ const g=get(k); g.jobs.add(p.num); g.rev+=R*f; g.pass+=R*passR*f; if(gpR!=null){ g.gp+=R*gpR*f; g.gpKnown+=R*f; }
+      if(jc){ g.aRev+=jc.rev*f; g.aGP+=jc.actGP*f; g.aJobs++; } } }
+  return [...M.values()].sort((a,b)=>b.rev-a.rev); }
+function renderProfit(){ const box=$('#profitBox'); if(!box || !isManager()) return; const R=profitRows(), sum=k=>R.reduce((s,r)=>s+r[k],0);
+  const m=(gp,base)=>base>0?pct(gp/base):'—', tot={rev:sum('rev'), gp:sum('gp'), gpKnown:sum('gpKnown'), pass:sum('pass'), aRev:sum('aRev'), aGP:sum('aGP')};
+  const btn=(v,l,cur,attr)=>`<button type="button" class="chip" aria-pressed="${cur===v}" ${attr}="${v}">${l}</button>`;
+  box.innerHTML=`<div class="card" style="margin-top:16px"><div class="toolbar" style="margin:0;justify-content:space-between;flex-wrap:wrap;gap:8px"><h3 style="margin:0">Profit by ${PROF_BY==='client'?'client':'service'}</h3>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${btn('client','By client',PROF_BY,'data-pby')}${btn('service','By service',PROF_BY,'data-pby')} <span style="width:8px"></span>${btn('year','This year',PROF_PER,'data-pper')}${btn('12m','Last 12 months',PROF_PER,'data-pper')}${btn('all','All time',PROF_PER,'data-pper')}</div></div>
+    <div class="note" style="margin:6px 0 8px">Won work. <b>Planned</b> = from the pricing on each job. <b>Actual</b> = jobs with hours logged (Jobs tab → Log actual hours). Margin = profit ÷ (revenue − pass-through: lifts, materials, tax). Click a heading to sort.</div>
+    <div class="tablewrap"><table><thead><tr><th>${PROF_BY==='client'?'Client':'Service'}</th><th class="r">Jobs</th><th class="r">Revenue</th><th class="r">Planned profit</th><th class="r">Planned margin</th><th class="r">Actual profit</th><th class="r">Actual margin</th></tr></thead><tbody>
+    ${R.length?R.map(r=>`<tr ${PROF_BY==='client'&&clientOf(r.k)?`data-pcl="${esc(clientOf(r.k).id)}"`:''}><td class="wrap"><b>${esc(r.k)}</b></td><td class="r num">${r.jobs.size}</td><td class="r num">${money(r.rev)}</td>
+      <td class="r num">${r.gpKnown?money(r.gp):'—'}${r.gpKnown&&r.gpKnown<r.rev-0.5?' <span class="note" style="margin:0" title="Some jobs have no pricing">*</span>':''}</td><td class="r num ${r.gpKnown&&r.gp/(r.gpKnown-r.pass*(r.gpKnown/r.rev))<S.marginFloor?'bad':''}">${r.gpKnown?m(r.gp, r.gpKnown-r.pass*(r.gpKnown/r.rev)):'—'}</td>
+      <td class="r num">${r.aJobs?money(r.aGP):'—'}</td><td class="r num ${r.aJobs&&r.aGP/(r.aRev-r.pass*(r.aRev/r.rev))<S.marginFloor?'bad':''}">${r.aJobs?m(r.aGP, r.aRev-r.pass*(r.aRev/r.rev)):'—'}</td></tr>`).join('')
+      :'<tr><td colspan="7" class="empty">No won work in this period.</td></tr>'}</tbody>
+    ${R.length?`<tfoot><tr><td><b>Total</b></td><td></td><td class="r num"><b>${money(tot.rev)}</b></td><td class="r num"><b>${money(tot.gp)}</b></td><td class="r num"><b>${m(tot.gp, tot.gpKnown-tot.pass*(tot.gpKnown/(tot.rev||1)))}</b></td><td class="r num"><b>${tot.aRev?money(tot.aGP):'—'}</b></td><td class="r num"><b>${tot.aRev?m(tot.aGP, tot.aRev-tot.pass*(tot.aRev/(tot.rev||1))):'—'}</b></td></tr></tfoot>`:''}</table></div>
+    <div class="note" style="margin:6px 0 0">* some jobs in this row have no pricing, so planned profit covers only the priced ones. Red = below the ${pct(S.marginFloor)} floor.</div></div>`; }
+document.addEventListener('click', e=>{ const b=e.target.closest && e.target.closest('#profitBox [data-pby],#profitBox [data-pper],#profitBox tr[data-pcl]'); if(!b) return;
+  if(b.dataset.pby){ PROF_BY=b.dataset.pby; renderProfit(); return; } if(b.dataset.pper){ PROF_PER=b.dataset.pper; renderProfit(); return; }
+  if(b.dataset.pcl){ CLSEL=b.dataset.pcl; CLTAB='jobs'; document.querySelector('#tabs [data-tab="clients"]')?.click(); } });
+
+// ---------- Recurring contracts up for renewal: next 90 days (and any already past), with this year's increase ----------
+function renewList(){ const td=today();
+  return P.filter(p=>activeContract(p) && renewalOf(p)).map(p=>{ const r=renewalOf(p), d=days(td, parse(r)), ren=P.find(x=>x.renewalOf===p.num && !LOST.includes(x.status)); return {p, r, d, ren}; })
+    .filter(x=>x.d<=90).sort((a,b)=>a.d-b.d); }
+function renewHTML(){ if(!isManager()) return ''; const L=renewList(); if(!L.length) return ''; const inc=incPct();
+  return `<div class="card" id="hRenew"><h3>Contracts up for renewal (${L.length})</h3><div class="note" style="margin:0 0 8px">Recurring contracts renewing in the next 90 days. <b>Start renewal</b> copies the contract into a new proposal with your ${pct(inc)} yearly increase (Settings → Margins); check it, then send.</div>
+    <div class="tablewrap"><table><thead><tr><th>Contract</th><th>Renews</th><th class="r">Now / year</th><th class="r">With +${pct(inc)}</th><th></th></tr></thead><tbody>
+    ${L.map(({p,r,d,ren})=>`<tr><td class="wrap"><a href="#" data-hopen="${esc(p.num)}"><b>${esc(p.client||'')}</b></a>${p.property?' · '+esc(p.property):''}<div class="note" style="margin:0">${esc(p.num)}${jobNoOf(p)?' · Job #'+esc(jobNoOf(p)):''}${p.frequency?' · '+esc(p.frequency):''}</div></td>
+      <td class="num"><span class="${d<0?'flag bad':d<=30?'flag warn':''}">${fmtD(r)}</span><div class="note" style="margin:0">${d<0?`${-d} days ago`:d===0?'today':`in ${d} days`}</div></td>
+      <td class="r num">${money(annual(p))}</td><td class="r num">${money((annual(p)||0)*(1+inc))}</td>
+      <td>${ren?`<a href="#" data-hopen="${esc(ren.num)}">${esc(ren.num)}</a> <span class="pill ${pillClass(ren.status)}">${esc(ren.status)}</span>`:`<button type="button" class="btn small" data-renew="${esc(p.num)}">Start renewal</button>`}</td></tr>`).join('')}
+    </tbody></table></div></div>`; }
+document.addEventListener('click', async e=>{ const b=e.target.closest && e.target.closest('[data-renew]'); if(!b) return; const src=P.find(x=>x.num===b.dataset.renew); if(!src) return;
+  b.disabled=true; const n=await requote(src, {pct:incPct()}); if(!n){ b.disabled=false; return; } await loadProposals(); openDrawer(n); });
+
+// ---------- My to-do: only what the signed-in person has to do, grouped, each line opens the thing ----------
+let TODO_OPEN=null; const dstr = x => x instanceof Date ? iso(x) : x;
+function todoGroups(){
+  if(!me) return []; const r=role(), mine=x=>x===me.name, td=iso(today()), in14=addDays(td,14), G=[];
+  const add=(title, items)=>{ if(items.length) G.push({title, items}); };
+  const prop=(p, why, cls='')=>({open:p.num, cls, text:`${p.num} · ${p.client||''}${p.property?' · '+p.property:''}`, why});
+  if(r!=='Accountant'){
+    add('Leads to price', P.filter(p=>p.status==='Lead' && mine(p.sentBy)).map(p=>prop(p, `waiting ${Math.max(0,days(parse(p.leadAt||p.createdAt||p.dateSent||td), today()))} days`, 'warn')));
+    add('Proposals to finish', P.filter(p=>p.status==='Estimating' && mine(p.sentBy)).map(p=>{ const un=countedItems(p).filter(i=>!i.estimate).length; return prop(p, un?`${un} line${un===1?'':'s'} not priced`:'ready to send for review or to the client'); }));
+    add('Follow-ups due', P.filter(p=>(mine(p.sentBy) || (r==='BD Rep' && mine(p.bdRep))) && outcome(p)==='Open' && followUp(p) && followUp(p)<=today()).map(p=>prop(p, `follow up was due ${fmtD(dstr(followUp(p)))}`, 'warn')));
+  }
+  if(isManager()){
+    add('Proposals to review', P.filter(p=>p.status==='Needs Review').map(p=>prop(p, `from ${p.sentBy||'—'}${(g=>g!=null&&g<S.marginFloor?` · margin ${pct(g)}, below the floor`:'')(marginPct(p))}`, 'warn')));
+  }
+  if(r==='BD Rep' || isManager()){
+    add('Prospects to contact today', (PROS||[]).filter(x=>touchDue(x) && (r!=='BD Rep' || mine(x.bd_rep))).map(x=>({pros:x.id, cls:'', text:`${x.company||x.name||'Prospect'}${x.property?' · '+x.property:''}`, why: x.next_touch?`next touch ${fmtD(x.next_touch)}`:'no next touch set'})));
+    if(r==='BD Rep') add('Leads waiting for an estimator', P.filter(p=>p.status==='Lead' && !p.sentBy && mine(p.bdRep)).map(p=>prop(p,'assign an estimator','warn')));
+  }
+  if(['Owner','Admin'].includes(r)){
+    add('Jobs to schedule', P.filter(p=>p.status==='Approved' && !p.cancelledOn && !p.onHoldSince && !VIS.some(v=>v.num===p.num)).map(p=>prop(p, `approved ${fmtD(p.dateResolved)}`, 'bad')));
+    add('Visits with no techs (next 2 weeks)', VIS.filter(v=>v.kind==='job' && v.status==='Scheduled' && !(v.techs||[]).length && v.visit_date>=td && v.visit_date<=in14).map(v=>({vis:v.id, cls:'bad', text:`${fmtD(v.visit_date)} · ${visLabel(v)}`, why:'pick the crew'})));
+    add('Double-booked techs (next 2 weeks)', [...dblBooked(VIS.filter(v=>!['Cancelled','Skipped'].includes(v.status) && visEnd(v)>=td && v.visit_date<=in14))].map(id=>VIS.find(v=>v.id===id)).filter(Boolean).map(v=>({vis:v.id, cls:'bad', text:`${fmtD(v.visit_date)} · ${visLabel(v)}`, why:(v.techs||[]).join(', ')})));
+    add('Lifts / rentals', P.filter(p=>WON.includes(p.status) && p.status!=='Paid' && !p.cancelledOn && rentAlerts(p).length).map(p=>prop(p, rentAlerts(p).map(a=>a[1]).join('; '), rentAlerts(p).some(a=>a[0]==='bad')?'bad':'warn')));
+    add('Jobs done, to invoice', P.filter(p=>['Approved','Scheduled'].includes(p.status) && !p.cancelledOn && jobState(p).toInv.length).map(p=>prop(p, `${jobState(p).toInv.length} visit${jobState(p).toInv.length===1?'':'s'} done`, 'warn')));
+    add('Service reports to send', (SR||[]).map(x=>({go:'orders', cls:'warn', text:`${x.client||'Report'}${x.address?' · '+x.address:''}`, why:'ready to review'})));
+  }
+  if(canMoney()){
+    add('Payment reminders to send', (MINV||[]).filter(v=>remDue(v)!=null).map(v=>({go:'money', cls:'warn', text:`Invoice #${v.inv_no} · ${invName(v)}`, why: daysLate(v)>0?`${daysLate(v)} days late · ${usd(invBal(v))}`:`due ${fmtD(invDue(v))} · ${usd(invBal(v))}`})));
+    if(r==='Accountant' || r==='Owner') add('Payments not deposited yet', (MPAY||[]).filter(x=>!x.voided && !x.deposited_on).map(x=>({go:'money', cls:'', text:`${usd(Number(x.amount))} · ${x.method||'payment'}${x.ref?' #'+x.ref:''}`, why:`received ${fmtD(String(x.received_on).slice(0,10))}`})));
+  }
+  if(isManager()){
+    add('Contracts up for renewal', P.filter(p=>renewalDue(p) && !P.some(x=>x.renewalOf===p.num && !LOST.includes(x.status))).map(p=>prop(p, `renews ${fmtD(dstr(renewalOf(p)))}`, 'warn')));
+  }
+  return G; }
+function renderTodo(){
+  const slot=document.getElementById('todo-'+current()); document.querySelectorAll('.todoslot').forEach(x=>{ if(x!==slot) x.innerHTML=''; });
+  if(!slot || !me) return; const c=current(), r=role();
+  if(c==='sales' && !['Estimator','BD Rep'].includes(r)) { slot.innerHTML=''; return; }
+  if(c==='money' && r!=='Accountant') { slot.innerHTML=''; return; }
+  const G=todoGroups(), n=G.reduce((s,g)=>s+g.items.length,0), open=TODO_OPEN??(n<=12);
+  slot.innerHTML=`<div class="card todo"><div class="toolbar" style="margin:0;justify-content:space-between"><h3 style="margin:0">My to-do <span class="c">${n}</span></h3>${n?`<button type="button" class="btn ghost small" data-tdtoggle="${open?'open':'closed'}">${open?'Show less':'Show all'}</button>`:''}</div>
+    ${!n?'<div class="note" style="margin:6px 0 0">Nothing waiting on you. 👍</div>':`<div class="tdgroups">${G.map(g=>`<div class="tdg"><b>${esc(g.title)} <span class="c">${g.items.length}</span></b>${(open?g.items:g.items.slice(0,3)).map(it=>`<a href="#" class="tdi ${it.cls}" ${it.open?`data-td-open="${esc(it.open)}"`:it.vis?`data-td-vis="${esc(it.vis)}"`:it.pros?`data-td-pros="${esc(it.pros)}"`:`data-td-go="${esc(it.go)}"`}><span>${esc(it.text)}</span><small>${esc(it.why||'')}</small></a>`).join('')}${!open&&g.items.length>3?`<div class="note" style="margin:2px 0 0">+${g.items.length-3} more</div>`:''}</div>`).join('')}</div>`}</div>`; }
+document.addEventListener('click', e=>{ const t=e.target.closest && e.target.closest('[data-tdtoggle],[data-td-open],[data-td-vis],[data-td-pros],[data-td-go]'); if(!t) return; e.preventDefault();
+  if(t.hasAttribute('data-tdtoggle')){ TODO_OPEN=t.dataset.tdtoggle!=='open'; renderTodo(); return; }
+  if(t.dataset.tdOpen) return openDrawer(t.dataset.tdOpen);
+  if(t.dataset.tdVis){ const v=VIS.find(x=>x.id===t.dataset.tdVis); if(v) visEdit(v); return; }
+  if(t.dataset.tdPros){ document.querySelector('#tabs [data-tab="leads"]')?.click(); setTimeout(()=>openProspect(+t.dataset.tdPros), 60); return; }
+  if(t.dataset.tdGo) document.querySelector(`#tabs [data-tab="${t.dataset.tdGo}"]`)?.click(); });
 
 // ---------- data ----------
 async function loadTeam(){ const {data}=await sb.from('team_members').select('*').order('name'); TEAM=data||[]; }
