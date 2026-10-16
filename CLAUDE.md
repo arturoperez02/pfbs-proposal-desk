@@ -61,6 +61,7 @@ Hosting: GitHub Pages from `main` (custom domain via `CNAME`). Pushing to `main`
   per invoice for recurring lines) plus approved change orders. Numbers continue from HousecallPro (`set_next_invoice_no`).
   Bill to = billing address + **billing (AP) email**; service reports go to the site contact instead. Clients flagged
   "requires a PO#" cannot be invoiced without one. PO# and billing typed on an invoice are saved back to the job.
+  Opening a sent / paid / void invoice shows the invoice itself like HCP (`invView`: Print · Download · Pay · Send · Edit, Job # link to the job, the document `invDocHTML`, Activity `invHistory`); drafts and Edit use the form (`invEdit(p,v,{edit:true})`).
   Invoice email body is only Arturo's wording: "Hi <first>, Attached is invoice #N for <place>, due net 30. Please let me know if you have any questions." (no details block, no closing line).
   Payments (partial allowed) are recorded once and voided, never edited or deleted; paid in full → job Paid with the
   last payment's date (commission starts). Sending an invoice moves the job to Invoiced. Invoice email: no signature.

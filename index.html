@@ -156,6 +156,12 @@ main table thead th:not(:empty){cursor:pointer;user-select:none} main table thea
 thead th{cursor:pointer;user-select:none} thead th:hover{color:var(--ink)} .sarrow{font-size:9px;color:var(--navy,#1F2A5C)}
 .snap{margin:0 0 14px} .snapgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px} .snap1{border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px} .snap1 .l{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)} .snap1 .v{font-size:22px;font-weight:700;font-family:var(--display)} .snap .up{color:var(--good);font-size:12px} .snap .down{color:var(--bad);font-size:12px}
 .todo{margin:0 0 14px} .tdchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px} .tdchip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 10px;font:inherit;font-size:13px;cursor:pointer;color:inherit;border-left:4px solid var(--line)} .tdchip.warn{border-left-color:#f0a020} .tdchip.bad{border-left-color:var(--bad)} .tdchip[aria-expanded=true]{background:var(--hover);font-weight:600} .tdg{margin-top:12px} .tdrow{display:flex;gap:6px;align-items:center;margin-top:4px} .tdrow .tdi{flex:1;min-width:0} .tdact{display:flex;gap:4px} @media (max-width:700px){ .tdrow{flex-direction:column;align-items:stretch} .tdact{justify-content:flex-end} } .todo .c{font-size:12px;background:var(--hover);border-radius:999px;padding:1px 8px;margin-left:4px;font-weight:600} .tdgroups{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px 18px;margin-top:10px} .tdg{display:flex;flex-direction:column;gap:3px;min-width:0} .tdg>b{font-size:13px;margin-bottom:2px} .tdi{display:flex;flex-direction:column;padding:5px 8px;border-radius:6px;border-left:3px solid var(--line);text-decoration:none;color:inherit;background:var(--surface)} .tdi:hover{background:var(--hover)} .tdi span{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .tdi small{color:var(--muted);font-size:12px} .tdi.warn{border-left-color:#f0a020} .tdi.bad{border-left-color:var(--bad)}
+dialog.ask.invview{width:min(1100px,97vw);max-width:none;max-height:94vh;overflow:auto;padding:0} .ivbar{position:sticky;top:0;z-index:2;background:var(--surface);display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)} .ivbar h3{margin:0} .ivjob{font-size:13px}
+.ivwrap{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px;padding:16px} .ivdoc{background:#fff;color:#1a1a1a;border:1px solid var(--line);border-radius:8px;padding:28px} .ivtop{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px} .ivk b{text-align:right;white-space:nowrap} .ivlogo{width:190px;height:auto;display:block} .ivco{font-size:12.5px;margin:8px 0 18px;color:#333} .ivbill{font-size:13.5px;line-height:1.45} .ivmail{margin-top:8px;color:#444;font-size:13px}
+.ivbox{border:1px solid #dde1ea;border-radius:6px;padding:4px 12px} .ivk{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:13px;border-bottom:1px solid #f0f2f6} .ivk span{color:#8a90a2;text-transform:uppercase;font-size:11px;letter-spacing:.05em} .ivdue{border-bottom:0;padding-top:8px} .ivdue b{font-size:18px}
+.ivsvc{margin-top:14px;font-size:13px;border-top:1px solid #dde1ea;padding-top:6px} .ivsvc span{display:block;color:#8a90a2;text-transform:uppercase;font-size:11px;letter-spacing:.05em;margin-bottom:2px} .ivlines{width:100%;margin-top:22px;border-collapse:collapse} .ivlines th,.ivlines td{padding:8px 6px;border-bottom:1px solid #eef0f4;font-size:13.5px;color:#1a1a1a;background:#fff} .ivlines tfoot td{border-bottom:0}
+.ivside{font-size:13px} .ivside h4{margin:0 0 8px} .ivh{padding:6px 0;border-bottom:1px solid var(--line)}
+@media (max-width:820px){ .ivwrap{grid-template-columns:minmax(0,1fr);padding:8px} .ivtop{grid-template-columns:minmax(0,1fr)} .ivdoc{padding:14px} dialog.ask.invview{width:100vw;max-height:100vh;overflow-x:hidden} .ivlines td,.ivlines th{padding:6px 3px} .ivdoc{overflow-wrap:anywhere} }
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .listedit{display:grid;gap:6px;align-content:start}
 .listedit textarea{min-height:150px;font-size:14px}
@@ -2491,7 +2497,8 @@ async function makeInvoicePdf(v, p){
 }
 const invFile = (v,p) => `Invoice ${v.inv_no} - ${invPlace(v,p).replace(/[\\/:*?"<>|]+/g,' ').trim()}.pdf`;
 // the editor: everything in one place, filled from the job; saving writes PO# and billing back to the job so it is typed once
-function invEdit(p, v){
+function invEdit(p, v, o={}){
+  if(v.id && v.status!=='Draft' && !o.edit) return invView(p, v);   // sent / paid / void open as the invoice itself, like HousecallPro; Edit opens this form
   const ro=v.status==='Paid'||v.status==='Void', dis=ro?'disabled':'', prior=(INV[p.num]||[]).filter(x=>x.status!=='Void'&&x.id!==v.id).reduce((s,x)=>s+(num(x.total)||0),0);
   const d=document.createElement('dialog'); d.className='ask inved'+((v.items||[]).some(i=>i.po)?' linepo':'');
   const row=it=>`<div class="invrow"><input data-f="description" list="pbSvc" value="${esc(it.description||'')}" placeholder="Service" aria-label="Service" ${dis}><input data-f="po" value="${esc(it.po||'')}" placeholder="PO #" aria-label="PO # for this service" ${dis}><input data-f="amount" type="number" step="0.01" inputmode="decimal" value="${esc(it.amount??'')}" placeholder="$" aria-label="Amount" ${dis}>${ro?'':'<button type="button" class="btn ghost small" data-a="rm" aria-label="Remove line">✕</button>'}<textarea data-f="notes" rows="1" placeholder="Notes under the line (one per line), e.g. Includes boom rental" aria-label="Notes under the line" ${dis}>${esc(it.notes||'')}</textarea></div>`;
@@ -2576,7 +2583,7 @@ function invEdit(p, v){
   });
   if(!ro) tot();
   let next=null; if(!v.id) sb.rpc('next_invoice_no').then(r=>{ if(r && r.data) next=r.data; });
-  d.showModal();
+  d.showModal(); return d;
 }
 // after the PDF downloads: the email, like proposals (Outlook adds the signature); opening it marks the invoice Sent
 function invSendBox(v,p){
@@ -2598,7 +2605,7 @@ function invSendBox(v,p){
     if(a!=='copy'){ close(); toast('Attach the downloaded PDF, then send'); }
     await invRefresh(p.num);
   });
-  d.showModal();
+  d.showModal(); return d;
 }
 async function invPay(v){
   const bal=invBal(v);
@@ -2615,6 +2622,49 @@ async function invPay(v){
   toast(amt>=bal-0.005?`Invoice #${v.inv_no} paid in full`:`Payment recorded · ${usd(Math.round((bal-amt)*100)/100)} still due`); return true;
 }
 async function invRefresh(n){ await loadInvoices(n); loadOpenInvoices(); loadMoney(); await loadProposals(); }
+
+// ---------- an invoice opens as the invoice itself (like HousecallPro): Print · Download · Pay · Send, Job # link, the document, and its history ----------
+function invDocHTML(v, p){ const lines=v.items||[], addr=a=>esc(String(a||'')).replace(/\n/g,'<br>'), jn=v.job_no||jobNoOf(p)||'', paid=num(v.paid)||0;
+  const row=(k,val)=>val?`<div class="ivk"><span>${k}</span><b>${val}</b></div>`:'';
+  return `<div class="ivdoc">
+    <div class="ivtop"><div><img src="reports-logo.jpg" alt="PF Building Services" class="ivlogo"><div class="ivco"><b>PF Building Services</b><br>${addr(invS('address'))}<br>${esc(invS('phone'))}${invS('license')?' · Lic. #'+esc(invS('license')):''}</div>
+        <div class="ivbill"><b>${esc(v.bill_to?.name||'')}</b>${v.bill_to?.address?'<br>'+addr(v.bill_to.address):''}${v.bill_to?.email?`<div class="ivmail">✉ ${esc(v.bill_to.email)}</div>`:''}</div></div>
+      <div><div class="ivbox">${row('Job', jn?'#'+esc(jn):'')}${row('Invoice', '#'+esc(v.inv_no||''))}${row('PO #', esc(v.po_number||''))}${row('Service date', v.service_date?ivDate(v.service_date):'')}${row('Invoice date', v.invoice_date?ivDate(v.invoice_date):'')}${row('Payment terms', 'Net '+esc(v.terms_days??30))}${row('Due date', invDue(v)?ivDate(invDue(v)):'')}
+        <div class="ivk ivdue"><span>Amount due</span><b>${usd(invBal(v))}</b></div></div>
+        ${v.service_address?`<div class="ivsvc"><span>Service address</span>${addr(v.service_address)}</div>`:''}</div></div>
+    <table class="ivlines"><thead><tr><th>Services</th><th class="r">Amount</th></tr></thead><tbody>
+      ${lines.map(i=>`<tr><td><b>${esc(i.description||'')}</b>${i.po?` <span class="note" style="margin:0">PO ${esc(i.po)}</span>`:''}${i.notes?`<div class="note" style="margin:2px 0 0;white-space:pre-wrap">${esc(i.notes)}</div>`:''}</td><td class="r num">${usd(i.amount)}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">No lines</td></tr>'}</tbody>
+      <tfoot><tr><td class="r">Total</td><td class="r num"><b>${usd(v.total)}</b></td></tr>${paid?`<tr><td class="r">Paid</td><td class="r num">− ${usd(paid)}</td></tr><tr><td class="r"><b>Amount due</b></td><td class="r num"><b>${usd(invBal(v))}</b></td></tr>`:''}</tfoot></table>
+    ${v.message?`<div class="note" style="margin:10px 0 0;white-space:pre-wrap">${esc(v.message)}</div>`:''}</div>`; }
+const ivDate = d => { const x=parse(d); return x ? x.toLocaleDateString('en-US',{month:'short', day:'numeric', year:'numeric'}) : ''; };
+function invHistory(v){ const L=[], at=x=>x?new Date(x).toLocaleString('en-US',{month:'numeric',day:'numeric',year:'2-digit',hour:'numeric',minute:'2-digit'}):'';
+  if(v.created_at) L.push([v.created_at, 'Invoice created']);
+  if(v.sent_at) L.push([v.sent_at, `Invoice sent${v.bill_to?.email?' to '+v.bill_to.email:''}`]);
+  for(const r of (v.reminders||[])) L.push([r.at, r.skipped?`Reminders skipped until due${r.note?': '+r.note:''}${r.by?' · '+r.by:''}`:`Payment reminder emailed${r.to?' to '+r.to:''}${r.by?' · '+r.by:''}`]);
+  for(const x of (v.payments||[])) L.push([x.created_at||x.received_on, `${x.voided?'<s>':''}Payment ${usd(x.amount)} · ${esc(x.method||'')}${x.ref?' #'+esc(x.ref):''} · received ${fmtD(x.received_on)}${x.deposited_on?' · deposited '+fmtD(x.deposited_on):''}${x.voided?'</s> (voided)':''}`]);
+  if(v.status==='Void') L.push([v.updated_at||v.created_at, `Voided${v.void_reason?': '+esc(v.void_reason):''}`]);
+  return L.filter(x=>x[0]).sort((a,b)=>String(b[0]).localeCompare(String(a[0]))).map(([t,txt])=>`<div class="ivh"><span class="note" style="margin:0">${at(t)}</span><div>${txt}</div></div>`).join('') || '<div class="note" style="margin:0">Nothing yet.</div>'; }
+function invView(p, v){
+  const real=P.some(x=>x.num===p.num), [lab,cls]=invLabel(v), jn=v.job_no||jobNoOf(p)||'', mgr=canMoney();
+  const d=document.createElement('dialog'); d.className='ask invview';
+  d.innerHTML=`<div class="ivbar"><button type="button" class="btn ghost small" data-a="x" aria-label="Back">←</button><h3>Invoice #${esc(v.inv_no||'')}</h3>${jn?(real?`<a href="#" data-a="job" class="ivjob">Job #${esc(jn)} ↗</a>`:`<span class="note" style="margin:0">Job #${esc(jn)}</span>`):''}<span class="flag ${cls}">${esc(lab)}</span>${v.source==='hcp'?'<span class="flag">from HousecallPro</span>':''}
+      <span style="flex:1"></span><button type="button" class="btn ghost small" data-a="print" title="Print">🖨 Print</button><button type="button" class="btn ghost small" data-a="dl" title="Download PDF">⬇ Download</button>
+      ${mgr&&v.status==='Sent'?'<button type="button" class="btn ghost small" data-a="pay">Pay</button>':''}${mgr&&v.status!=='Void'?`<button type="button" class="btn small" data-a="send">${v.status==='Paid'?'Email copy':'Send'}</button>`:''}${mgr&&v.status==='Sent'?'<button type="button" class="btn ghost small" data-a="edit">Edit</button>':''}</div>
+    <div class="ivwrap">${invDocHTML(v,p)}<aside class="ivside"><h4>Activity</h4>${invHistory(v)}${v.status==='Sent'&&remDue(v)!=null?`<button type="button" class="btn small" data-a="remind" style="margin-top:8px">Send reminder</button>`:''}</aside></div>`;
+  document.body.appendChild(d); const close=()=>{ d.close(); d.remove(); };
+  d.addEventListener('cancel', e=>{ e.preventDefault(); close(); });
+  d.addEventListener('click', async e=>{ const b=e.target.closest('[data-a]'); if(!b) return; e.preventDefault(); const a=b.dataset.a;
+    if(a==='x') return close();
+    if(a==='job'){ close(); return openDrawer(p.num); }
+    if(a==='print' || a==='dl'){ b.disabled=true; const doc=await makeInvoicePdf(v,p); b.disabled=false; if(!doc) return;
+      if(a==='dl') return doc.save(invFile(v,p));
+      const f=document.createElement('iframe'); f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0'; f.src=doc.output('bloburl'); document.body.appendChild(f);
+      f.onload=()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(_){ pdfPreview(doc, invFile(v,p), null); } setTimeout(()=>f.remove(), 60000); }; return; }
+    if(a==='pay'){ close(); if(await invPay(v)) await invRefresh(p.num); return; }
+    if(a==='remind'){ close(); return remindBox(v, remDue(v)); }
+    if(a==='edit'){ close(); return invEdit(p, v, {edit:true}); }
+    if(a==='send'){ close(); const f=invEdit(p, v, {edit:true}); f?.querySelector('[data-a="send"]')?.click(); return; } });
+  d.showModal(); return d; }
 async function invOpen(p, id){ if(!INV[p.num]) await loadInvoices(p.num); const v=(INV[p.num]||[]).find(x=>x.id===id); if(v) invEdit(p, v); }
 function invOpenNew(p){ if(!INVOK){ toast('Run database update 018 in Supabase first.'); return; } invEdit(p, invBlank(p)); }
 // ---------- clients, contacts, properties (update 019) ----------

@@ -509,8 +509,13 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.equal(await pg.evaluate(() => !!document.querySelector('[data-mrem="r1"]')), false, 'and it leaves the list (earlier steps are not offered again)');
   // each invoice once, clickable; filters
   assert.equal(await pg.evaluate(() => document.querySelectorAll('tr[data-mrow="r1"]').length), 1, 'each invoice listed once');
-  await pg.click('tr[data-mrow="r1"] td.wrap'); await pg.waitForSelector('dialog.inved', T);
-  assert.match(await pg.textContent('dialog.inved'), /1600/, 'clicking an invoice opens it');
+  await pg.click('tr[data-mrow="r1"] td.wrap'); await pg.waitForSelector('dialog.invview', T);
+  const iv = await pg.textContent('dialog.invview');
+  assert.match(iv, /Invoice #1600/, 'clicking an invoice opens the invoice itself, like HousecallPro');
+  assert.match(iv, /Amount due[\s\S]*\$500\.00/); assert.match(iv, /Late Payer Co[\s\S]*ap@late\.example/, 'bill-to with email');
+  assert.match(iv, /Activity[\s\S]*Payment reminder emailed/, 'history: the reminder just sent');
+  assert.ok(await pg.$('dialog.invview [data-a="print"]') && await pg.$('dialog.invview [data-a="dl"]') && await pg.$('dialog.invview [data-a="pay"]') && await pg.$('dialog.invview [data-a="send"]'), 'Print, Download, Pay, Send');
+  await pg.click('dialog.invview [data-a="edit"]'); await pg.waitForSelector('dialog.inved', T); assert.match(await pg.textContent('dialog.inved'), /1600/, 'Edit opens the form');
   await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
   await pg.click('[data-mf="Overdue"]'); assert.equal(await pg.evaluate(() => [...document.querySelectorAll('tr[data-mrow]')].map(r => r.dataset.mrow).join()), 'r1', 'overdue filter');
   await pg.close();
