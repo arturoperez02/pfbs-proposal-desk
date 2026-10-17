@@ -769,7 +769,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const pr = { num: 'PFBS-1016', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Late Lift Co', status: 'Approved', date_resolved: '2026-10-10', hcp_job: '10238', parts: [], items: [{ type: 'Base', qty: 1, description: 'Perimeter windows', amount: 9338, estimate: est }] };
   const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('late lift: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
-  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, pr);
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = [{ id: 'lv1', num: 'PFBS-1016', kind: 'job', status: 'Scheduled', visit_date: '2026-12-28', start_time: '06:00', end_time: '14:30', techs: ['Rigo Perez'], work: [], equipment: [], notes: 'Gate code 4455' }]; sessionStorage.clear(); }, pr);
   await pg.goto(BASE); await pg.waitForTimeout(900);
   await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(200);
   assert.match(await pg.textContent('#homeBody'), /Lifts \/ rentals to handle[\s\S]*Late Lift Co/, 'Home flags the lift even before it is saved on the job');
@@ -796,6 +796,14 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('[data-hopen="PFBS-1016"]'); await pg.waitForTimeout(700);
   const parts = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1016').parts || []);
   assert.equal(parts.filter(x => x.kind === 'rental').length, 1, 'opening the job does not add the lift twice');
+  // printed job sheet for the warehouse + supervisor, EN / ES
+  await pg.click('#jfSheet'); await pg.waitForSelector('#jsWrap .jspage', T);
+  let js = await pg.textContent('#jsWrap .jspage');
+  assert.ok(/Hoja de trabajo|Job sheet/.test(js) && /65' Boom Lift/.test(js) && /Sunbelt/.test(js) && /R-5521/.test(js), 'sheet shows the lift with its reservation');
+  await pg.click('#jsWrap [data-js="en"]'); js = await pg.textContent('#jsWrap .jspage');
+  assert.ok(/Job sheet/.test(js) && /Scope of work[\s\S]*Perimeter windows/.test(js) && /Back from the job/.test(js) && !/\$|9,338/.test(js) && /Gate code 4455/.test(js) && /Rigo Perez/.test(js), 'English sheet: scope, crew, notes, back-from-job, no prices');
+  await pg.click('#jsWrap [data-js="es"]'); assert.match(await pg.textContent('#jsWrap .jspage'), /Alcance del trabajo[\s\S]*Al regresar del trabajo/, 'Spanish toggle');
+  await pg.click('#jsWrap [data-js="x"]'); assert.ok(!(await pg.$('#jsWrap')), 'closes');
   await pg.close();
 }
 
