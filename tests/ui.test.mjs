@@ -283,9 +283,9 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('[data-schnew="PFBS-0990"]', T); await pg.waitForSelector('dialog.inved', T);
   await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(500);
   await pg.click('#tabs [data-tab="schedule"]', T); await pg.click('#schToday'); await pg.waitForTimeout(300);
-  await pg.click('.vchip:has-text("Demo Co")', T); await pg.waitForSelector('dialog.inved .jobno', T);
-  assert.equal(await pg.$eval('dialog.inved .jobno', e => e.textContent), 'Job #10240');
-  assert.ok(await pg.$eval('dialog.inved .jobno', e => parseFloat(getComputedStyle(e).fontSize) >= 24), 'big');
+  await pg.click('.vchip:has-text("Demo Co")', T); await pg.waitForSelector('dialog.schedpop .sp-top h3', T);
+  assert.match(await pg.$eval('dialog.schedpop .sp-top h3', e => e.textContent), /Job #10240$/);
+  assert.ok(await pg.$eval('dialog.schedpop .sp-top h3', e => parseFloat(getComputedStyle(e).fontSize) >= 20), 'big');
   await pg.close();
 }
 
@@ -487,6 +487,15 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.match(await pg.textContent('dialog.inved'), /Gate code 4321/, 'job notes shown');
   await pg.click('dialog.inved [data-a="usenotes"]');
   assert.match(await pg.$eval('dialog.inved [name="notes"]', e => e.value), /Park in back\nGate code 4321/, 'added to crew notes in one click');
+  // HCP-style: the schedule pops up with the month calendar beside the form; this job in gold; click a day to move it
+  await pg.waitForSelector('dialog.schedpop .sp-cal .sgrid', T);
+  assert.ok(await pg.$('dialog.schedpop .sp-cal .vchip.mine'), 'this job shows on the calendar');
+  const d0 = await pg.$eval('dialog.inved [name="visit_date"]', e => e.value);
+  const pick = await pg.$$eval('dialog.schedpop [data-pday]', (L, d0) => L.map(x => x.dataset.pday).find(x => x !== d0 && x.slice(0, 7) === d0.slice(0, 7)), d0);
+  await pg.click(`dialog.schedpop [data-pday="${pick}"]`);
+  assert.equal(await pg.$eval('dialog.inved [name="visit_date"]', e => e.value), pick, 'clicking a day sets the date');
+  assert.equal(await pg.$eval(`dialog.schedpop [data-pday="${pick}"]`, e => !!e.querySelector('.vchip.mine')), true, 'gold chip moves to the new day');
+  await pg.click('dialog.schedpop [data-pc="next"]'); assert.ok(await pg.$('dialog.schedpop .sp-cal .sgrid'), 'next month');
   await pg.close();
 }
 
