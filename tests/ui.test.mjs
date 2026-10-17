@@ -891,6 +891,14 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.ok(!/OMW|Start/.test(await pg.textContent('.jflow2')), 'no OMW / Start');
   pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jf="finish"]'); await pg.waitForTimeout(500);
   assert.equal(await pg.evaluate(() => DBX.visits.find(v => v.id === 'fv1').status), 'Done', 'Finish marks the visit done');
+  // UNDO above Finish and Schedule, like HCP
+  await pg.waitForSelector('[data-jfu="finish"]', T); pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jfu="finish"]'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.visits.find(v => v.id === 'fv1').status), 'Scheduled', 'Undo finish puts the visit back');
+  assert.ok(!(await pg.$('[data-jfu="finish"]')), 'no finish undo once nothing is finished');
+  pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jfu="sched"]'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.visits.filter(v => v.num === 'PFBS-1030').length), 0, 'Undo schedule takes the visit off the schedule');
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1030').status), 'Approved', 'job back to unscheduled');
+  assert.ok(await pg.$('[data-jf="sched"].now'), 'Schedule is the next step again');
   await pg.evaluate(() => document.getElementById('closeD')?.click()); await pg.waitForTimeout(200);
   await pg.click('[data-hopen="PFBS-1031"]'); await pg.waitForSelector('.jflow2', T); await pg.click('[data-jf="inv"]'); await pg.waitForSelector('dialog.inved', T);
   const dl = pg.waitForEvent('download', T); await pg.click('dialog.inved [data-a="send"]'); await dl; await pg.waitForSelector('#ivTo', T);
