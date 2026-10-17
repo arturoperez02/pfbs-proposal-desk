@@ -76,17 +76,19 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   let st = await pg.evaluate(() => { const v = DBX.invoices[0], p = DBX.proposals.find(x => x.num === 'PFBS-0970'); return { inv: v.status, job: p.status, po: p.po_number }; });
   assert.deepEqual(st, { inv: 'Sent', job: 'Invoiced', po: 'PO-4455' }, 'sent; job Invoiced; PO# saved back to the job');
   await pg.keyboard.press('Escape'); await pg.click('#tabs [data-tab="orders"]', T); await pg.waitForTimeout(500);
-  assert.match(await pg.$eval('#jobsBody', e => e.innerText), /Open invoices \(1\) · \$7,715\.00 due/);
-  await pg.click('[data-oipay]', T); await pg.waitForSelector('dialog.ask [name="amount"]', T);
+  assert.match(await pg.$eval('#jobsBody', e => e.innerText), /1 open invoice · \$7,715\.00 due/, 'Jobs only points to Money');
+  assert.ok(!(await pg.$('#jobsBody [data-oipay]')), 'no invoice list on Jobs');
+  await pg.click('#jobsBody [data-gomoney]', T); await pg.waitForTimeout(500);
+  await pg.click('[data-mpay]', T); await pg.waitForSelector('dialog.ask [name="amount"]', T);
   await pg.fill('dialog.ask [name="amount"]', '5000'); await pg.selectOption('dialog.ask [name="method"]', 'ACH'); await pg.fill('dialog.ask [name="received_on"]', '2026-10-20');
   await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
-  assert.match(await pg.$eval('#jobsBody', e => e.innerText), /\$2,715\.00/, 'partial payment leaves the balance');
-  await pg.click('[data-oipay]', T); await pg.waitForSelector('dialog.ask [name="amount"]', T);
+  assert.match(await pg.$eval('#moneyBody', e => e.innerText), /\$2,715\.00/, 'partial payment leaves the balance');
+  await pg.click('[data-mpay]', T); await pg.waitForSelector('dialog.ask [name="amount"]', T);
   assert.equal(await pg.$eval('dialog.ask [name="amount"]', e => e.value), '2715');
   await pg.fill('dialog.ask [name="received_on"]', '2026-10-28'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
   st = await pg.evaluate(() => { const v = DBX.invoices[0], p = DBX.proposals.find(x => x.num === 'PFBS-0970'); return { inv: v.status, job: p.status, paid: p.date_paid }; });
   assert.deepEqual(st, { inv: 'Paid', job: 'Paid', paid: '2026-10-28' }, 'paid in full marks the job Paid with the last payment date');
-  assert.match(await pg.$eval('#jobsBody', e => e.innerText), /No open invoices/);
+  await pg.click('#tabs [data-tab="orders"]', T); await pg.waitForTimeout(400); assert.ok(!/open invoice/i.test(await pg.$eval('#jobsBody', e => e.innerText)), 'no open-invoice line once all are paid');
   await pg.screenshot({ path: path.join(B, 'jobs_invoices.png'), fullPage: true });
   await pg.close();
 }

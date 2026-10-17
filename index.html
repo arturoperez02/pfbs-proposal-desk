@@ -1692,13 +1692,7 @@ function renderJobs(){
     <div class="tablewrap"><table><thead><tr><th>Job</th><th class="r">Per month</th><th class="hide-sm">Estimator</th><th class="r">Margin</th><th>Issue</th></tr></thead><tbody>
     ${chk.length?chk.map(({p,h})=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="r num">${money(monthlyValue(p))}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${h.m!=null?`<b class="${h.kind==='low'?'down':''}">${pct(h.m)}</b>`:'—'}</td><td class="wrap"><span class="flag ${h.cls}">${esc(h.text)}</span></td></tr>`).join('')
       : '<tr><td colspan="5" class="empty">All recurring contracts look healthy.</td></tr>'}</tbody></table></div></div>
-  ${OPENINV?`<div class="card"><h3>Open invoices (${OI.length})${OI.length?` · ${usd(oiDue)} due`:''}</h3>
-    <div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Job</th><th class="hide-sm">Bill to</th><th>Due</th><th class="r">Balance</th><th></th></tr></thead><tbody>
-    ${OI.length?OI.map(v=>{ const p=P.find(x=>x.num===v.num), [lab,cls]=invLabel(v); return `<tr><td class="num"><b>#${esc(v.inv_no)}</b><div><span class="flag ${cls}">${esc(lab)}</span></div></td>
-      <td class="wrap">${p?`<a href="#" data-open="${esc(p.num)}">${job(p)}</a>`:esc(v.num||'')}</td><td class="hide-sm wrap">${esc(v.bill_to?.name||'')}</td><td class="num">${fmtD(invDue(v))}</td>
-      <td class="r num">${usd(invBal(v))}${num(v.paid)>0?`<div class="note" style="margin:0">of ${usd(v.total)}</div>`:''}</td><td>${isManager()?`<button type="button" class="btn small" data-oipay="${esc(v.id)}">Record payment</button>`:''}</td></tr>`; }).join('')
-      : '<tr><td colspan="6" class="empty">No open invoices.</td></tr>'}</tbody></table></div>
-    <div class="note">Sent invoices with money still due, oldest due date first. Paid in full marks the job Paid with its date paid, so commission starts.</div></div>`:''}
+  ${OPENINV&&OI.length?`<div class="card"><div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0"><span><b>${OI.length} open invoice${OI.length===1?'':'s'}</b> · ${usd(oiDue)} due</span>${$('#moneyTab')&&!$('#moneyTab').hidden?'<button type="button" class="btn ghost small" data-gomoney>Open in Money →</button>':''}</div></div>`:''}
   <div class="card"><h3>${OPENINV?'Invoiced in HousecallPro':'Waiting on payment'} (${inv.length})</h3>
     <div class="note" style="margin:0 0 8px">Invoiced jobs. Match them to paid invoices in HousecallPro by the <b>HCP job #</b>, then click Paid. Commission starts from the date paid.</div>
     <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th>HCP job #</th><th class="r">Amount</th><th class="hide-sm">Estimator</th><th>Date paid</th><th></th></tr></thead><tbody>
@@ -1717,7 +1711,7 @@ function renderJobs(){
 $('#jobsBody').addEventListener('click', async e=>{
   const sn=e.target.closest('[data-schnew]'); if(sn){ const p=P.find(x=>x.num===sn.dataset.schnew); if(p) visNewFor(p); return; }
   const ni=e.target.closest('[data-invnew]'); if(ni){ await openDrawer(ni.dataset.invnew); await loadInvoices(ni.dataset.invnew); if(draft) invOpenNew(draft); return; }
-  const op=e.target.closest('[data-oipay]'); if(op){ const v=(OPENINV||[]).find(x=>x.id===op.dataset.oipay); if(v && await invPay(v)) invRefresh(v.num); return; }
+  if(e.target.closest('[data-gomoney]')){ $('#moneyTab').click(); return; }
   const o=e.target.closest('[data-open]'); if(o){ e.preventDefault(); openDrawer(o.dataset.open); return; }
   const pb=e.target.closest('[data-paid]');
   if(pb){ const p=P.find(x=>x.num===pb.dataset.paid); if(!p) return; const d=pb.closest('tr').querySelector('[data-pd]').value||iso(today());
