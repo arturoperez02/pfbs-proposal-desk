@@ -1237,6 +1237,32 @@ function partsHTML(p, ed){
       <span>${safeLink(x.link)?`<a class="btn ghost small" href="${esc(safeLink(x.link))}" target="_blank" rel="noopener">Open link ↗</a>`:''}${ed?` <button type="button" class="btn ghost small" data-ptdel="${i}">Remove</button>`:''}</span></div>
   </div>`).join('')}</div>${ed?'<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="ptAdd">+ Part</button></div>':''}`;
 }
+function rentStamp(x, v){ const d=iso(today()); x.status=v;
+  if(v==='Reserved'){ x.reservedOn=x.reservedOn||d; x.reservedBy=x.reservedBy||me.name; }
+  if(v==='Delivered'){ x.deliveredOn=x.deliveredOn||d; x.reservedOn=x.reservedOn||d; }
+  if(v==='Off-rent called'){ x.offRentOn=x.offRentOn||d; x.offRentBy=x.offRentBy||me.name; }
+  if(v==='Picked up'){ x.pickedUpOn=x.pickedUpOn||d; x.offRentOn=x.offRentOn||d; }
+  if(v==='To reserve'){ ['reservedOn','reservedBy','deliveredOn','offRentOn','offRentBy','pickedUpOn'].forEach(f=>delete x[f]); } }
+// Parts & rentals list: update one rental in a pop-up, saved straight onto the job (no need to open it)
+const RENT_NEXT={'To reserve':'Reserved','Reserved':'Delivered','Delivered':'Off-rent called','Off-rent called':'Picked up','Picked up':'Picked up'};
+async function rentQuick(jn, ri){
+  const p=P.find(x=>x.num===jn); if(!p) return; const R=jobRentals(p), x0=R[ri]; if(!x0) return;
+  const st0=x0.status||'To reserve', nx=RENT_NEXT[st0]||st0, f=(k,l,type='text')=>`<label class="f">${l}<input name="${k}" type="${type}" ${type==='number'?'step="any"':''} value="${esc(x0[k]??'')}"></label>`;
+  const r=await formDialog(`${esc(x0.desc||'Lift rental')} · ${esc(p.hcpJob?'Job #'+p.hcpJob:p.num)}`,
+    `<div class="note" style="margin:0 0 8px">${esc(p.client||'')}${p.property?' · '+esc(p.property):''}${x0.estCost!=null?` · estimated ${usd(x0.estCost)}`:''}</div>
+     <label class="f">Status<select name="status">${RENT_ST.map(v=>`<option ${v===nx?'selected':''}>${v}</option>`).join('')}</select></label>
+     <div class="grid2">${f('vendor','Rental company')}${f('vendorPhone','Branch phone','tel')}${f('reservationNo','Reservation / contract #')}${f('deliveryDate','Delivery date','date')}
+     ${f('offRentDate','Planned off-rent date','date')}${f('offRentNo','Off-rent (termination) #')}${f('finalCost','Final invoice $','number')}${f('notes','Notes')}</div>`, 'Save to the job');
+  if(!r) return;
+  const stored=(p.parts||[]).some(isRent), parts=structuredClone(stored ? (p.parts||[]) : [...(p.parts||[]), ...R]);
+  const idx=stored ? parts.map((x,i)=>isRent(x)?i:-1).filter(i=>i>=0)[ri] : (p.parts||[]).length+ri, x=parts[idx];
+  for(const k of ['vendor','vendorPhone','reservationNo','deliveryDate','offRentDate','offRentNo','notes']) x[k]=String(r[k]||'').trim();
+  x.finalCost=num(r.finalCost); if(r.status!==st0) rentStamp(x, r.status);
+  const {error}=await sb.from('proposals').update({parts}).eq('num',jn); if(error){ toast(error.message); return; }
+  p.parts=parts; if(draft&&draft.num===jn) draft.parts=structuredClone(parts);
+  await addActivity(jn,'note',`Rental: ${x.desc} → ${x.status}${x.reservationNo?' (reservation '+x.reservationNo+')':''}${x.offRentNo?' (off-rent # '+x.offRentNo+')':''}`);
+  toast(`${x.desc}: ${x.status}`); renderAll();
+}
 async function saveParts(note){
   const {error}=await sb.from('proposals').update({parts:draft.parts, buyer:draft.buyer||null}).eq('num',draft.num);
   if(error){ toast(/column|schema/i.test(error.message)?'Run database update 009 to turn on Parts to order.':error.message); return false; }
@@ -1268,12 +1294,7 @@ function rentalsTrackHTML(p, ed){
 }
 $('#drawer').addEventListener('change', async e=>{ const t=e.target; if(!draft||t.dataset.rt==null) return;
   const [i,k]=t.dataset.rt.split('.'), x=draft.parts[+i]; x[k]= ['qty','finalCost'].includes(k) ? num(t.value) : t.value.trim(); let note=null;
-  if(k==='status'){ const v=t.value, d=iso(today());
-    if(v==='Reserved'){ x.reservedOn=x.reservedOn||d; x.reservedBy=x.reservedBy||me.name; }
-    if(v==='Delivered'){ x.deliveredOn=x.deliveredOn||d; x.reservedOn=x.reservedOn||d; }
-    if(v==='Off-rent called'){ x.offRentOn=x.offRentOn||d; x.offRentBy=x.offRentBy||me.name; }
-    if(v==='Picked up'){ x.pickedUpOn=x.pickedUpOn||d; x.offRentOn=x.offRentOn||d; }
-    if(v==='To reserve'){ ['reservedOn','reservedBy','deliveredOn','offRentOn','offRentBy','pickedUpOn'].forEach(f=>delete x[f]); }
+  if(k==='status'){ const v=t.value; rentStamp(x, v);
     note=`Rental: ${x.desc} → ${v}${v==='Reserved'&&x.reservationNo?' (reservation '+x.reservationNo+')':''}${v==='Off-rent called'&&x.offRentNo?' (off-rent # '+x.offRentNo+')':''}`; }
   if(k==='offRentNo' && x.offRentNo) note=`Rental: ${x.desc} off-rent # ${x.offRentNo}`;
   if(k==='finalCost' && x.finalCost!=null) note=`Rental: ${x.desc} final invoice ${usd(x.finalCost)}`;
@@ -1632,7 +1653,7 @@ async function loadPendingReports(){
 function renderOrders(){
   const jobs=P.filter(p=>outcome(p)==='Won');
   const R=[], Pt=[];
-  for(const p of jobs){ jobRentals(p).forEach(x=>R.push({p,x})); (p.parts||[]).forEach(x=>{ if(!isRent(x)) Pt.push({p,x}); }); }   // rentals include a lift still only in the pricing
+  for(const p of jobs){ jobRentals(p).forEach((x,ri)=>R.push({p,x,ri})); (p.parts||[]).forEach(x=>{ if(!isRent(x)) Pt.push({p,x}); }); }   // rentals include a lift still only in the pricing
   const rentAct=({p,x})=>!!rentAlert(p,x), rentOpen=({x})=>(x.status||'To reserve')!=='Picked up' || num(x.finalCost)==null;
   const partAct=({p,x})=>(x.status||'To order')==='To order', partOpen=({x})=>(x.status||'To order')!=='Received';
   const F={'Needs action':[rentAct,partAct],'Open':[rentOpen,partOpen],'All':[()=>true,()=>true]};
@@ -1642,7 +1663,7 @@ function renderOrders(){
   const job=p=>{ const jn=p.hcpJob||(VIS.find(v=>v.num===p.num && v.job_no)||{}).job_no; return `${jn?`<span class="jobtag">#${esc(jn)}</span> `:''}<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`; };
   $('#ordersBody').innerHTML = `<div class="card"><h3>Lift &amp; equipment rentals (${rr.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>Job</th><th>Equipment</th><th class="hide-sm">Rental company</th><th>Status</th><th class="hide-sm">Delivery</th><th class="hide-sm">Reservation #</th><th class="hide-sm">Off-rent #</th><th>Needs</th></tr></thead><tbody>
-    ${rr.length?rr.map(({p,x})=>{ const a=rentAlert(p,x); return `<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td>${esc(x.desc)}</td><td class="hide-sm">${esc(x.vendor||'')}</td><td><span class="pill ${(x.status||'To reserve')==='Picked up'?'p-won':(x.status||'To reserve')==='To reserve'?'p-open':'p-review'}">${esc(x.status||'To reserve')}</span></td><td class="hide-sm num">${fmtD(x.deliveryDate)}</td><td class="hide-sm">${esc(x.reservationNo||'')}</td><td class="hide-sm">${esc(x.offRentNo||'')}</td><td>${a?`<span class="flag ${a[0]}">${esc(a[1])}</span>`:'—'}</td></tr>`; }).join('')
+    ${rr.length?rr.map(({p,x,ri})=>{ const a=rentAlert(p,x); return `<tr data-rq="${esc(p.num)}" data-ri="${ri}" tabindex="0" style="cursor:pointer" title="Update this rental"><td class="wrap"><a href="#" data-open="${esc(p.num)}" title="Open the job">${job(p)}</a></td><td>${esc(x.desc)}</td><td class="hide-sm">${esc(x.vendor||'')}</td><td><span class="pill ${(x.status||'To reserve')==='Picked up'?'p-won':(x.status||'To reserve')==='To reserve'?'p-open':'p-review'}">${esc(x.status||'To reserve')}</span></td><td class="hide-sm num">${fmtD(x.deliveryDate)}</td><td class="hide-sm">${esc(x.reservationNo||'')}</td><td class="hide-sm">${esc(x.offRentNo||'')}</td><td>${a?`<span class="flag ${a[0]}">${esc(a[1])}</span>`:'—'}</td></tr>`; }).join('')
       : `<tr><td colspan="8" class="empty">${ordFilter==='Needs action'?'Nothing needs action on rentals.':'No rentals here.'}</td></tr>`}</tbody></table></div>
     <div class="note">Red: costs money or blocks the job (job done but still on rent, delivery soon but not reserved, off-rent called without a number).</div></div>
   <div class="card" style="margin-top:16px"><h3>Parts (${pp.length})</h3>
@@ -1651,7 +1672,9 @@ function renderOrders(){
       : `<tr><td colspan="8" class="empty">${ordFilter==='Needs action'?'No parts waiting to be ordered.':'No parts here.'}</td></tr>`}</tbody></table></div></div>`;
 }
 $('#ordChips').addEventListener('click', e=>{ const b=e.target.closest('[data-of]'); if(b){ ordFilter=b.dataset.of; renderOrders(); } });
-$('#ordersBody').addEventListener('click', e=>{ if(e.target.closest('a')) return; const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
+$('#ordersBody').addEventListener('click', e=>{ const o=e.target.closest('a[data-open]'); if(o){ e.preventDefault(); openDrawer(o.dataset.open); return; } if(e.target.closest('a')) return;
+  const q=e.target.closest('tr[data-rq]'); if(q){ if(isManager()) rentQuick(q.dataset.rq, +q.dataset.ri); else openDrawer(q.dataset.rq); return; }
+  const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); });
 $('#ordersBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); } });
 
 
@@ -1693,13 +1716,13 @@ function renderJobs(){
     ${chk.length?chk.map(({p,h})=>`<tr data-id="${esc(p.num)}" tabindex="0"><td class="wrap">${job(p)}</td><td class="r num">${money(monthlyValue(p))}</td><td class="hide-sm">${esc(p.sentBy||'')}</td><td class="r num">${h.m!=null?`<b class="${h.kind==='low'?'down':''}">${pct(h.m)}</b>`:'—'}</td><td class="wrap"><span class="flag ${h.cls}">${esc(h.text)}</span></td></tr>`).join('')
       : '<tr><td colspan="5" class="empty">All recurring contracts look healthy.</td></tr>'}</tbody></table></div></div>
   ${OPENINV&&OI.length?`<div class="card"><div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0"><span><b>${OI.length} open invoice${OI.length===1?'':'s'}</b> · ${usd(oiDue)} due</span>${$('#moneyTab')&&!$('#moneyTab').hidden?'<button type="button" class="btn ghost small" data-gomoney>Open in Money →</button>':''}</div></div>`:''}
-  <div class="card"><h3>${OPENINV?'Invoiced in HousecallPro':'Waiting on payment'} (${inv.length})</h3>
+  ${inv.length?`<div class="card"><h3>${OPENINV?'Invoiced in HousecallPro':'Waiting on payment'} (${inv.length})</h3>
     <div class="note" style="margin:0 0 8px">Invoiced jobs. Match them to paid invoices in HousecallPro by the <b>HCP job #</b>, then click Paid. Commission starts from the date paid.</div>
     <div class="tablewrap"><table class="qatable"><thead><tr><th>Job</th><th>HCP job #</th><th class="r">Amount</th><th class="hide-sm">Estimator</th><th>Date paid</th><th></th></tr></thead><tbody>
     ${inv.length?inv.map(p=>`<tr data-prow="${esc(p.num)}"><td class="wrap"><a href="#" data-open="${esc(p.num)}">${job(p)}</a></td><td class="num"><b>${esc(p.hcpJob||'—')}</b></td><td class="r num">${money(isRecurring(p)?monthlyValue(p):p.amount)}${isRecurring(p)?'<div class="note" style="margin:0">first month</div>':''}</td><td class="hide-sm">${esc(p.sentBy||'')}</td>
       <td><input class="qa qd" type="date" data-pd value="${iso(today())}" aria-label="Date paid for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}></td><td>${canEditRow(p)?`<button class="btn small" data-paid="${esc(p.num)}">Paid</button>`:''}</td></tr>`).join('')
       : '<tr><td colspan="6" class="empty">Nothing waiting on payment.</td></tr>'}</tbody></table></div>
-    <div class="note">Recurring contracts: mark Paid when the first monthly invoice is paid; later months are tracked in HousecallPro.</div></div>
+    <div class="note">Recurring contracts: mark Paid when the first monthly invoice is paid; later months are tracked in HousecallPro.</div></div>`:''}
   <div class="card"><h3>Service reports to send (${SR.length+nsr2.length})</h3>
     <div class="tablewrap"><table><thead><tr><th>Job</th><th>Report</th><th class="hide-sm">Service dates</th><th></th></tr></thead><tbody>
     ${SR.map(r=>{ const p=r.num&&P.find(x=>x.num===r.num); return `<tr><td class="wrap">${p?job(p):`<span class="note" style="margin:0">${esc(r.client||'No client yet')}${r.address?' · '+esc(r.address):''}</span>`}</td><td><span class="flag warn">Ready to review</span></td><td class="hide-sm num">${esc(r.service_dates||'')}</td><td><a class="btn small" href="reports.html#/r/${encodeURIComponent(r.id)}" target="_blank" rel="noopener">Review</a></td></tr>`; }).join('')}

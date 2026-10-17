@@ -775,10 +775,19 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.match(await pg.textContent('#homeBody'), /Lifts \/ rentals to handle[\s\S]*Late Lift Co/, 'Home flags the lift even before it is saved on the job');
   await pg.click('#tabs [data-tab="orders"]'); await pg.waitForTimeout(300);
   assert.match(await pg.textContent('#ordersBody'), /Late Lift Co[\s\S]*65' Boom Lift[\s\S]*Not reserved yet/, 'Parts & rentals lists it too');
+  // reserve it right from the list: pop-up, saved onto the job, no need to open it
+  await pg.click('#ordersBody tr[data-rq="PFBS-1016"] td:nth-child(2)'); await pg.waitForSelector('dialog.ask [name="reservationNo"]', T);
+  assert.equal(await pg.$eval('dialog.ask [name="status"]', e => e.value), 'Reserved', 'next step is preselected');
+  await pg.fill('dialog.ask [name="vendor"]', 'Sunbelt'); await pg.fill('dialog.ask [name="reservationNo"]', 'R-5521'); await pg.fill('dialog.ask [name="deliveryDate"]', '2026-12-27');
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(500);
+  const rq = await pg.evaluate(() => (DBX.proposals.find(x => x.num === 'PFBS-1016').parts || []).find(x => x.kind === 'rental'));
+  assert.ok(rq && rq.status === 'Reserved' && rq.reservationNo === 'R-5521' && rq.vendor === 'Sunbelt' && rq.deliveryDate === '2026-12-27' && rq.reservedOn, 'saved on the job as Reserved');
+  assert.ok(await pg.$('#view-orders:not([hidden])') && !(await pg.$('#drawer:not([hidden])')), 'stayed on the list');
+  assert.doesNotMatch(await pg.textContent('#ordersBody'), /Not reserved yet/, 'no longer needs action');
   await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(200);
   await pg.click('[data-hopen="PFBS-1016"]'); await pg.waitForTimeout(700);
   const parts = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1016').parts || []);
-  assert.ok(parts.some(x => x.kind === 'rental' && x.status === 'To reserve' && /Boom Lift/.test(x.desc)), 'opening the job saves the lift as To reserve');
+  assert.equal(parts.filter(x => x.kind === 'rental').length, 1, 'opening the job does not add the lift twice');
   await pg.close();
 }
 
