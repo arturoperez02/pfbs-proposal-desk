@@ -933,6 +933,8 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.evaluate(() => document.getElementById('closeD')?.click()); await pg.waitForTimeout(200);
   await pg.click('#tabs [data-tab="orders"]'); await pg.waitForTimeout(400);
   assert.match(await pg.$eval('#jobsBody', e => e.innerText), /Service reports to send \(\d+\)[\s\S]*PFBS-1030/, 'finished job is on Service reports to send');
+  assert.ok(await pg.$('#jobsBody tr[data-qrow="PFBS-1030"]'), 'finished job is on Log actual hours');
+  assert.equal(await pg.$eval('#jobsBody tr[data-qrow="PFBS-1030"] [data-qa="start"]', e => e.value), d(-1), 'start date filled from the schedule');
   await pg.click('#tabs [data-tab="home"]'); await pg.click('[data-hopen="PFBS-1030"]'); await pg.waitForSelector('.jflow2', T);
   // UNDO above Finish and Schedule, like HCP
   await pg.waitForSelector('[data-jfu="finish"]', T); pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jfu="finish"]'); await pg.waitForTimeout(500);

@@ -1701,7 +1701,7 @@ $('#ordersBody').addEventListener('keydown', e=>{ if(e.key==='Enter'){ const r=e
 // ---------- Jobs tab: approved work, hours to log (office / project manager) ----------
 function renderJobs(){
   const up=P.filter(p=>['Approved','Scheduled'].includes(p.status) && !p.cancelledOn).sort((a,b)=>(a.status==='Approved'?0:1)-(b.status==='Approved'?0:1) || String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
-  const hrs=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !hasActuals(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
+  const hrs=P.filter(p=>(['Invoiced','Paid'].includes(p.status) || (WON.includes(p.status) && jobFinished(p))) && !hasActuals(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   const job=p=>{ const jn=p.hcpJob||(VIS.find(v=>v.num===p.num && v.job_no)||{}).job_no; return `${jn?`<span class="jobtag">#${esc(jn)}</span> `:''}<span class="pnum">${esc(p.num)}</span> <span class="note" style="margin:0">${esc(p.client)}${p.property?' · '+esc(p.property):''}</span>`; };
   const needs=p=>{ const n=[]; const po=partsOpen(p), ra=rentAlerts(p);
     if(p.onHoldSince) n.push(`<span class="flag bad">On hold${p.onHoldReason?': '+esc(p.onHoldReason):''}</span>`);
@@ -1710,7 +1710,8 @@ function renderJobs(){
     if(po) n.push(`<span class="flag ${partsLate(p)?'bad':'warn'}">${po} part${po===1?'':'s'} to order</span>`);
     for(const a of ra) n.push(`<span class="flag ${a[0]}">${esc(a[1])}</span>`);
     return n.join('<br>') || '<span class="note" style="margin:0">Ready</span>'; };
-  const dcell=(p,k)=>`<input class="qa qd" data-qa="${k}" type="date" aria-label="${k==='start'?'Start date':'Finish date'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
+  const vdates=p=>{ const d=jobVisits(p).filter(v=>v.status==='Done'); return d.length?[d[0].visit_date, visEnd(d[d.length-1])]:['','']; };   // from the schedule: type it once
+  const dcell=(p,k)=>`<input class="qa qd" data-qa="${k}" type="date" value="${esc(vdates(p)[k==='start'?0:1]||'')}" aria-label="${k==='start'?'Start date':'Finish date'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
   const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='techs'?'Techs':k==='hpt'?'Hours each':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
   const OI=(OPENINV||[]).slice().sort((a,b)=>String(invDue(a)).localeCompare(String(invDue(b)))), oiDue=OI.reduce((s,v)=>s+invBal(v),0);
   const inv=P.filter(p=>p.status==='Invoiced' && !OI.some(v=>v.num===p.num) && !(INV[p.num]||[]).some(v=>v.status!=='Void')).sort((a,b)=>String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
