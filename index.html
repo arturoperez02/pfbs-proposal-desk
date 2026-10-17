@@ -1536,6 +1536,9 @@ function jobState(p){
           : (toInv.length || (p.status==='Scheduled' && vs.length && !next)) ? 'To invoice' : 'Scheduled';
   return {vs, past, next, toInv, col};
 }
+// a one-time job needs a service report once it's finished (Finish clicked / visits Done) or invoiced, until the report is sent
+const jobFinished = p => { const vs=jobVisits(p); return vs.length>0 && vs.some(v=>v.status==='Done') && vs.every(v=>['Done','Skipped'].includes(v.status)); };
+const needsReport = p => !p.reportSentOn && !isRecurring(p) && !p.cancelledOn && (['Invoiced','Paid'].includes(p.status) || (WON.includes(p.status) && jobFinished(p)));
 function jobFlowHTML(p){
   const st=jobState(p), S0=p.status, inv=(INV[p.num]||[]).filter(v=>v.status!=='Void'), lastInv=inv[inv.length-1], openInv=inv.find(v=>v.status==='Sent');
   const after = k => ['Approved','Scheduled','Invoiced','Paid'].indexOf(S0) >= k;
@@ -1551,7 +1554,7 @@ function jobFlowHTML(p){
   const m=isManager(), b=[];
   if(m && !jobNoOf(p)) b.push('<button type="button" class="btn small" id="jfJobNo">Give it a job #</button>');
   if(m && !p.onHoldSince){
-    if((st.past.length || after(2)) && !p.reportSentOn && !isRecurring(p)) b.push(`<a class="btn ghost small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">Service report</a>`);
+    if((st.past.length || after(2) || doneV.length) && !p.reportSentOn && !isRecurring(p)) b.push(`<a class="btn ghost small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">Service report</a>`);
   }
   if(m && !['Paid'].includes(S0)) b.push(`<button type="button" class="btn ghost small" id="jfHold">${p.onHoldSince?'Take off hold':'Put on hold'}</button>`);
   return `${p.onHoldSince?`<div class="holdline"><b>On hold</b> since ${fmtD(p.onHoldSince)}${p.onHoldReason?': '+esc(p.onHoldReason):''}</div>`:''}
@@ -1618,7 +1621,7 @@ function renderHome(){
   const est=P.filter(p=>['Sent'].includes(p.status)), rev=P.filter(p=>p.status==='Needs Review'), drafts=P.filter(p=>p.status==='Estimating'), leads=P.filter(p=>p.status==='Lead');
   const jobs=P.filter(p=>['Approved','Scheduled','Invoiced'].includes(p.status) && !p.cancelledOn).map(p=>({p, s:jobState(p)}));
   const OI=OPENINV||[], due=OI.reduce((a,v)=>a+invBal(v),0), od=OI.filter(v=>invDue(v) && invDue(v)<td), odAmt=od.reduce((a,v)=>a+invBal(v),0);
-  const nsr=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !p.reportSentOn && !isRecurring(p) && !SR.some(r=>r.num===p.num)).length + SR.length;
+  const nsr=P.filter(p=>needsReport(p) && !SR.some(r=>r.num===p.num)).length + SR.length;
   const col=k=>jobs.filter(j=>j.s.col===k);
   const kpi=(go,n,l,cls='')=>`<button type="button" data-go="${go}"><span class="n ${cls}">${n}</span><span class="l">${l}</span></button>`;
   const card=({p,s})=>{ const jn=jobNoOf(p); return `<button type="button" class="bcard" data-hopen="${esc(p.num)}">${jn?`<span class="jobtag">#${esc(jn)}</span> `:''}<b>${esc(p.client||'')}</b>
@@ -1711,7 +1714,7 @@ function renderJobs(){
   const cell=(p,k,ph)=>`<input class="qa" data-qa="${k}" type="number" step="any" inputmode="decimal" placeholder="${esc(ph)}" aria-label="${k==='hrs'?'Total tech hours':k==='techs'?'Techs':k==='hpt'?'Hours each':k==='rent'?'Lift / sub $':k==='mat'?'Materials $':'Other $'} for ${esc(p.num)}" ${canEditRow(p)?'':'disabled'}>`;
   const OI=(OPENINV||[]).slice().sort((a,b)=>String(invDue(a)).localeCompare(String(invDue(b)))), oiDue=OI.reduce((s,v)=>s+invBal(v),0);
   const inv=P.filter(p=>p.status==='Invoiced' && !OI.some(v=>v.num===p.num) && !(INV[p.num]||[]).some(v=>v.status!=='Void')).sort((a,b)=>String(a.dateResolved||'').localeCompare(String(b.dateResolved||'')));
-  const nsr=P.filter(p=>['Invoiced','Paid'].includes(p.status) && !p.reportSentOn && !isRecurring(p)).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
+  const nsr=P.filter(needsReport).sort((a,b)=>String(b.num).localeCompare(String(a.num)));
   const nsr2=nsr.filter(p=>!SR.some(r=>r.num===p.num));
   const chk=P.map(p=>({p,h:contractHealth(p)})).filter(x=>x.h && x.h.kind!=='ok').sort((a,b)=>(a.h.kind==='low'?0:1)-(b.h.kind==='low'?0:1));
   $('#jobsBody').innerHTML = `<div class="cards">

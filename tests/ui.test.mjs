@@ -929,6 +929,11 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.ok(!/OMW|Start/.test(await pg.textContent('.jflow2')), 'no OMW / Start');
   pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jf="finish"]'); await pg.waitForTimeout(500);
   assert.equal(await pg.evaluate(() => DBX.visits.find(v => v.id === 'fv1').status), 'Done', 'Finish marks the visit done');
+  assert.ok(await pg.$('#jfBox a[href*="reports.html?num=PFBS-1030"]'), 'finished job offers the service report');
+  await pg.evaluate(() => document.getElementById('closeD')?.click()); await pg.waitForTimeout(200);
+  await pg.click('#tabs [data-tab="orders"]'); await pg.waitForTimeout(400);
+  assert.match(await pg.$eval('#jobsBody', e => e.innerText), /Service reports to send \(\d+\)[\s\S]*PFBS-1030/, 'finished job is on Service reports to send');
+  await pg.click('#tabs [data-tab="home"]'); await pg.click('[data-hopen="PFBS-1030"]'); await pg.waitForSelector('.jflow2', T);
   // UNDO above Finish and Schedule, like HCP
   await pg.waitForSelector('[data-jfu="finish"]', T); pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jfu="finish"]'); await pg.waitForTimeout(500);
   assert.equal(await pg.evaluate(() => DBX.visits.find(v => v.id === 'fv1').status), 'Scheduled', 'Undo finish puts the visit back');
