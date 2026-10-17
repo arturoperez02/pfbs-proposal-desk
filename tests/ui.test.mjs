@@ -778,12 +778,20 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   // reserve it right from the list: pop-up, saved onto the job, no need to open it
   await pg.click('#ordersBody tr[data-rq="PFBS-1016"] td:nth-child(2)'); await pg.waitForSelector('dialog.ask [name="reservationNo"]', T);
   assert.equal(await pg.$eval('dialog.ask [name="status"]', e => e.value), 'Reserved', 'next step is preselected');
+  assert.ok(await pg.$('dialog.ask .rflow [data-rs="Reserved"].ok') && !(await pg.$('dialog.ask select[name="status"]')), 'icon steps, no dropdown');
+  await pg.click('dialog.ask [data-rs="Delivered"]'); assert.equal(await pg.$eval('dialog.ask [name="status"]', e => e.value), 'Delivered', 'click a step to move there');
+  await pg.click('dialog.ask [data-rs="Delivered"]'); assert.equal(await pg.$eval('dialog.ask [name="status"]', e => e.value), 'Reserved', 'click it again to go back one');
   await pg.fill('dialog.ask [name="vendor"]', 'Sunbelt'); await pg.fill('dialog.ask [name="reservationNo"]', 'R-5521'); await pg.fill('dialog.ask [name="deliveryDate"]', '2026-12-27');
   await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(500);
   const rq = await pg.evaluate(() => (DBX.proposals.find(x => x.num === 'PFBS-1016').parts || []).find(x => x.kind === 'rental'));
   assert.ok(rq && rq.status === 'Reserved' && rq.reservationNo === 'R-5521' && rq.vendor === 'Sunbelt' && rq.deliveryDate === '2026-12-27' && rq.reservedOn, 'saved on the job as Reserved');
   assert.ok(await pg.$('#view-orders:not([hidden])') && !(await pg.$('#drawer:not([hidden])')), 'stayed on the list');
   assert.doesNotMatch(await pg.textContent('#ordersBody'), /Not reserved yet/, 'no longer needs action');
+  await pg.click('#ordChips [data-of="All"]'); await pg.waitForTimeout(200); assert.ok(await pg.$('#ordersBody tr[data-rq="PFBS-1016"] .rmini .ok'), 'list shows the step icons');
+  await pg.click('#ordersBody a[data-open="PFBS-1016"]'); await pg.waitForSelector('.rtitem [data-rs="Delivered"]', T);
+  await pg.click('.rtitem [data-rs="Delivered"]'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1016').parts.find(x => x.kind === 'rental').status), 'Delivered', 'job tab: click the icon to move the lift on');
+  await pg.evaluate(() => document.getElementById('closeD')?.click()); await pg.waitForTimeout(200);
   await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(200);
   await pg.click('[data-hopen="PFBS-1016"]'); await pg.waitForTimeout(700);
   const parts = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1016').parts || []);
