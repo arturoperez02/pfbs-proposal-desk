@@ -316,10 +316,10 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const col = await pg.$$eval('.bcol', cs => cs.map(c => [c.querySelector('h4').textContent, c.textContent]));
   const uc = col.find(c => /^Unscheduled/.test(c[0]));
   assert.ok(uc && /Board Unsched Co/.test(uc[1]) && /#10260/.test(uc[1]), 'approved job without visits is Unscheduled with its job #');
-  await pg.click('[data-hopen="PFBS-0996"]'); await pg.waitForSelector('.jflow', T);
+  await pg.click('[data-hopen="PFBS-0996"]'); await pg.waitForSelector('.jflow2', T);
   assert.match(await pg.textContent('.dhead .sub'), /Job for Board Unsched Co/, 'drawer says Job for client');
-  assert.match(await pg.textContent('.jflow'), /Approved.*Scheduled.*not yet.*Done.*Invoiced.*Paid/s, 'progress steps');
-  assert.ok(await pg.$('#jfSched'), 'Schedule is the next step');
+  assert.match(await pg.textContent('.jflow2'), /Schedule.*not scheduled.*Finish.*Invoice.*Pay/s, 'HCP-style steps: Schedule, Finish, Invoice, Pay');
+  assert.ok(await pg.$('[data-jf="sched"].now'), 'Schedule is the next step');
   assert.equal(await pg.$('#jfJobNo'), null, 'job with a # has no Give-a-number button');
   await pg.click('#jfHold'); await pg.fill('dialog.ask [name="why"]', 'Client paused'); await pg.click('dialog.ask [data-a="ok"]');
   await pg.waitForSelector('.holdline', T);
@@ -397,7 +397,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await p3.addInitScript(x => { window.MOCK_EXTRA = [x]; window.MOCK_KITS = [{ id: 'k1', hcp_job_number: '10305', status: 'packed', packed_at: '2026-10-12T15:00:00Z', tech_names: 'Rigo, Israel' }]; sessionStorage.clear(); }, kj);
   await p3.goto(BASE); await p3.waitForTimeout(900);
   assert.ok(await p3.$('#whTab:not([hidden])'), 'Warehouse tab in the CRM menu');
-  await p3.click('[data-hopen="PFBS-0998"]'); await p3.waitForSelector('.jflow', T);
+  await p3.click('[data-hopen="PFBS-0998"]'); await p3.waitForSelector('.jflow2', T);
   assert.match(await p3.textContent('#jfBox'), /Kit packed/, 'kit status on the job');
   assert.equal(await p3.evaluate(() => pfbsToEs('Pressure washing - parking structure')), 'Lavado a presión - estructura de estacionamiento', 'scope in Spanish');
   assert.equal(await p3.evaluate(() => pfbsToEs('Window Cleaning')), 'Limpieza de ventanas');
@@ -482,7 +482,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); }, [nj, vis]);
   await pg.goto(BASE); await pg.waitForTimeout(800);
   await pg.click('[data-hopen="PFBS-1002"]'); await pg.waitForSelector('#jfBox', T);
-  await pg.evaluate(() => document.querySelector('#visNew, #jfSched')?.click()); await pg.waitForSelector('dialog.inved [name="notes"]', T);
+  await pg.evaluate(() => document.querySelector('#visNew, [data-jf="sched"]')?.click()); await pg.waitForSelector('dialog.inved [name="notes"]', T);
   assert.equal(await pg.$eval('dialog.inved [name="notes"]', e => e.value), 'Park in back', 'crew notes carried from the last visit');
   assert.match(await pg.textContent('dialog.inved'), /Gate code 4321/, 'job notes shown');
   await pg.click('dialog.inved [data-a="usenotes"]');
@@ -533,7 +533,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.keyboard.press('/'); await pg.keyboard.type('10420'); await pg.waitForSelector('#gres .gitem', T);
   assert.match(await pg.textContent('#gres'), /Job #10420 · Searchable Towers/, 'finds a job by its job #');
   await pg.fill('#gq', 'skylight'); await pg.waitForTimeout(250); assert.match(await pg.textContent('#gres'), /Searchable Towers/, 'finds by scope of work');
-  await pg.keyboard.press('Enter'); await pg.waitForSelector('#drawer:not([hidden]) .jflow', T);
+  await pg.keyboard.press('Enter'); await pg.waitForSelector('#drawer:not([hidden]) .jflow2', T);
   assert.match(await pg.textContent('.dhead'), /Job #10420/, 'Enter opens it');
   await pg.click('#closeD'); await pg.waitForTimeout(200);
   await pg.click('#gNew'); assert.deepEqual(await pg.$$eval('#gMenu [data-gnew]', L => L.map(x => x.dataset.gnew)), ['job', 'recurring', 'proposal', 'event', 'customer', 'lead'], 'HCP-style New menu');
@@ -862,6 +862,29 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.ok(!(await ps.$('#todo-home [data-tdg="Jobs to schedule"]')) && !(await ps.$('#todo-home [data-tdg="Follow-ups due"]')), 'approved / sent before the start date: not on the list');
   assert.match(await ps.textContent('#todo-home'), /counting from/);
   await ps.close();
+}
+
+// 34. Job steps like HousecallPro: Finish marks the visit done; sending the invoice on a one-time job finishes it too (even if the visit is dated later)
+{
+  const d = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const jobs = [{ num: 'PFBS-1030', date_sent: d(-9), sent_by: 'Arturo', client: 'Finish Co', status: 'Scheduled', date_resolved: d(-5), hcp_job: '10700', bill_address: '1 A St', billing_email: 'ap@finish.example', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: 400 }], amount: 400 },
+                { num: 'PFBS-1031', date_sent: d(-9), sent_by: 'Arturo', client: 'Early Bill Co', status: 'Scheduled', date_resolved: d(-5), hcp_job: '10701', bill_address: '2 B St', billing_email: 'ap@early.example', items: [{ type: 'Base', qty: 1, description: 'Gutters', amount: 300 }], amount: 300 }];
+  const vis = [{ id: 'fv1', num: 'PFBS-1030', kind: 'job', status: 'Scheduled', visit_date: d(-1), start_time: '08:00', techs: ['Rigo Perez'], work: [], equipment: [] },
+               { id: 'fv2', num: 'PFBS-1031', kind: 'job', status: 'Scheduled', visit_date: d(5), start_time: '08:00', techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('job steps: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(([j, v]) => { window.MOCK_EXTRA = j; window.MOCK_VIS = v; window.open = () => null; }, [jobs, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(1000);
+  await pg.click('#tabs [data-tab="home"]'); await pg.click('[data-hopen="PFBS-1030"]'); await pg.waitForSelector('.jflow2', T);
+  assert.ok(!/OMW|Start/.test(await pg.textContent('.jflow2')), 'no OMW / Start');
+  pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jf="finish"]'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.visits.find(v => v.id === 'fv1').status), 'Done', 'Finish marks the visit done');
+  await pg.evaluate(() => document.getElementById('closeD')?.click()); await pg.waitForTimeout(200);
+  await pg.click('[data-hopen="PFBS-1031"]'); await pg.waitForSelector('.jflow2', T); await pg.click('[data-jf="inv"]'); await pg.waitForSelector('dialog.inved', T);
+  const dl = pg.waitForEvent('download', T); await pg.click('dialog.inved [data-a="send"]'); await dl; await pg.waitForSelector('#ivTo', T);
+  await pg.click('dialog.ask [data-a="owa"]'); await pg.waitForTimeout(600);
+  assert.equal(await pg.evaluate(() => DBX.visits.find(v => v.id === 'fv2').status), 'Done', 'sending the invoice finished the job');
+  await pg.close();
 }
 
 await b.close(); srv.close();

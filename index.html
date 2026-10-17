@@ -86,6 +86,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 #drawer .dtabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 h3.setsec{margin:28px 0 10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#666)} h3.setsec:first-child{margin-top:4px}
 dialog.ask.inved{max-width:760px} #schTech{width:auto;min-width:140px} .jobno{font-family:var(--display);font-size:26px;font-weight:700;color:var(--navy,#1F2A6B);line-height:1.1;margin:0 0 2px} .jobno.none{font-size:15px;color:var(--muted);font-weight:600} .jobtag{display:inline-block;background:#1F2A6B;color:#fff;border-radius:6px;padding:1px 7px;font-weight:700;font-size:13px} .cjob{font-weight:800} .sgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)} .shead{padding:6px;font-size:12px;font-weight:700;color:var(--mut,#666);border-bottom:1px solid var(--line);text-align:center} .scell{min-height:104px;padding:4px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);cursor:pointer;min-width:0} .scell.out{background:var(--bg);opacity:.75} .scell.today .sday{background:var(--navy,#1F2A6B);color:#fff;border-radius:10px;padding:0 6px;display:inline-block} .sday{font-size:12px;font-weight:700;margin-bottom:2px} .vchip{display:block;width:100%;text-align:left;font-size:11.5px;line-height:1.25;margin:0 0 2px;padding:2px 4px;border:1px solid transparent;border-radius:4px;background:#1F2A6B;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer} .vchip.ev{background:#e4e8f5;color:#1F2A6B} .vchip.done{background:#8a8f99} .vchip.skip{background:#c9ccd3;color:#333;text-decoration:line-through} .vchip.nocrew{border-color:#d33;box-shadow:inset 3px 0 0 #d33} .vchip.dbl{border-color:#f0a020;box-shadow:inset 3px 0 0 #f0a020} .vchip.dbl::before{content:'⚠ '} .vmore{font-size:11px;border:0;background:none;color:var(--navy,#1F2A6B);cursor:pointer;padding:0} .vscope{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:0 0 8px;font-size:13px} .vscope ul{margin:4px 0 0 18px;padding:0} .vchecks{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0 8px;font-weight:400} .vchecks label{font-size:13px} .vmon label,.vends label{display:inline-flex;align-items:center;gap:4px;margin:4px 10px 4px 0;font-size:13px} @media (max-width:700px){ .scell{min-height:64px} .vchip{font-size:10px} } .inved:not(.linepo) .invrow [data-f="po"]{display:none} .inved.linepo .invrow{grid-template-columns:1fr 130px 110px auto} .invrow{display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid var(--line)} .invrow textarea{grid-column:1/-1;min-height:34px;font-size:13px} .invhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:10px 0 6px;font-size:13px;color:var(--mut,#666)} .flag.ok{background:#e3f4e8;color:#1e6b3a}
+.jflow2{display:flex;align-items:flex-start;margin:4px 0 12px;gap:0} .jfline{flex:1;height:2px;background:var(--line);margin-top:18px;min-width:8px} .jfs{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;padding:0 4px;cursor:pointer;font:inherit;color:var(--muted);min-width:76px} .jfs .jfi{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--line);background:var(--surface);font-size:15px;color:var(--muted)} .jfs b{font-size:12px;letter-spacing:.04em;text-transform:uppercase} .jfs small{font-size:11px;text-align:center;max-width:110px}
+.jfs.ok .jfi{background:#1F6FD0;border-color:#1F6FD0;color:#fff} .jfs.ok b{color:#1F6FD0} .jfs.now .jfi{border-color:#1F6FD0;color:#1F6FD0} .jfs.now b{color:var(--ink)} .jfs.due .jfi{background:#d63384;border-color:#d63384;color:#fff} .jfs.due b{color:#d63384} .jfs:hover .jfi{box-shadow:0 0 0 3px var(--hover)}
 .jflow{display:flex;gap:0;margin:0 0 10px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)} .jflow>div{flex:1;min-width:0;padding:7px 8px;border-right:1px solid var(--line);font-size:12px;line-height:1.3} .jflow>div:last-child{border-right:0} .jflow b{display:block;font-size:13px} .jflow .ok{background:#e3f4e8} .jflow .ok b::before{content:'✓ ';color:#1e6b3a} .jflow .now{background:#fff6dc} .jflow .muted{color:var(--muted)} .jnext{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px} .holdline{background:#fdecea;color:#8a1f11;border-radius:8px;padding:8px 10px;margin:0 0 10px;font-size:13px}
 .hkpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:0 0 14px} .hkpi button{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;cursor:pointer;font:inherit;color:inherit} .hkpi button:hover{border-color:var(--navy,#1F2A6B)} .hkpi .n{font-family:var(--display);font-size:26px;font-weight:700;display:block;line-height:1.1} .hkpi .l{font-size:12px;color:var(--muted)} .hkpi .bad{color:var(--bad)}
 .board{display:grid;grid-template-columns:repeat(5,minmax(170px,1fr));gap:8px;overflow-x:auto;padding-bottom:4px} .bcol{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:6px;min-width:170px} .bcol h4{margin:2px 4px 6px;font-size:13px;display:flex;justify-content:space-between} .bcard{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin:0 0 6px;cursor:pointer;font:inherit;font-size:12.5px;color:inherit;line-height:1.3} .bcard:hover{border-color:var(--navy,#1F2A6B)} .bcard .note{margin:0;font-size:11.5px} .bmore{font-size:12px;color:var(--muted);padding:2px 4px}
@@ -1461,26 +1463,33 @@ function jobState(p){
 function jobFlowHTML(p){
   const st=jobState(p), S0=p.status, inv=(INV[p.num]||[]).filter(v=>v.status!=='Void'), lastInv=inv[inv.length-1], openInv=inv.find(v=>v.status==='Sent');
   const after = k => ['Approved','Scheduled','Invoiced','Paid'].indexOf(S0) >= k;
-  const step=(label,ok,now,detail)=>`<div class="${ok?'ok':now?'now':''}"><b>${label}</b><span class="${ok||now?'':'muted'}">${detail||'—'}</span></div>`;
-  const lastDone=st.past[st.past.length-1];
+  const doneV=st.vs.filter(v=>v.status==='Done'), lastDone=doneV[doneV.length-1]||st.past[st.past.length-1], doneAll=after(2) || (st.vs.length>0 && st.vs.every(v=>['Done','Skipped'].includes(v.status)));
+  // HousecallPro-style steps: Schedule → Finish → Invoice → Pay. Each one is a button for that step.
+  const step=(k,icon,label,state,detail)=>`<button type="button" class="jfs ${state}" data-jf="${k}"><span class="jfi">${icon}</span><b>${label}</b><small>${detail||''}</small></button>`;
   const steps=[
-    step('Approved', true, false, fmtD(p.dateResolved)),
-    step('Scheduled', st.vs.length>0 || after(1), S0==='Approved' && !st.vs.length, st.next?`next ${fmtD(st.next.visit_date)}`:st.vs.length?`${st.vs.length} visit${st.vs.length===1?'':'s'}`:after(1)?'yes':'not yet'),
-    step('Done', st.past.length>0 || after(2), st.col==='To invoice', lastDone?`${isRecurring(p)?st.past.length+' done · last ':''}${fmtD(visEnd(lastDone))}`:after(2)?'yes':''),
-    step('Invoiced', inv.length>0 || after(2), st.col==='To invoice', lastInv?`#${esc(lastInv.inv_no)} · ${fmtD(lastInv.invoice_date)}`:after(2)?'in HousecallPro':''),
-    step('Paid', S0==='Paid', S0==='Invoiced', p.datePaid?fmtD(p.datePaid):openInv?`${usd(invBal(openInv))} due`:'')];
+    step('sched','📅','Schedule', st.vs.length||after(1)?'ok':'now', st.next?`${fmtD(st.next.visit_date)}${st.next.start_time?' · '+t12(st.next.start_time):''}`:st.vs.length?`${st.vs.length} visit${st.vs.length===1?'':'s'}`:'not scheduled'),
+    step('finish','■','Finish', doneAll||doneV.length?'ok':(st.vs.length?'now':''), lastDone&&(doneAll||lastDone.status==='Done')?`${isRecurring(p)&&doneV.length>1?doneV.length+' done · ':''}${fmtD(visEnd(lastDone))}`:st.vs.length?'mark finished':''),
+    step('inv','➤','Invoice', inv.length||after(2)?'ok':(st.col==='To invoice'?'now':''), lastInv?`#${esc(lastInv.inv_no)} · ${lastInv.status==='Draft'?'draft':'sent '+fmtD(lastInv.invoice_date)}`:after(2)?'in HousecallPro':'create'),
+    step('pay','$','Pay', S0==='Paid'?'ok':(openInv?'due':''), p.datePaid?`paid ${fmtD(p.datePaid)}`:openInv?`due ${usd(invBal(openInv))}`:'')];
   const m=isManager(), b=[];
   if(m && !jobNoOf(p)) b.push('<button type="button" class="btn small" id="jfJobNo">Give it a job #</button>');
   if(m && !p.onHoldSince){
-    if(!st.vs.length && VISOK) b.push('<button type="button" class="btn small" id="jfSched">Schedule</button>');
-    if((st.toInv.length || (S0==='Scheduled' && !isRecurring(p) && !inv.length)) && INVOK) b.push(`<button type="button" class="btn small" id="jfInv">${isRecurring(p)?'Invoice a visit':'Create invoice'}</button>`);
-    if(openInv) b.push(`<button type="button" class="btn small" data-invpay="${esc(openInv.id)}">Record payment #${esc(openInv.inv_no)}</button>`);
     if((st.past.length || after(2)) && !p.reportSentOn && !isRecurring(p)) b.push(`<a class="btn ghost small" href="reports.html?num=${encodeURIComponent(p.num)}" target="_blank" rel="noopener">Service report</a>`);
   }
   if(m && !['Paid'].includes(S0)) b.push(`<button type="button" class="btn ghost small" id="jfHold">${p.onHoldSince?'Take off hold':'Put on hold'}</button>`);
   return `${p.onHoldSince?`<div class="holdline"><b>On hold</b> since ${fmtD(p.onHoldSince)}${p.onHoldReason?': '+esc(p.onHoldReason):''}</div>`:''}
-    <div class="jflow">${steps.join('')}</div>${kitLine(p)}${b.length?`<div class="jnext">${b.join('')}</div>`:''}`;
+    <div class="jflow2">${steps.join('<span class="jfline"></span>')}</div>${kitLine(p)}${b.length?`<div class="jnext">${b.join('')}</div>`:''}`;
 }
+async function jobStep(k){ const p=P.find(x=>x.num===draft.num)||draft, st=jobState(p), inv=(INV[p.num]||[]).filter(v=>v.status!=='Void'), lastInv=inv[inv.length-1], openInv=inv.find(v=>v.status==='Sent');
+  if(!isManager()) return;
+  if(k==='sched'){ if(!VISOK) return toast('Run database update 020 first.'); const v=st.next||st.vs[st.vs.length-1]; return v ? visEdit(v) : visNewFor(p); }
+  if(k==='finish'){ const todo=st.vs.filter(v=>v.kind==='job' && v.status==='Scheduled' && (!isRecurring(p) || v.visit_date<=iso(today())));
+    if(!todo.length) return toast(st.vs.length?'Already finished.':'Schedule it first.');
+    if(!confirm(`Mark ${todo.length===1?'this visit':todo.length+' visits'} finished (Done)?`)) return;
+    for(const v of todo){ const r=await sb.from('visits').update({status:'Done'}).eq('id',v.id); if(r.error){ toast(r.error.message); return; } v.status='Done'; }
+    await addActivity(p.num,'note',`Job finished (${todo.length} visit${todo.length===1?'':'s'} marked Done)`); toast('Finished. Next: Invoice.'); await loadSchedule(); $('#jfBox').innerHTML=jobFlowHTML(draft); return; }
+  if(k==='inv'){ if(!INVOK) return toast('Run database update 018 first.'); return lastInv && (!isRecurring(p) || !st.toInv.length) ? invEdit(p, {...lastInv, payments:lastInv.payments||[]}) : invOpenNew(draft); }
+  if(k==='pay'){ if(openInv){ if(await invPay(openInv)) await invRefresh(p.num); return; } return toast(p.status==='Paid'?`Paid ${fmtD(p.datePaid)}`:'Send the invoice first.'); } }
 async function toggleHold(){
   if(!draft || !isManager()) return; const p=draft, on=!p.onHoldSince;
   let reason='';
@@ -1494,6 +1503,7 @@ async function toggleHold(){
 }
 $('#drawer').addEventListener('click', async e=>{
   const t=e.target; if(!draft) return;
+  const jf=t.closest('[data-jf]'); if(jf){ await jobStep(jf.dataset.jf); return; }
   if(t.id==='jfSched'){ const p=P.find(x=>x.num===draft.num); if(p) visNewFor(p); return; }
   if(t.id==='jfInv'){ invOpenNew(draft); return; }
   if(t.id==='jfHold'){ toggleHold(); return; }
@@ -2600,7 +2610,9 @@ function invSendBox(v,p){
     if(a==='copy'){ try{ await navigator.clipboard.writeText(`To: ${to}\nSubject: ${s}\n\n${m}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } }
     else if(a==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(s)}&body=${enc(m)}`,'_blank','noopener');
     else location.href=`mailto:${enc(to)}?subject=${enc(s)}&body=${enc(m)}`;
-    if(v.status==='Draft'){ const {error}=await sb.from('invoices').update({status:'Sent', sent_to:to}).eq('id',v.id); if(error){ toast(error.message); return; } v.status='Sent'; }
+    if(v.status==='Draft'){ const {error}=await sb.from('invoices').update({status:'Sent', sent_to:to}).eq('id',v.id); if(error){ toast(error.message); return; } v.status='Sent';
+      if(p.num && !isRecurring(p)) await sb.from('visits').update({status:'Done', invoice_id:v.id}).eq('num',p.num).eq('kind','job').eq('status','Scheduled');   // one-time job: sending the invoice finishes it, even if the visit was dated later
+    }
     else await addActivity(p.num,'note',`Invoice #${v.inv_no} emailed again to ${to}`);
     if(a!=='copy'){ close(); toast('Attach the downloaded PDF, then send'); }
     await invRefresh(p.num);
