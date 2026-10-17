@@ -1576,6 +1576,12 @@ async function jobUndo(k){ const p=P.find(x=>x.num===draft.num)||draft; if(!isMa
     if(!confirm(`Mark ${L.length===1?'this visit':L.length+' visits'} not finished (${L.map(v=>fmtD(visEnd(v))).join(', ')})?`)) return;
     for(const v of L){ const r=await sb.from('visits').update({status:'Scheduled'}).eq('id',v.id); if(r.error) return toast(r.error.message); v.status='Scheduled'; }
     await addActivity(p.num,'note',`Finish undone (${L.length} visit${L.length===1?'':'s'} back to Scheduled)`); toast('Back to not finished');
+    // a report draft started for this finish would keep asking to be sent: offer to delete it (unsent only; Owner/Admin can delete reports)
+    const drafts=SR.filter(r=>r.num===p.num);
+    if(drafts.length && !['Invoiced','Paid'].includes(p.status) && ['Owner','Admin'].includes(role())
+       && confirm(`This job has ${drafts.length===1?'an unsent service report draft':drafts.length+' unsent service report drafts'} (started ${drafts.map(r=>fmtD(r.created_at)).join(', ')}).\n\nDelete ${drafts.length===1?'it':'them'} too? Anything typed or photos added in ${drafts.length===1?'it':'them'} will be lost. Cancel keeps ${drafts.length===1?'it':'them'}.`)){
+      const r=await sb.from('service_reports').delete().in('id',drafts.map(x=>x.id)).eq('status','pending');
+      if(r.error) toast(r.error.message); else { await addActivity(p.num,'note','Unsent service report draft deleted (finish undone)'); await loadPendingReports(); } }
   }
   await loadSchedule(); $('#jfBox').innerHTML=jobFlowHTML(draft); loadActivity(p.num); renderAll(); }
 async function jobStep(k){ const p=P.find(x=>x.num===draft.num)||draft, st=jobState(p), inv=(INV[p.num]||[]).filter(v=>v.status!=='Void'), lastInv=inv[inv.length-1], openInv=inv.find(v=>v.status==='Sent');

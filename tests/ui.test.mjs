@@ -923,7 +923,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
                { id: 'fv2', num: 'PFBS-1031', kind: 'job', status: 'Scheduled', visit_date: d(5), start_time: '08:00', techs: ['Rigo Perez'], work: [], equipment: [] }];
   const pg = await b.newPage({ viewport: { width: 1300, height: 950 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('job steps: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
-  await pg.addInitScript(([j, v]) => { window.MOCK_EXTRA = j; window.MOCK_VIS = v; window.open = () => null; }, [jobs, vis]);
+  await pg.addInitScript(([j, v]) => { window.MOCK_EXTRA = j; window.MOCK_VIS = v; window.MOCK_SR = [{ id: 'srd1', num: 'PFBS-1030', status: 'pending', client: 'Finish Co', created_at: new Date().toISOString() }]; window.open = () => null; }, [jobs, vis]);
   await pg.goto(BASE); await pg.waitForTimeout(1000);
   await pg.click('#tabs [data-tab="home"]'); await pg.click('[data-hopen="PFBS-1030"]'); await pg.waitForSelector('.jflow2', T);
   assert.ok(!/OMW|Start/.test(await pg.textContent('.jflow2')), 'no OMW / Start');
@@ -937,7 +937,10 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.equal(await pg.$eval('#jobsBody tr[data-qrow="PFBS-1030"] [data-qa="start"]', e => e.value), d(-1), 'start date filled from the schedule');
   await pg.click('#tabs [data-tab="home"]'); await pg.click('[data-hopen="PFBS-1030"]'); await pg.waitForSelector('.jflow2', T);
   // UNDO above Finish and Schedule, like HCP
-  await pg.waitForSelector('[data-jfu="finish"]', T); pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jfu="finish"]'); await pg.waitForTimeout(500);
+  const msgs = []; const acc = dlg => { msgs.push(dlg.message()); dlg.accept(); }; pg.on('dialog', acc);
+  await pg.waitForSelector('[data-jfu="finish"]', T); await pg.click('[data-jfu="finish"]'); await pg.waitForTimeout(700); pg.off('dialog', acc);
+  assert.ok(msgs.some(m => /unsent service report draft/.test(m)), 'undo finish offers to delete the draft report');
+  assert.equal(await pg.evaluate(() => DBX.service_reports.filter(r => r.num === 'PFBS-1030').length), 0, 'draft report deleted');
   assert.equal(await pg.evaluate(() => DBX.visits.find(v => v.id === 'fv1').status), 'Scheduled', 'Undo finish puts the visit back');
   assert.ok(!(await pg.$('[data-jfu="finish"]')), 'no finish undo once nothing is finished');
   pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jfu="sched"]'); await pg.waitForTimeout(500);
