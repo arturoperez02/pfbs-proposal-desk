@@ -718,7 +718,17 @@ async function openDrawer(id, opts={}){
   hist=[]; fillClientBlanks(); drawDrawer();
   $('#scrim').hidden=false; $('#drawer').hidden=false; $('#closeD')?.focus();
   if(id && outcome(draft)==='Won' && isManager()) loadInvoices(id);
+  if(id && isManager()) await syncPricingRentals(id);
   if(id) await loadActivity(id);
+}
+// opening a won job whose pricing has a lift that isn't on the job yet puts it there as "To reserve" (saved, logged)
+async function syncPricingRentals(id){
+  if(!draft || draft.num!==id || !WON.includes(draft.status) || (draft.parts||[]).some(isRent) || (COLS && !COLS.has('parts'))) return;
+  const add=pricingRentals(draft); if(!add.length) return;
+  const parts=[...(draft.parts||[]), ...add], r=await sb.from('proposals').update({parts}).eq('num',id); if(r.error) return;
+  for(const o of [draft, orig, P.find(x=>x.num===id)]) if(o) o.parts=structuredClone(parts);
+  await addActivity(id,'note',`From the pricing: ${add.map(x=>x.desc).join(', ')} put on the job as To reserve`);
+  toast(`${add.length===1?'Lift':add.length+' rentals'} from the pricing added to the job: reserve ${add.length===1?'it':'them'}`); if(draft&&draft.num===id) drawDrawer(); renderAll();
 }
 let ACT=[], actOK=true;
 async function loadActivity(id){
@@ -1189,8 +1199,11 @@ function rentAlert(p, x){
   if(st==='Picked up' && num(x.finalCost)==null) return ['warn','Enter the final rental invoice'];
   return null;
 }
-const rentAlerts = p => (p.parts||[]).filter(isRent).map(x=>rentAlert(p,x)).filter(Boolean);
-const jobRentals = p => (p?.parts||[]).filter(isRent);
+// a won job's lifts: the ones saved on the job; if none are saved yet (approved before the lift was in the pricing,
+// or the lift was moved to Subcontractors / rentals later), the pricing's rentals count as "To reserve" so nothing is missed
+const pricingRentals = p => { try{ return buildParts(p).filter(isRent); }catch(_){ return []; } };
+const jobRentals = p => { const R=(p?.parts||[]).filter(isRent); return R.length || !p || !WON.includes(p.status) ? R : pricingRentals(p); };
+const rentAlerts = p => jobRentals(p).map(x=>rentAlert(p,x)).filter(Boolean);
 const rentLine = x => `${x.desc||'Lift rental'}${num(x.qty)>1?' ×'+num(x.qty):''}: ${x.status||'To reserve'}${x.deliveryDate?' · delivers '+fmtD(x.deliveryDate):''}${x.offRentDate?' · off-rent '+fmtD(x.offRentDate):''}${x.vendor?' · '+x.vendor:''}`;
 // what Oscar sees on the schedule: the job's lifts / rentals and what's left to do (reserve, delivery, off-rent)
 function rentBox(p){ const R=jobRentals(p); if(!R.length) return ''; const A=rentAlerts(p);

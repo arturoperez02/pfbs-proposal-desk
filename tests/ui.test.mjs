@@ -761,6 +761,22 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 29b. A job approved without its lift on the job (pricing changed later): Home alerts, and opening the job puts it on as To reserve
+{
+  const est = { sheet: 'WC', labor: [{ role: 'Expert', hours: 40, rate: 75 }], materials: [], taxRate: 0, rentals: [{ desc: "65' Boom Lift", unit: 2000, qty: 1, markup: 0.25 }], equipment: [], misc: [] };
+  const pr = { num: 'PFBS-1016', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Late Lift Co', status: 'Approved', date_resolved: '2026-10-10', hcp_job: '10238', parts: [], items: [{ type: 'Base', qty: 1, description: 'Perimeter windows', amount: 9338, estimate: est }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('late lift: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, pr);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(200);
+  assert.match(await pg.textContent('#homeBody'), /Lifts \/ rentals to handle[\s\S]*Late Lift Co/, 'Home flags the lift even before it is saved on the job');
+  await pg.click('[data-hopen="PFBS-1016"]'); await pg.waitForTimeout(700);
+  const parts = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1016').parts || []);
+  assert.ok(parts.some(x => x.kind === 'rental' && x.status === 'To reserve' && /Boom Lift/.test(x.desc)), 'opening the job saves the lift as To reserve');
+  await pg.close();
+}
+
 // 30. Click a column heading to sort (biggest first, click again for smallest); stays sorted after a redraw
 {
   const mk = (n, a) => ({ num: n, date_sent: '2026-10-0' + (a % 9 + 1), sent_by: 'Arturo', client: 'Sort Co ' + n, status: 'Sent', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: a }] });
