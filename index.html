@@ -755,7 +755,33 @@ async function addActivity(num, kind, note){
   const {error}=await sb.from('proposal_activity').insert({num, kind, note});
   if(error){ toast(error.message); return false; } return true;
 }
-function closeDrawer(){ try{ sessionStorage.removeItem('pfbs.open'); }catch(_){} $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; PR=null; }
+// ---- autosave: an open proposal / job saves itself a moment after you stop typing (not new ones, not while saving) ----
+const AUTO={busy:false, last:0};
+document.addEventListener('input', e=>{ if(e.target.closest && e.target.closest('#drawer')) AUTO.last=Date.now(); }, true);
+const rowSig = p => { const c=structuredClone(p); syncFromItems(c); c.yearValue=isRecurring(c)?Math.round((annual(c)||0)*100)/100:null; const r=toRow(c); delete r.actuals_summary; return JSON.stringify(r); };
+async function autoSave(force, d=draft, o=orig){
+  if(AUTO.busy || !d || !o || isNew || d.num!==o.num) return;
+  if(!force && (Date.now()-AUTO.last<1200 || $('#drawer').hidden || $('#saveD')?.disabled)) return;
+  if(!canEditDraft() || !d.client || (LOST.includes(d.status) && !d.lostReason)) return;
+  if(rowSig(d)===rowSig(o)) return;
+  AUTO.busy=true; const n=o.num, msg=t=>{ if(draft===d && $('#dmsg')) $('#dmsg').textContent=t; };
+  try{
+    msg('Saving…'); syncFromItems(d); d.actualsSummary=actSummary(d); d.yearValue=isRecurring(d)?Math.round((annual(d)||0)*100)/100:null;
+    await ensureClient(d);
+    const row=toRow(d); if(!canPayComm()){ delete row.comm_paid_on; delete row.est_comm_paid_on; }
+    const res=await sb.from('proposals').update(row).eq('num',n).select().single();
+    if(res.error){ msg(/column|schema cache/i.test(res.error.message||'')?'The database is missing an update. Run the newest file in the sql folder, then save again.':(res.error.message||'Could not save.')); return; }
+    const saved=fromRow(res.data), i=P.findIndex(x=>x.num===n); if(i>=0) P[i]=saved;
+    // fields the server filled (e.g. the job # given at approval) come back into the open form unless you changed them meanwhile
+    const now=toRow(d); let redraw=false; for(const [c,f] of Object.entries(MAP)) if(c in row && JSON.stringify(now[c])===JSON.stringify(row[c]) && JSON.stringify(saved[f]??null)!==JSON.stringify(row[c]??null)){ d[f]=saved[f]; redraw=true; }
+    if(draft===d){ orig=structuredClone(saved); if(redraw && !document.activeElement?.closest('#drawer')){ const sc=document.querySelector('#drawer .dbody')?.scrollTop||0; drawDrawer(); const b=document.querySelector('#drawer .dbody'); if(b) b.scrollTop=sc; }
+      msg(`All changes saved · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`); loadActivity(n); }
+    renderAll();
+  } finally { AUTO.busy=false; }
+}
+setInterval(()=>{ autoSave().catch(()=>{ AUTO.busy=false; }); }, 1000);
+function closeDrawer(){ if(draft && orig && !isNew) autoSave(true, draft, orig).catch(()=>{});   // closing never loses a change
+  try{ sessionStorage.removeItem('pfbs.open'); }catch(_){} $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; PR=null; }
 function calc1(p){ const g=marginPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
 function openLine(p){ const d=daysOpen(p), f=followUp(p); if(d==null){ const o=outcome(p); return (o==='Won'||o==='Lost') && p.dateResolved ? `<div class="gpline">${o} on ${fmtD(p.dateResolved)}${p.datePaid?' · paid '+fmtD(p.datePaid):''}</div>` : ''; } const due=f&&f<=today(); return `<div class="gpline">Open ${d} day${d===1?'':'s'}${f?` · follow up ${due?'<b style="color:var(--warn)">now</b> (due '+fmtD(iso(f))+')':'by '+fmtD(iso(f))}`:''}${d>S.expiryDays?' · <b style="color:var(--bad)">past '+S.expiryDays+' days</b>':''}</div>`; }
 // renewal price check: last price, real margin, and what to charge next
@@ -948,9 +974,9 @@ function drawDrawer(){
     <fieldset><legend>Notes</legend><textarea id="f-notes" data-k="notes" rows="3" ${dis}>${esc(p.notes??'')}</textarea></fieldset>
   </div>
   <div class="dfoot"><span class="msg" id="dmsg">${ed?'':'View only'}</span>
-    <button class="btn ghost" id="cancelD">Cancel</button>
+    ${isNew?'<button class="btn ghost" id="cancelD">Cancel</button>':''}
     ${isNew?'':`<button class="btn ghost" id="estPdfD">Pricing PDF</button><button class="btn ghost" id="pdfD">Preview PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
-    <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save changes'}</button></div>`;
+    <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save now'}</button></div>`;
 }
 const incPct = () => S.priceIncrease ?? 0.05;
 function raiseItems(items, f){ return (items||[]).map(i=>({...i, amount: num(i.amount)!=null ? Math.round(num(i.amount)*(1+f)*100)/100 : i.amount})); }
@@ -1119,7 +1145,7 @@ $('#drawer').addEventListener('click', e=>{ if(e.target.id!=='dsToday' || !draft
 $('#drawer').addEventListener('click', e=>{ const dt=e.target.closest('[data-dtab]'); if(!dt) return; DTAB=dt.dataset.dtab;
   for(const b of document.querySelectorAll('#drawer [data-dtab]')) b.setAttribute('aria-selected', b===dt);
   for(const x of document.querySelectorAll('#drawer .dpane')) x.hidden = x.dataset.pane!==DTAB; });
-$('#drawer').addEventListener('input', e=>{ if(itemEvent(e,false)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
+$('#drawer').addEventListener('input', e=>{ if(!draft) return; if(itemEvent(e,false)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; refreshCalcs(); });
 // ---------- lead form (a lead is a request, not a priced proposal yet) ----------
 const TIMING=['As soon as possible','This month','Next 1–3 months','Planning / budgeting'];
 function drawLeadForm(){
@@ -1962,7 +1988,7 @@ $('#drawer').addEventListener('change', e=>{ const o=e.target.dataset.opt; if(o=
   const groups=groupsOf(draft); let ch=chosenOptions(draft).filter(g=>g!==o); if(e.target.checked) ch.push(o); ch=groups.filter(g=>ch.includes(g));
   if(!ch.length){ e.target.checked=true; toast('At least one option has to count.'); return; }
   draft.pricingOption=ch.join('||'); rerenderItems(); }, true);
-$('#drawer').addEventListener('change', e=>{ if(e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property'){ autofill(k); checkDup(); } if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
+$('#drawer').addEventListener('change', e=>{ if(!draft || e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property'){ autofill(k); checkDup(); } if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='dMore'){ const m=$('#dMenu'); if(m) m.hidden=!m.hidden; return; }

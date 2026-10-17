@@ -978,6 +978,25 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 36. Autosave: an open proposal / job saves itself after you stop typing; closing right away still saves; new ones still need Create
+{
+  const pr = { num: 'PFBS-1050', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Auto Co', status: 'Approved', hcp_job: '10900', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: 500 }], amount: 500 };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('autosave: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, pr);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="orders"]'); await pg.waitForTimeout(300); await pg.evaluate(() => document.querySelector('[data-open="PFBS-1050"],tr[data-id="PFBS-1050"]')?.click());
+  await pg.waitForSelector('#drawer:not([hidden])', T); await pg.evaluate(() => document.querySelector('#drawer [data-dtab="prop"],#drawer [data-tab2="prop"]')?.click());
+  await pg.waitForSelector('#f-contactPhone', T);
+  await pg.fill('#f-contactPhone', '510-555-0101'); await pg.dispatchEvent('#f-contactPhone', 'change'); await pg.waitForTimeout(2600);
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1050').contact_phone), '510-555-0101', 'saved without clicking Save');
+  assert.match(await pg.textContent('#dmsg'), /All changes saved/);
+  await pg.fill('#f-contactPhone', '510-555-0202'); await pg.dispatchEvent('#f-contactPhone', 'change');
+  await pg.evaluate(() => document.getElementById('closeD').click()); await pg.waitForTimeout(800);
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1050').contact_phone), '510-555-0202', 'closing right away still saves');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
