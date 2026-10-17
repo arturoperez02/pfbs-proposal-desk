@@ -771,6 +771,9 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.goto(BASE); await pg.waitForTimeout(900);
   await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(200);
   assert.match(await pg.textContent('#homeBody'), /Lifts \/ rentals to handle[\s\S]*Late Lift Co/, 'Home flags the lift even before it is saved on the job');
+  await pg.click('#tabs [data-tab="orders"]'); await pg.waitForTimeout(300);
+  assert.match(await pg.textContent('#ordersBody'), /Late Lift Co[\s\S]*65' Boom Lift[\s\S]*Not reserved yet/, 'Parts & rentals lists it too');
+  await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(200);
   await pg.click('[data-hopen="PFBS-1016"]'); await pg.waitForTimeout(700);
   const parts = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1016').parts || []);
   assert.ok(parts.some(x => x.kind === 'rental' && x.status === 'To reserve' && /Boom Lift/.test(x.desc)), 'opening the job saves the lift as To reserve');

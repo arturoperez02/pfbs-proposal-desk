@@ -1630,9 +1630,9 @@ async function loadPendingReports(){
   if(current()==='orders') renderJobs(); if(current()==='home') renderHome();
 }
 function renderOrders(){
-  const jobs=P.filter(p=>(p.parts||[]).length && (outcome(p)==='Won'));
+  const jobs=P.filter(p=>outcome(p)==='Won');
   const R=[], Pt=[];
-  for(const p of jobs) (p.parts||[]).forEach(x=>{ (isRent(x)?R:Pt).push({p,x}); });
+  for(const p of jobs){ jobRentals(p).forEach(x=>R.push({p,x})); (p.parts||[]).forEach(x=>{ if(!isRent(x)) Pt.push({p,x}); }); }   // rentals include a lift still only in the pricing
   const rentAct=({p,x})=>!!rentAlert(p,x), rentOpen=({x})=>(x.status||'To reserve')!=='Picked up' || num(x.finalCost)==null;
   const partAct=({p,x})=>(x.status||'To order')==='To order', partOpen=({x})=>(x.status||'To order')!=='Received';
   const F={'Needs action':[rentAct,partAct],'Open':[rentOpen,partOpen],'All':[()=>true,()=>true]};
