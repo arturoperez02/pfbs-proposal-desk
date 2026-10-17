@@ -899,6 +899,29 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 35. HCP's "Copy to new job" / copy a proposal: same client + lines, none of the old one's history
+{
+  const d = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const src = { num: 'PFBS-1040', date_sent: d(-20), sent_by: 'Arturo', client: 'Copy Co', property: '5 Copy Way', site_address: '5 Copy Way, Fremont', status: 'Paid', date_resolved: d(-15), date_paid: d(-2), hcp_job: '10800', contact_email: 'pm@copy.example',
+    items: [{ type: 'Base', qty: 1, description: 'Exterior windows', amount: 900 }, { type: 'Add-on', qty: 1, description: 'Screens', amount: 100, accepted: true }], amount: 1000 };
+  const vis = [{ id: 'cv1', num: 'PFBS-1040', kind: 'job', status: 'Done', visit_date: d(-16), start_time: '08:00', techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('copy: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(([j, v]) => { window.MOCK_EXTRA = [j]; window.MOCK_VIS = v; sessionStorage.clear(); }, [src, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="orders"]'); await pg.waitForTimeout(300); await pg.click('tr[data-id="PFBS-1040"]'); await pg.waitForSelector('#dMore', T);
+  await pg.click('#dMore'); assert.ok(await pg.isVisible('#dMenu [data-copy="job"]'), 'menu opens');
+  pg.once('dialog', dlg => dlg.accept()); await pg.click('#dMenu [data-copy="job"]'); await pg.waitForTimeout(800);
+  const nj = await pg.evaluate(() => DBX.proposals.filter(x => x.client === 'Copy Co' && x.num !== 'PFBS-1040').pop());
+  assert.ok(nj && nj.status === 'Approved' && !nj.date_paid && !nj.hcp_job && nj.items.length === 2 && nj.items[1].accepted === true && nj.site_address === '5 Copy Way, Fremont', 'new job: same lines, no paid date or old job #');
+  assert.equal(await pg.evaluate(n => DBX.visits.filter(v => v.num === n).length, nj.num), 0, 'no visits copied');
+  assert.match(await pg.textContent('#dTitle'), new RegExp(nj.num), 'the new job opens');
+  await pg.click('#dMore'); pg.once('dialog', dlg => dlg.accept()); await pg.click('#dMenu [data-copy="prop"]'); await pg.waitForTimeout(800);
+  const np = await pg.evaluate(() => DBX.proposals.filter(x => x.client === 'Copy Co').pop());
+  assert.ok(np.status === 'Estimating' && !np.date_sent && np.items[1].accepted === false, 'new proposal: not sent, add-ons not accepted yet');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

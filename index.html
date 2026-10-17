@@ -113,7 +113,7 @@ td.wrap{white-space:normal;min-width:180px}
 .scrim{position:fixed;inset:0;background:rgba(10,14,30,.45);z-index:20}
 aside.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--surface);z-index:21;display:flex;flex-direction:column;border-left:1px solid var(--line)}
 .dhead{padding:calc(14px + env(safe-area-inset-top,0px)) 18px 12px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start}
-.dhead .t{flex:1;min-width:0}
+.dhead .t{flex:1;min-width:0} .dmore{position:relative} .dmenu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(15,20,40,.18);min-width:210px;padding:4px} .dmenu button{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 12px;font:inherit;font-size:14px;color:var(--ink);border-radius:6px;cursor:pointer} .dmenu button:hover{background:var(--gold-soft)}
 .dhead .t b{font-family:var(--display);font-size:24px;color:var(--accent)}
 .dbody{padding:16px 18px;overflow-y:auto;flex:1;display:grid;gap:18px}
 .estmini{display:none}
@@ -831,6 +831,7 @@ function drawDrawer(){
     : (p.status==='Lead' && !isNew) ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>New lead${p.bdRep?' from '+esc(p.bdRep):''}.</b> ${p.sentBy?'Assigned to '+esc(p.sentBy)+'.':'Assign an estimator.'}${p.leadAt?' Logged '+fmtD(p.leadAt)+'.':''}</div>${(isManager()||(role()==='Estimator'&&p.sentBy===me.name))?'<button class="btn small" id="startEst">Start pricing</button>':''}</div>` : '';
   $('#drawer').innerHTML = `
   <div class="dhead"><div class="t">${!isNew && p.hcpJob && outcome(p)==='Won' ? `<div class="jobno">Job #${esc(p.hcpJob)}</div>` : ''}<b id="dTitle" class="num">${isNew?'New proposal':esc(p.num)}</b><div class="sub">${isNew?(newLead?'New lead · the PFBS number is assigned when you save.':'The PFBS number is assigned when you save.'):(outcome(p)==='Won'?'Job for ':'')+esc(p.client||'')+(p.property?' · '+esc(p.property):'')}</div></div>
+    ${!isNew && isManager() ? `<div class="dmore"><button class="btn ghost small" id="dMore" aria-haspopup="true" aria-label="More actions">⋯</button><div class="dmenu" id="dMenu" hidden><button type="button" data-copy="job">Copy to new job</button><button type="button" data-copy="prop">Copy to new proposal</button></div></div>` : ''}
     <button class="btn ghost small" id="closeD">Close</button></div>
   <div class="dbody">
     <div id="emBox" class="fubox" hidden></div>
@@ -955,6 +956,23 @@ async function requote(src, {pct=0, budget=false}={}){
   const res=await sb.from('proposals').insert(row).select().single();
   if(res.error){ toast(res.error.message); return null; }
   toast(`Created ${res.data.num} from ${src.num}${pct?` (+${Math.round(pct*1000)/10}%)`:''}`); return res.data.num;
+}
+// HCP's "Copy to new job" / a plain copy of a proposal: same client, site, contacts and lines (pricing included);
+// nothing from the old one's history comes along (no dates, job #, visits, invoices, payments, commission, photos)
+async function copyProposal(src, asJob){
+  if(!src || !isManager()) return;
+  if(!confirm(`Make a new ${asJob?'job':'proposal'} from ${src.num}?`)) return;
+  const td=iso(today()), keep=['client','property','service','frequency','amount','gp','passThrough','clientType','leadSource','bdRep','contactName','contactEmail','contactPhone','billAddress','siteAddress','billingEmail','poRequired','clientId','propertyId','clarifications','pricingOption','termMonths','folderLink','bidLink','notes','buyer'];
+  const copy={}; for(const k of keep) if(src[k]!=null && src[k]!=='') copy[k]=structuredClone(src[k]);
+  copy.items=structuredClone(src.items||[]).map(i=>asJob?i:{...i, accepted:false});
+  Object.assign(copy, asJob ? {status:'Approved', sentBy:src.sentBy||me.name, dateSent:src.dateSent?td:null, dateResolved:td} : {status:'Estimating', sentBy:me.name, dateSent:null});
+  if(asJob){ try{ copy.parts=buildParts(copy); }catch(_){ copy.parts=[]; } }
+  syncFromItems(copy); const row=toRow(copy); delete row.num; delete row.hcp_job;
+  const res=await sb.from('proposals').insert(row).select().single();
+  if(res.error){ toast(res.error.message); return; }
+  const n=res.data.num; await addActivity(n,'note',`Copied from ${src.num}`);
+  toast(`${asJob?'Job':'Proposal'} ${n} made from ${src.num}${asJob&&res.data.hcp_job?' · Job #'+res.data.hcp_job:''}`);
+  closeDrawer(); await loadProposals(); openDrawer(n);
 }
 async function turnOnJobNumbers(){
   const r=await formDialog('Let the CRM number jobs', '<label class="f">HousecallPro\'s latest job #<input name="last" type="number" required placeholder="e.g. 10234"></label><div class="note" style="margin:0">In HousecallPro: Pipeline → Jobs, the highest Job #. The next CRM job will be that + 1. From now on, create jobs here, not in HousecallPro.</div>', 'Start numbering');
@@ -1424,7 +1442,7 @@ $('#gNew').addEventListener('click', e=>{ e.stopPropagation(); const m=$('#gMenu
   m.innerHTML=newItems().map(([k,t,h])=>`<button type="button" data-gnew="${k}">${esc(t)} <small>${esc(h)}</small></button>`).join('') || '<div class="note" style="margin:6px">Nothing to create with your role.</div>';
   m.hidden=!open; $('#gNew').setAttribute('aria-expanded', String(open)); if(open) m.querySelector('button')?.focus(); });
 $('#gMenu').addEventListener('click', e=>{ const b=e.target.closest('[data-gnew]'); if(b) newThing(b.dataset.gnew); });
-document.addEventListener('click', e=>{ if(!e.target.closest('.gnew')){ $('#gMenu').hidden=true; $('#gNew').setAttribute('aria-expanded','false'); } if(!e.target.closest('.gsearch')) $('#gres').hidden=true; });
+document.addEventListener('click', e=>{ if(!e.target.closest('.gnew')){ $('#gMenu').hidden=true; $('#gNew').setAttribute('aria-expanded','false'); } if(!e.target.closest('.gsearch')) $('#gres').hidden=true; if(!e.target.closest('.dmore')){ const m=$('#dMenu'); if(m) m.hidden=true; } });
 let GHITS=[], GSEL=0;
 function gSearch(q){ q=norm(q); if(q.length<2) return [];
   const has=(...xs)=>xs.some(x=>norm(x).includes(q)), out=[];
@@ -1870,6 +1888,8 @@ $('#drawer').addEventListener('change', e=>{ const o=e.target.dataset.opt; if(o=
 $('#drawer').addEventListener('change', e=>{ if(e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property'){ autofill(k); checkDup(); } if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
+  if(t.id==='dMore'){ const m=$('#dMenu'); if(m) m.hidden=!m.hidden; return; }
+  if(t.dataset.copy){ $('#dMenu').hidden=true; copyProposal(draft, t.dataset.copy==='job'); return; }
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
   else if(t.id==='saveD') save(null,{stay:true});   // Save changes keeps the proposal open, like HousecallPro
   else if(t.id==='pdfD') makePdf(draft, {preview:true});
