@@ -206,7 +206,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.fill('[name="visit_date"]', '2026-11-04'); await pg.dispatchEvent('[name="visit_date"]', 'change');
   await pg.check('[name="skip_weekends"]'); await pg.fill('[name="workdays"]', '10'); await pg.dispatchEvent('[name="workdays"]', 'change');
   assert.equal(await pg.$eval('[name="end_date"]', e => e.value), '2026-11-17', '10 work days skipping weekends ends on Tuesday the 17th');
-  assert.match(await pg.$eval('[name="preset"] option[value="week"]', e => e.textContent), /Weekly on Wednesday/, 'menu follows the start date'); await pg.check('dialog.inved [name="techs"][value="Ana Tech"]'); await pg.check('dialog.inved [name="equipment"][value="Swing Stage"]');
+  assert.match(await pg.$eval('[name="preset"] option[value="week"]', e => e.textContent), /Weekly on Wednesday/, 'menu follows the start date'); await pg.check('dialog.inved [name="techs"][value="Ana Tech"]');
   await pg.fill('[name="notes"]', 'Check in at security'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(500);
   // weekly crew email
   await pg.click('#tabs [data-tab="schedule"]', T); await pg.waitForTimeout(200); await pg.click('#schWeek'); await pg.waitForSelector('dialog.ask [name="mon"]', T);
@@ -218,7 +218,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('dialog.ask [data-l="en"]'); assert.ok((await pg.$eval('#cmBody', e => e.value)).startsWith('Hi Rigo,'), 'switch to English');
   await pg.locator('dialog.ask').last().locator('[data-a="x"]').click(); await pg.click('dialog.ask [data-t="Ana Tech"]'); await pg.waitForTimeout(200);
   const en = await pg.$eval('#cmBody', e => e.value);
-  assert.ok(/Wednesday, November 4, 2026 – Tuesday, November 17, 2026 \(weekdays only\)/.test(en) && /Swing Stage/.test(en) && /Check in at security/.test(en) && /Scope of work: Swing stage glass/.test(en), 'weekday job, equipment, notes and scope in the email');
+  assert.ok(/Wednesday, November 4, 2026 – Tuesday, November 17, 2026 \(weekdays only\)/.test(en) && !/Equipment:/.test(en) && /Check in at security/.test(en) && /Scope of work: Swing stage glass/.test(en), 'weekday job, notes and scope in the email (no equipment: the warehouse packs it)');
   await pg.locator('dialog.ask').last().locator('[data-a="x"]').click(); await pg.locator('dialog.ask').last().locator('[data-a="x"]').click();
   await pg.click('#schToday'); for (let i = 0; i < 24; i++) { if ((await pg.$eval('#schedBody b', e => e.textContent)).startsWith('November 2026')) break; await pg.click('#schNext'); await pg.waitForTimeout(80); }
   assert.equal(await pg.$$eval('[data-day="2026-11-07"] .vchip', c => c.filter(x => /Demo Plaza/.test(x.textContent)).length), 0, 'not on Saturday');
@@ -737,7 +737,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
 
 // 29. A lift in the pricing follows the job: rental to reserve on approval, LIFT on the schedule, the visit editor, Home and the crew email
 {
-  const est = { sheet: 'SP', units: [{ desc: 'Solar panels', qty: 1000, rate: 2 }], labor: [{ role: 'Expert', hours: 8, rate: 0, wage: 32 }], materials: [], taxRate: 0, rentals: [{ desc: "40' Boom Lift", unit: 1900, qty: 1, markup: 0.25 }], equipment: [], misc: [] };
+  const est = { sheet: 'SP', units: [{ desc: 'Solar panels', qty: 1000, rate: 2 }], labor: [{ role: 'Expert', hours: 8, rate: 0, wage: 32 }], materials: [], taxRate: 0, rentals: [{ desc: "40' Boom Lift", unit: 1900, qty: 1, markup: 0.25 }], equipment: [{ desc: 'Hot water pressure washer', unit: 75, qty: 1, markup: 0.2 }, { desc: 'Water tank', unit: 40, qty: 0, markup: 0 }], misc: [] };
   const pr = { num: 'PFBS-1015', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Lift Co', status: 'Sent', items: [{ type: 'Base', qty: 1, description: 'Carport solar', amount: 4375, estimate: est }] };
   const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('lift: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
@@ -750,7 +750,10 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.ok(parts.some(x => x.kind === 'rental' && x.status === 'To reserve' && /Boom Lift/.test(x.desc)), 'approval puts the lift on the job as To reserve');
   assert.match(await pg.textContent('dialog.inved'), /Lift \/ rental[\s\S]*Boom Lift: To reserve[\s\S]*Not reserved yet/, 'visit editor shows the lift to reserve');
   await pg.fill('dialog.inved [name="visit_date"]', new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10));
+  assert.match(await pg.textContent('#vEquip'), /Equipment[\s\S]*Hot water pressure washer/, 'equipment shows as named in the pricing');
+  assert.ok(!/Water tank/.test(await pg.textContent('#vEquip')) && !(await pg.$('dialog.inved [name="equipment"]')), 'only lines with a qty; no checkboxes');
   await pg.check('dialog.inved [name="techs"] >> nth=0'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(800);
+  assert.deepEqual(await pg.evaluate(() => DBX.visits.find(x => x.num === 'PFBS-1015').equipment), ['Hot water pressure washer', "40' Boom Lift"], 'the visit keeps the pricing equipment + lift for the warehouse');
   await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForTimeout(300);
   if (!(await pg.$('.vchip .clift.todo'))) { await pg.click('#schNext'); await pg.waitForTimeout(200); }
   assert.ok(await pg.$('.vchip .clift.todo'), 'LIFT tag on the schedule chip');

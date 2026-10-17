@@ -1177,6 +1177,13 @@ const rentLine = x => `${x.desc||'Lift rental'}${num(x.qty)>1?' ×'+num(x.qty):'
 // what Oscar sees on the schedule: the job's lifts / rentals and what's left to do (reserve, delivery, off-rent)
 function rentBox(p){ const R=jobRentals(p); if(!R.length) return ''; const A=rentAlerts(p);
   return `<div class="vscope ${A.some(a=>a[0]==='bad')?'rentbad':A.length?'rentwarn':''}"><b>Lift / rental</b> <span class="note" style="margin:0">from the pricing; update it on the job (Job tab → Parts &amp; rentals)</span><ul>${R.map(x=>{ const a=rentAlert(p,x); return `<li>${esc(rentLine(x))}${a?` <span class="flag ${a[0]}">${esc(a[1])}</span>`:''}</li>`; }).join('')}</ul></div>`; }
+// the equipment lines from the pricing (calculation sheet), named exactly as there; lifts / rentals are in rentBox
+function pricingEquip(p){ const out=new Map(); if(!p) return [];
+  for(const it of countedItems(p)){ for(const r of (it.estimate?.equipment||[])){ const k=String(r.desc||'').trim(); if(k && (num(r.qty)||0)>0 && !out.has(k.toLowerCase())) out.set(k.toLowerCase(), k); } }
+  return [...out.values()]; }
+const jobEquip = p => p ? [...new Set([...pricingEquip(p), ...jobRentals(p).map(x=>x.desc||'Lift rental')])] : [];
+function equipBox(p, v){ const L=pricingEquip(p), old=!L.length && !jobRentals(p).length ? (v?.equipment||[]) : [];
+  return `<div class="vscope"><b>Equipment</b> <span class="note" style="margin:0">${L.length?'from the pricing; the warehouse packs it':old.length?'saved on this visit':'none in the pricing'}</span>${(L.length?L:old).length?`<ul>${(L.length?L:old).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}</div>`; }
 const partsLate = p => outcome(p)==='Won' && partsOpen(p)>0 && p.dateResolved && days(parse(p.dateResolved), today())>=2;
 const buyerOf = p => p.buyer || p.sentBy || '';
 function partsHTML(p, ed){
@@ -4098,7 +4105,7 @@ function visEdit(v, opts={}){
       <div class="vchecks vtechs">${[...new Set([...allTechs(), ...(v.techs||[])])].map(t=>`<label data-tech="${esc(t)}" title="${esc(skillsOf(t).join(', '))}"><input type="checkbox" name="techs" value="${esc(t)}" ${(v.techs||[]).includes(t)?'checked':''} ${dis}><span class="vtn">${esc(t)}</span><span class="vbusy flag warn" hidden>busy</span><span class="vsk">${esc(skillsOf(t).join(' · '))}</span></label>`).join('')}</div>
       <div class="note vgap" style="margin:2px 0 0;color:var(--warn)" hidden></div></div>
 
-    <div class="f"><b>Equipment</b>${checks('equipment', [...new Set([...equipList(), ...(v.equipment||[])])], v.equipment||[])}</div>
+    ${v.kind==='job'?`<div id="vEquip">${equipBox(p, v)}</div>`:''}
     <div class="grid2">${(S.vehicles||[]).length||v.vehicle?`<label class="f">Vehicle<select name="vehicle" ${dis}><option value="">—</option>${[...new Set([...vehList(), ...(v.vehicle?[v.vehicle]:[])])].map(x=>`<option ${x===v.vehicle?'selected':''}>${esc(x)}</option>`).join('')}</select></label>`:''}
       <label class="f">Status<select name="status" ${dis}>${['Scheduled','Done','Skipped','Cancelled'].map(x=>`<option ${x===v.status?'selected':''}>${x}</option>`).join('')}</select></label></div>
     <label class="f">Notes for the crew <span class="note" style="margin:0;font-weight:400">go in their email</span><textarea name="notes" rows="2" ${dis}>${esc(v.notes||'')}</textarea></label>
@@ -4130,7 +4137,7 @@ function visEdit(v, opts={}){
     for(const l of d.querySelectorAll('.vtechs [data-tech]')){ const t=l.dataset.tech, on=l.querySelector('input').checked;
       const tq=norm(d.querySelector('[name="techq"]')?.value||''); l.hidden=!on && ((!!cap && !skillsOf(t).includes(cap)) || (!!tq && !norm(t).includes(tq)));
       const cf=row.visit_date?techConflicts({...row, techs:[t]}, v.id):[], b=l.querySelector('.vbusy'); b.hidden=!cf.length; b.title=cf.map(c=>`${fmtD(c.day)} ${t12(c.v.start_time)} ${c.v.job_no?'#'+c.v.job_no+' ':''}${visLabel(c.v)}`).join('\n'); b.textContent=cf.length?`busy: ${visLabel(cf[0].v).split(' · ')[0]}${cf[0].v.start_time?' '+t12(cf[0].v.start_time).replace(':00',''):''}`:'busy'; }
-    const picked=[...d.querySelectorAll('[name="techs"]:checked')].map(x=>x.value), need=[...new Set([...d.querySelectorAll('[name="equipment"]:checked')].map(x=>EQUIP_SKILL[x.value]).filter(Boolean))];
+    const picked=[...d.querySelectorAll('[name="techs"]:checked')].map(x=>x.value), need=[...new Set((j0=>j0?equipFromJob(j0):(v.equipment||[]))(visJob({num:d.querySelector('[name="num"]')?.value||v.num})).map(x=>EQUIP_SKILL[x]).filter(Boolean))];
     const gaps=need.filter(k=>picked.length && !picked.some(t=>skillsOf(t).includes(k))), g=d.querySelector('.vgap');
     if(g){ g.hidden=!gaps.length; g.textContent=gaps.length?`⚠ Nobody picked is tagged for: ${gaps.join(', ')}`:''; } };
   // HCP-style: the live month calendar beside the form; this job shows in gold, click a day to move it there
@@ -4152,12 +4159,13 @@ function visEdit(v, opts={}){
     if(n==='unit') d.querySelector('.vmon').hidden=e.target.value!=='month';
     if(n==='workdays'||n==='skip_weekends') syncEnd(); if(n==='end_date') syncDays(); if(n==='visit_date'){ syncEnd(); relabel(); }
     if(n==='num' && !v.id){ const j=P.find(x=>x.num===e.target.value); $('#vScope').innerHTML=scopeBox(j); if(j){ const dd=visitDraft(j, f('visit_date').value); Object.assign(v,{num:j.num, address:dd.address, client:dd.client, title:dd.title});
-      for(const c of d.querySelectorAll('[name="equipment"]')) c.checked=dd.equipment.includes(c.value);
+      { const eb=d.querySelector('#vEquip'); if(eb) eb.innerHTML=equipBox(j, v); }
       { const nt=d.querySelector('[name="notes"]'); if(nt && !nt.value.trim() && dd.notes) nt.value=dd.notes; const vs=d.querySelector('[name="vehicle"]'); if(vs && !vs.value && dd.vehicle && [...vs.options].some(o=>o.value===dd.vehicle)) vs.value=dd.vehicle; }
       if(isRecurring(j) && f('preset')){ const r=ruleFromJob(j, f('visit_date').value); f('preset').value='custom'; d.querySelector('.vcustom').hidden=false; d.querySelector('.vends').hidden=false; f('every').value=r.every; f('unit').value=r.unit; d.querySelector('.vmon').hidden=r.unit!=='month'; } } } });
-  const collect=()=>{ const row={visit_date:f('visit_date').value, end_date:f('end_date').value||null, start_time:f('start_time').value||null, end_time:f('end_time').value||null, techs:all('techs'), equipment:all('equipment'),
+  const collect=()=>{ const row={visit_date:f('visit_date').value, end_date:f('end_date').value||null, start_time:f('start_time').value||null, end_time:f('end_time').value||null, techs:all('techs'),
       notes:f('notes').value.trim()||null, office_notes:f('office_notes').value.trim()||null, status:f('status').value, vehicle:f('vehicle')?.value||null, skip_weekends:f('skip_weekends').checked};
     if(v.kind==='event'){ row.title=f('title').value.trim(); row.kind='event'; } else { row.work=v.work||[]; row.num=v.id?v.num:(f('num').value||null); const j=row.num&&P.find(x=>x.num===row.num); row.client=j?j.client:v.client; row.title=j?j.property:v.title; row.address=j?(j.siteAddress||j.property):v.address; }
+    { const j=row.num&&P.find(x=>x.num===row.num), L=jobEquip(j); row.equipment = L.length ? L : (v.equipment||[]); }
     if(row.end_date && row.end_date<=row.visit_date) row.end_date=null; return row; };
   const repeatOf=()=>{ if(!f('preset') || !f('preset').value) return null; const pr=f('preset').value, mode=d.querySelector('[name="mode"]:checked')?.value||'nth', ends=d.querySelector('[name="ends"]:checked')?.value||'never';
     const rule = pr!=='custom' ? presetRule(pr, f('visit_date').value) : {every:Math.max(1,Number(f('every').value)||1), unit:f('unit').value, mode, nth:Number(f('nth').value), weekday:Number(f('weekday').value), day:Number(f('day').value)||parse(f('visit_date').value).getDate()};
@@ -4369,7 +4377,7 @@ function visMailText(v, tech, lang){ const t=I18[lang], dts=dLong(v.visit_date,l
   const team=(v.techs||[]).filter(x=>x!==tech), addr=String(v.address||'').replace(/\n/g,', ');
   const L=[...(v.job_no?[`${t.job}: ${v.job_no}`]:[]), `${t.when}: ${dts}`, `${t.time}: ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)}`, `${t.address}: ${addr}`];
   if(team.length) L.push(`${t.team}: ${team.join(', ')}`);
-  if((v.equipment||[]).length) L.push(`${t.equipment}: ${v.equipment.map(x=>lang==='es'?(EQUIP_ES[x]||x):x).join(', ')}`); { const R=jobRentals(visJob(v)); if(R.length) L.push(`${t.rental}: ${R.map(x=>x.desc||'Lift').join(', ')}`); } if(v.vehicle) L.push(`${t.vehicle}: ${v.vehicle}`); if(v.notes) L.push(`${t.notes}: ${v.notes}`);
+  { const R=jobRentals(visJob(v)); if(R.length) L.push(`${t.rental}: ${R.map(x=>x.desc||'Lift').join(', ')}`); } if(v.vehicle) L.push(`${t.vehicle}: ${v.vehicle}`); if(v.notes) L.push(`${t.notes}: ${v.notes}`);
   const sc=scopeLines(visJob(v)).map(x=>lang==='es'?toEs(x):x); if(sc.length) L.push('', `${t.scope}:`, ...sc.map(x=>'- '+x));
   L.push('', t.questions, '', t.thanks, 'PFBS');
   return {subject:(lang==='es'?'Detalles del trabajo':'Job details')+` — ${addr.split(',')[0]} — ${fmtD(v.visit_date)}`, body:L.join('\n')}; }
@@ -4380,7 +4388,7 @@ function weekText(tech, monday, lang){ const t=I18[lang], sun=addDays(monday,6),
   for(const v of L){ const team=(v.techs||[]).filter(x=>x!==tech), addr=String(v.address||'').replace(/\n/g,', ');
     out.push(`${dLong(v.visit_date,lang)}${v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang)+(v.skip_weekends?` (${t.weekdays})`:''):''}${v.job_no?` — ${t.job} ${v.job_no}`:''}`, `  ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)} — ${v.kind==='event'?(v.title||''):addr}`);
     if(team.length) out.push(`  ${t.team}: ${team.join(', ')}`);
-    if((v.equipment||[]).length) out.push(`  ${t.equipment}: ${v.equipment.map(x=>lang==='es'?(EQUIP_ES[x]||x):x).join(', ')}`); { const R=jobRentals(visJob(v)); if(R.length) out.push(`  ${t.rental}: ${R.map(x=>x.desc||'Lift').join(', ')}`); } if(v.vehicle) out.push(`  ${t.vehicle}: ${v.vehicle}`); if(v.notes) out.push(`  ${t.notes}: ${v.notes}`); const sc=scopeLines(visJob(v)).map(x=>lang==='es'?toEs(x):x); if(sc.length) out.push(`  ${t.scope}: ${sc.join('; ')}`); out.push(''); }
+    { const R=jobRentals(visJob(v)); if(R.length) out.push(`  ${t.rental}: ${R.map(x=>x.desc||'Lift').join(', ')}`); } if(v.vehicle) out.push(`  ${t.vehicle}: ${v.vehicle}`); if(v.notes) out.push(`  ${t.notes}: ${v.notes}`); const sc=scopeLines(visJob(v)).map(x=>lang==='es'?toEs(x):x); if(sc.length) out.push(`  ${t.scope}: ${sc.join('; ')}`); out.push(''); }
   out.push(t.questions, '', t.thanks, 'PFBS');
   return {subject:`${t.yourSchedule} — ${first} — ${t.weekOf} ${fmtD(monday)}`, body:out.join('\n'), n:L.length}; }
 function mailBox(title, to, txt, relang){ const d=document.createElement('dialog'); d.className='ask';
