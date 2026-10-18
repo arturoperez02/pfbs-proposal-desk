@@ -801,7 +801,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   let js = await pg.textContent('#jsWrap .jspage');
   assert.ok(/Hoja de trabajo|Job sheet/.test(js) && /65' Boom Lift/.test(js) && /Sunbelt/.test(js) && /R-5521/.test(js), 'sheet shows the lift with its reservation');
   await pg.click('#jsWrap [data-js="en"]'); js = await pg.textContent('#jsWrap .jspage');
-  assert.ok(/Job sheet/.test(js) && /Scope of work[\s\S]*Perimeter windows/.test(js) && /Back from the job/.test(js) && !/\$|9,338/.test(js) && /Gate code 4455/.test(js) && /Rigo Perez/.test(js), 'English sheet: scope, crew, notes, back-from-job, no prices');
+  assert.ok(/Job sheet/.test(js) && /Scope of work[\s\S]*Perimeter windows/.test(js) && /Back from the job/.test(js) && !/\$|9,338/.test(js) && /Gate code 4455/.test(js) && /Rigo Perez/.test(js) && !/Site contact|Contacto/.test(js), 'English sheet: scope, crew, notes, back-from-job, no prices');
   await pg.click('#jsWrap [data-js="es"]'); assert.match(await pg.textContent('#jsWrap .jspage'), /Alcance del trabajo[\s\S]*Al regresar del trabajo/, 'Spanish toggle');
   await pg.click('#jsWrap [data-js="x"]'); assert.ok(!(await pg.$('#jsWrap')), 'closes');
   await pg.close();

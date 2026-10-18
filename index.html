@@ -4359,14 +4359,13 @@ function jobSheetHTML(v, lang){
   const t=JS_T[lang], p=visJob(v)||{}, es=x=>lang==='es'?toEs(x):x, box='<span class="jsb"></span>', line='<span class="jsl"></span>';
   const dts=dLong(v.visit_date,lang)+(v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang)+(v.skip_weekends?` (${t.weekdays})`:''):'');
   const mats=jobMaterials(p), eq=pricingEquip(p), R=jobRentals(p), sc=scopeLines(p);
-  const contact=[p.contactName, p.contactPhone].filter(Boolean).join(' · ');
   return `<div class="jspage">
    <div class="jshead"><img src="reports-logo.jpg" alt="PF Building Services"><div><div class="jst">${t.title}</div>${v.job_no||p.hcpJob?`<div class="jsjob">${t.job} ${esc(v.job_no||p.hcpJob)}</div>`:''}</div></div>
    <table class="jskv"><tr><th>${t.client}</th><td>${esc([p.client||v.client, p.property||v.title].filter(Boolean).join(' · '))}</td></tr>
      <tr><th>${t.site}</th><td>${esc(v.address||p.siteAddress||'').replace(/\n/g,'<br>')}</td></tr>
      <tr><th>${t.when}</th><td>${esc(dts)}</td></tr><tr><th>${t.time}</th><td>${esc(t12(v.start_time,lang))}${v.end_time?' – '+esc(t12(v.end_time,lang)):''}</td></tr>
      <tr><th>${t.team}</th><td>${esc((v.techs||[]).join(', ')||'—')}${v.vehicle?` &nbsp;·&nbsp; ${t.vehicle}: ${esc(v.vehicle)}`:''}</td></tr>
-     ${contact?`<tr><th>${t.contact}</th><td>${esc(contact)}</td></tr>`:''}</table>
+</table>
    <h4>${t.scope}</h4>${sc.length?`<ul>${sc.map(x=>`<li>${esc(es(x))}</li>`).join('')}</ul>`:`<p>${t.none}</p>`}
    <div class="jscols"><div><h4>${t.mat}</h4>${mats.length?`<table class="jsgrid"><tr><th>${t.qty}</th><th></th><th>${t.packed}</th></tr>${mats.map(m=>`<tr><td class="n">${esc(String(Math.round(m.qty*100)/100))}</td><td>${esc(es(m.desc))}</td><td class="c">${box}</td></tr>`).join('')}</table>`:`<p>${t.none}</p>`}</div>
      <div><h4>${t.equip}</h4>${eq.length?`<table class="jsgrid"><tr><th></th><th>${t.packed}</th></tr>${eq.map(x=>`<tr><td>${esc(lang==='es'?(EQUIP_ES[x]||toEs(x)):x)}</td><td class="c">${box}</td></tr>`).join('')}</table>`:`<p>${t.none}</p>`}</div></div>
