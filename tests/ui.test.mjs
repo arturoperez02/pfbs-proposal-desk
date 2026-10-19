@@ -1076,6 +1076,35 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 39. Won job: status chips tucked away (job steps drive it); 📁 Save to client folder puts the PDFs in SharePoint in one click
+{
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('sp save: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  const pr = { num: 'PFBS-1070', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Folder Test Co', property: '9 Elm St', service: 'Window Cleaning', status: 'Approved', date_resolved: '2026-10-10', hcp_job: '10970', items: [{ type: 'Base', qty: 1, description: 'Exterior windows', amount: 1200, estimate: { labor: [], materials: [] } }] };
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); sessionStorage.setItem('pfbs.open', 'PFBS-1070'); }, pr);
+  // stand-ins for Microsoft sign-in and SharePoint (Graph)
+  await pg.route(/msal-browser/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.msal={PublicClientApplication:class{getAllAccounts(){return [{username:"a"}]} async acquireTokenSilent(){return {accessToken:"t"}} async acquireTokenPopup(){return {accessToken:"t"}}}}' }));
+  const up = [], mk = [];
+  await pg.route(/graph\.microsoft\.com/, r => { const u = decodeURIComponent(r.request().url()), m = r.request().method(), j = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
+    if (m === 'PUT') { up.push(u); return j({ id: 'x' }); }
+    if (m === 'POST') { mk.push(u); return j({}); }
+    if (/\/drives\?/.test(u)) return j({ value: [{ id: 'd1', name: 'Clients', webUrl: 'https://x.sharepoint.com/sites/team/Clients' }] });
+    if (/root\/children/.test(u)) return j({ value: [{ name: 'Folder Test Co', folder: {} }, { name: 'Other Client', folder: {} }] });
+    if (/root:\/Folder Test Co:\/children/.test(u)) return j({ value: [{ name: '9 Elm St', folder: {} }] });
+    if (/root:\/Folder Test Co\/9 Elm St\/Window Cleaning\?/.test(u)) return j({ id: 'f1', webUrl: 'https://x.sharepoint.com/sites/team/Clients/Folder%20Test%20Co/9%20Elm%20St/Window%20Cleaning' });
+    if (/\/shares\//.test(u)) return j({ id: 'f1', parentReference: { driveId: 'd1' } });
+    return r.fulfill({ status: 404, body: '{}' }); });
+  await pg.goto(BASE + (BASE.includes('?') ? '&' : '?') + 'sp=1'); await pg.waitForSelector('#spSaveD', T);
+  assert.ok(await pg.$eval('#drawer .stages', e => e.hidden), 'status chips hidden on a job');
+  await pg.click('[data-stshow]'); assert.ok(!(await pg.$eval('#drawer .stages', e => e.hidden)), 'Change by hand shows them');
+  await pg.click('#spSaveD'); await pg.waitForTimeout(2500);
+  assert.equal(up.length, 2, 'proposal + pricing PDFs uploaded: ' + JSON.stringify(up));
+  assert.ok(up.some(u => /items\/f1:\/.*PFBS-1070\.pdf/.test(u)) && up.some(u => /Pricing/.test(u)), 'both into the found folder: ' + JSON.stringify(up));
+  assert.ok(mk.length, 'service folder made if missing');
+  assert.match(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1070').folder_link), /Folder%20Test%20Co/, 'folder remembered on the job');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

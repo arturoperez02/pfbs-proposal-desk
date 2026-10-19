@@ -2,7 +2,7 @@
 import fs from 'fs'; import path from 'path'; import { fileURLToPath } from 'url';
 const T = path.dirname(fileURLToPath(import.meta.url)), R = path.join(T, '..'), B = path.join(T, '.build');
 fs.mkdirSync(B, { recursive: true });
-const cfg = '<script>window.PFBS_CONFIG={SUPABASE_URL:"https://x.supabase.co",SUPABASE_ANON_KEY:"k"}; window.MOCK_EMAIL=new URLSearchParams(location.search).get("u")||"";</script>';
+const cfg = '<script>window.PFBS_CONFIG={SUPABASE_URL:"https://x.supabase.co",SUPABASE_ANON_KEY:"k",...(new URLSearchParams(location.search).has("sp")?{SP_CLIENT_ID:"c",SP_TENANT_ID:"t"}:{})}; window.MOCK_EMAIL=new URLSearchParams(location.search).get("u")||"";</script>';
 const swap = s => s
   .replace('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>', '<script src="mock.js"></script>')
   .replace('<script src="config.js"></script>', cfg)

@@ -133,7 +133,7 @@ aside.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);backgro
   .dfoot .btn{padding:8px 4px;font-size:13px} .dfoot #saveD{grid-column:span 2}
 }
 .dfoot .msg{margin-right:auto;font-size:13px;color:var(--muted)}
-.stages{display:flex;flex-wrap:wrap;gap:6px}
+.stages{display:flex;flex-wrap:wrap;gap:6px} .stages[hidden]{display:none}
 .stages button{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 9px;font-size:13px;cursor:pointer}
 .stages .stnext{align-self:center;color:var(--muted,#888);padding:0 2px} .stages .strest{display:contents} .stages .strest[hidden]{display:none} .stages button.stmore{background:none;border-style:dashed}
 .stages button.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700}
@@ -875,7 +875,8 @@ function drawDrawer(){
     ${review}
     ${won && !isNew ? `<div id="jfBox">${jobFlowHTML(p)}</div>` : ''}
     <fieldset><legend>Status</legend>
-      <div class="stages">${(()=>{ const all=(STATUSES.includes(p.status)?[]:[p.status]).concat(STATUSES).filter(s=>s===p.status || (ed && !preLocked(s) && s!=='Lead'));
+      ${won && !isNew ? `<div class="gpline" style="margin:0">Status <b>${esc(p.status)}</b>${p.onHoldSince?' · on hold':''}: it moves by itself with the job steps above.${ed?' <button type="button" class="btn ghost small" data-stshow>Change by hand</button>':''}</div>` : ''}
+      <div class="stages" ${won && !isNew ? 'hidden' : ''}>${(()=>{ const all=(STATUSES.includes(p.status)?[]:[p.status]).concat(STATUSES).filter(s=>s===p.status || (ed && !preLocked(s) && s!=='Lead'));
         const nx=nextSteps(p.status, p).filter(s=>all.includes(s)), rest=all.filter(s=>s!==p.status && !nx.includes(s));
         const btn=s=>`<button type="button" data-st="${s}" class="${p.status===s?'on':''}" ${ed&&!preLocked(s)?'':'disabled'}>${s}</button>`;
         return btn(p.status) + (nx.length?'<span class="stnext">→</span>':'') + nx.map(btn).join('') + (rest.length?`<button type="button" class="stmore" data-stmore>More ▾</button><span class="strest" hidden>${rest.map(btn).join('')}</span>`:''); })()}</div>
@@ -976,7 +977,7 @@ function drawDrawer(){
   </div>
   <div class="dfoot"><span class="msg" id="dmsg">${ed?'':'View only'}</span>
     ${isNew?'<button class="btn ghost" id="cancelD">Cancel</button>':''}
-    ${isNew?'':`<button class="btn ghost" id="estPdfD">Pricing PDF</button><button class="btn ghost" id="pdfD">Preview PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
+    ${isNew?'':`<button class="btn ghost" id="estPdfD">Pricing PDF</button>${spOn()?'<button class="btn ghost" id="spSaveD" title="Saves the proposal PDF (and the pricing PDF) into the client\'s SharePoint folder. No download.">📁 Save to client folder</button>':''}<button class="btn ghost" id="pdfD">Preview PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
     <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save now'}</button></div>`;
 }
 const incPct = () => S.priceIncrease ?? 0.05;
@@ -1141,7 +1142,7 @@ function itemEvent(e, final){
   return true;
 }
 $('#drawer').addEventListener('change', e=>{ if(e.target.id!=='budChk' || !draft) return; draft.budgetYear = e.target.checked ? today().getFullYear()+1 : null; if(!e.target.checked) draft.budgetCheck=null; drawDrawer(); $('#dmsg').textContent = e.target.checked ? 'Budget proposal: the PDF and email say so. Save to keep it.' : 'Normal proposal again. Save to keep it.'; });
-$('#drawer').addEventListener('click', e=>{ const m=e.target.closest('[data-stmore]'); if(m){ const r=m.nextElementSibling; r.hidden=!r.hidden; m.textContent=r.hidden?'More ▾':'Less ▴'; } });
+$('#drawer').addEventListener('click', e=>{ const sh=e.target.closest('[data-stshow]'); if(sh){ const g=sh.closest('fieldset').querySelector('.stages'); g.hidden=!g.hidden; sh.textContent=g.hidden?'Change by hand':'Hide'; return; } const m=e.target.closest('[data-stmore]'); if(m){ const r=m.nextElementSibling; r.hidden=!r.hidden; m.textContent=r.hidden?'More ▾':'Less ▴'; } });
 $('#drawer').addEventListener('click', e=>{ if(!draft) return; const t=e.target;
   if(t.closest('#invNew')){ invOpenNew(draft); return; }
   if(t.closest('#visNew')){ visNewFor(draft); return; }
@@ -2025,6 +2026,7 @@ $('#drawer').addEventListener('click', e=>{
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
   else if(t.id==='saveD') save(null,{stay:true});   // Save changes keeps the proposal open, like HousecallPro
   else if(t.id==='pdfD') makePdf(draft, {preview:true});
+  else if(t.id==='spSaveD') spSaveAll(draft).catch(err=>toast('SharePoint: '+err.message));
   else if(t.id==='estPdfD') makeEstimatePdf(draft, (draft.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]));
   else if(t.dataset.est!=null) openEst(+t.dataset.est);
   else if(t.dataset.add){ draft.items=[...(draft.items||[])]; if(!draft.items.length && t.dataset.add==='Service' && num(draft.amount)!=null) draft.items.push({type:'Service',service:draft.service||'',qty:1,frequency:draft.frequency||'',amount:num(draft.amount),description:draft.service||''}); else draft.items.push({type:t.dataset.add,service:t.dataset.add==='Add-on'?'':(draft.service||''),qty:1,frequency:draft.frequency||'',amount:'',description:'',accepted:false}); rerenderItems(); }
@@ -3132,9 +3134,39 @@ async function spEnsure(path){ const d=await spDrive(); let parent=''; for(const
   return graph(`/drives/${d.id}/root:/${encPath(parent)}?$select=id,webUrl`); }
 async function spUse(){
   const parts=[$('#spClient').value.trim(), $('#spProp').value.trim(), $('#spSvc').value.trim()]; if(!parts[0]||!parts[1]){ toast('Pick the client and property folders.'); return; }
-  const it=await spEnsure(parts.filter(Boolean).join('/')); draft.folderLink=it.webUrl; const el=$('#f-folderLink'); if(el) el.value=it.webUrl;
-  if(!isNew && draft.num){ const {error}=await sb.from('proposals').update({folder_link:it.webUrl}).eq('num',draft.num); if(!error){ const o=P.find(x=>x.num===draft.num); if(o) o.folderLink=it.webUrl; } }
-  $('#spBox').hidden=true; $('#spLine').innerHTML=spLine(draft); toast('SharePoint folder set. PDFs will save there.');
+  const it=await spEnsure(parts.filter(Boolean).join('/')); await spSetFolder(it.webUrl);
+  $('#spBox').hidden=true; toast('SharePoint folder set. PDFs will save there.');
+  if(SP_THEN){ const f=SP_THEN; SP_THEN=null; await f(); }
+}
+let SP_THEN=null;
+async function spSetFolder(url){ draft.folderLink=url; const el=$('#f-folderLink'); if(el) el.value=url;
+  if(!isNew && draft.num){ const {error}=await sb.from('proposals').update({folder_link:url}).eq('num',draft.num); if(!error){ const o=P.find(x=>x.num===draft.num); if(o) o.folderLink=url; if(orig&&orig.num===draft.num) orig.folderLink=url; } }
+  const l=$('#spLine'); if(l) l.innerHTML=spLine(draft); const b=$('#spPick'); if(b) b.textContent='Change SharePoint folder'; }
+// the folder without asking: another proposal for the same property + service already has one, or the client and property folders already exist in SharePoint
+async function spFindFolder(p){
+  const k=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), svc=SVC_FOLDER[p.service] || SVC_FOLDER[guessService((p.items||[])[0]?.description)] || '';
+  const twin=P.find(x=>x.num!==p.num && /sharepoint\.com/.test(x.folderLink||'') && (x.service||'')===(p.service||'') &&
+    ((p.propertyId && x.propertyId===p.propertyId) || (k(x.client)===k(p.client) && k(x.property)===k(p.property) && k(p.property))));
+  if(twin) return twin.folderLink;
+  const cl=bestMatch(await spChildren(''), p.client); if(!cl) return '';
+  const pr=bestMatch(await spChildren(cl), String(p.siteAddress||'').split(/\n|,/)[0], p.property); if(!pr) return '';
+  return (await spEnsure([cl,pr,svc].filter(Boolean).join('/'))).webUrl;
+}
+// one click: the proposal PDF (and the pricing PDF, if it was priced) go straight into the client's folder, nothing downloads
+async function spSaveAll(p){
+  if(!/sharepoint\.com/.test(p.folderLink||'')){
+    toast('Finding the client folder…'); const url=await spFindFolder(p);
+    if(!url){ SP_THEN=()=>spSaveAll(draft); const b=$('#spBox'); b?.closest('fieldset')?.scrollIntoView({behavior:'smooth',block:'start'}); await spPicker();
+      toast('Pick the client folder once. The PDFs save right after.'); return; }
+    await spSetFolder(url); p=draft;
+  }
+  toast('Saving to SharePoint…'); const saved=[];
+  await makePdf(p, {spOnly:true, saved});
+  const pairs=(p.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]); if(pairs.length) await makeEstimatePdf(p, pairs, {spOnly:true, saved});
+  if(!saved.length){ toast('Nothing was saved.'); return; }
+  const where=decodeURIComponent(p.folderLink.split('/sites/')[1]||'').split('/').slice(2).join(' / ');
+  toast(`Saved to SharePoint (${where}): ${saved.length} file${saved.length>1?'s':''}`);
+  if(p.num) addActivity(p.num,'note',`Saved to SharePoint: ${saved.join(', ')}`).then(()=>{ if(draft&&draft.num===p.num) loadActivity(p.num); });
 }
 function spLine(p){ if(!spOn()) return ''; return /^https:\/\/[^/]*sharepoint\.com\//.test(p.folderLink||'') ? `PDFs save to <a href="${esc(p.folderLink)}" target="_blank" rel="noopener">${esc(decodeURIComponent(p.folderLink.split('/sites/')[1]||p.folderLink).split('/').slice(1).join(' / '))}</a>` : 'Pick the client folder once and every PDF from this proposal saves there.'; }
 async function spUpload(blob, name, folderUrl){
@@ -3152,6 +3184,7 @@ function pdfPreview(doc, name, onDownload){ const url=doc.output('bloburl'), d=d
   d.showModal(); }
 async function deliverPdf(doc, name, p, what, o={}){
   if(o.preview){ pdfPreview(doc, name, ()=>deliverPdf(doc, name, p, what)); return; }
+  if(o.spOnly){ await spUpload(doc.output('blob'), name, p.folderLink); o.saved?.push(name); return; }
   doc.save(name);
   if(!spOn()){ toast(`${what} downloaded`); return; }
   if(!/sharepoint\.com/.test(p.folderLink||'')){ toast(`${what} downloaded. Set the SharePoint folder (Files) to also save it there.`); return; }
