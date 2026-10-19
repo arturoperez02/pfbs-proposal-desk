@@ -315,3 +315,24 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.deepEqual(r2.map(x => x.desc), ['25 scissor'], 'falls back to the lifts in the pricing');
   console.log('db: warehouse job packet data passed');
 }
+// ---------- open HCP invoices link to their CRM job by job # (update 033) ----------
+{
+  const q1 = async (s, p) => (await db.query(s, p)).rows[0];
+  await db.exec('reset role');
+  await db.exec(`insert into proposals(num, client, status, date_sent, sent_by) values ('PFBS-7033','Link Co','Approved','2026-10-01','Arturo'), ('PFBS-7034','Visit Co','Scheduled','2026-10-01','Arturo')`);
+  await db.exec(`insert into invoices(inv_no, job_no, status, items, bill_to, source) values (99031,'55123','Sent','[{"description":"HCP balance","amount":400}]','{"name":"Link Co"}','hcp'),
+                 (99032,'55124','Sent','[{"description":"HCP balance","amount":250}]','{"name":"Visit Co"}','hcp'), (99033,'55123','Paid','[{"description":"old paid","amount":90}]','{"name":"Link Co"}','hcp')`);
+  assert.equal((await q1(`select num from invoices where inv_no=99031`)).num, null, 'no job with that # yet');
+  await db.exec(`update proposals set hcp_job='55123' where num='PFBS-7033'`);
+  assert.equal((await q1(`select num from invoices where inv_no=99031`)).num, 'PFBS-7033', 'job # given later links the open HCP invoice');
+  assert.equal((await q1(`select num from invoices where inv_no=99033`)).num, null, 'paid history is never linked');
+  await db.exec(`insert into visits(num, kind, visit_date, job_no, status) values ('PFBS-7034','job','2026-10-05','55124','Done')`);
+  assert.equal((await q1(`select num from invoices where inv_no=99032`)).num, 'PFBS-7034', 'a visit\'s job # links too');
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  const id = (await q1(`select id from invoices where inv_no=99031`)).id;
+  await db.query(`insert into invoice_payments(invoice_id, amount, method, received_on) values ($1, 400, 'Check', '2026-10-30')`, [id]);
+  await db.exec('reset role');
+  const p = await q1(`select status, date_paid::text d from proposals where num='PFBS-7033'`);
+  assert.deepEqual([p.status, p.d], ['Paid', '2026-10-30'], 'paying the HCP invoice in Money marks the job Paid with the payment date');
+  console.log('db: HCP invoices link to jobs passed');
+}

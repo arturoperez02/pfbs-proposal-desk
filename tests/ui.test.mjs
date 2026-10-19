@@ -321,8 +321,16 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('[data-hopen="PFBS-0996"]'); await pg.waitForSelector('.jflow2', T);
   assert.match(await pg.textContent('.dhead .sub'), /Job for Board Unsched Co/, 'drawer says Job for client');
   assert.match(await pg.textContent('.jflow2'), /Schedule.*not scheduled.*Finish.*Invoice.*Pay/s, 'HCP-style steps: Schedule, Finish, Invoice, Pay');
-  assert.ok(await pg.$('[data-jf="sched"].now'), 'Schedule is the next step');
+  assert.ok(await pg.$('[data-jf="contract"].now') && !(await pg.$('[data-jf="sched"].now')), 'Contract / PO is the next step after approval');
   assert.equal(await pg.$('#jfJobNo'), null, 'job with a # has no Give-a-number button');
+  // scheduling before the contract asks first (Cancel = stay)
+  pg.once('dialog', dlg => { assert.match(dlg.message(), /No signed contract/); dlg.dismiss(); }); await pg.click('[data-jf="sched"]'); await pg.waitForTimeout(300);
+  assert.ok(!(await pg.$('dialog.schedpop[open]')), 'cancel keeps it unscheduled');
+  await pg.click('[data-jf="contract"]'); await pg.waitForSelector('dialog.ask [name="kind"]', T);
+  await pg.check('dialog.ask [name="kind"][value="PO received"]'); await pg.fill('dialog.ask [name="po"]', '4455'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(500);
+  const ct = await pg.evaluate(() => { const p = DBX.proposals.find(x => x.num === 'PFBS-0996'); return [p.contract_on, p.contract_note, p.po_number]; });
+  assert.ok(ct[0] && ct[1] === 'PO received · PO 4455' && ct[2] === '4455', 'contract / PO saved: ' + JSON.stringify(ct));
+  assert.ok(await pg.$('[data-jf="contract"].ok') && await pg.$('[data-jf="sched"].now'), 'then Schedule is next');
   await pg.click('#jfHold'); await pg.fill('dialog.ask [name="why"]', 'Client paused'); await pg.click('dialog.ask [data-a="ok"]');
   await pg.waitForSelector('.holdline', T);
   const h = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-0996'));
@@ -965,7 +973,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   pg.once('dialog', dlg => dlg.accept()); await pg.click('[data-jfu="sched"]'); await pg.waitForTimeout(500);
   assert.equal(await pg.evaluate(() => DBX.visits.filter(v => v.num === 'PFBS-1030').length), 0, 'Undo schedule takes the visit off the schedule');
   assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1030').status), 'Approved', 'job back to unscheduled');
-  assert.ok(await pg.$('[data-jf="sched"].now'), 'Schedule is the next step again');
+  assert.ok(await pg.$('[data-jf="contract"].now'), 'back to unscheduled: Contract / PO is the next step again');
   await pg.evaluate(() => document.getElementById('closeD')?.click()); await pg.waitForTimeout(200);
   await pg.click('[data-hopen="PFBS-1031"]'); await pg.waitForSelector('.jflow2', T); await pg.click('[data-jf="inv"]'); await pg.waitForSelector('dialog.inved', T);
   const dl = pg.waitForEvent('download', T); await pg.click('dialog.inved [data-a="send"]'); await dl; await pg.waitForSelector('#ivTo', T);
@@ -1013,6 +1021,43 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.fill('#f-contactPhone', '510-555-0202'); await pg.dispatchEvent('#f-contactPhone', 'change');
   await pg.evaluate(() => document.getElementById('closeD').click()); await pg.waitForTimeout(800);
   assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1050').contact_phone), '510-555-0202', 'closing right away still saves');
+  await pg.close();
+}
+
+// 37. Pricing guardrails: a lift under PFBS equipment offers "Move to rentals"; a line priced below its pricing asks before it goes out
+{
+  const est = { sheet: 'WC', labor: [{ role: 'Expert', hours: 40, rate: 75 }], materials: [], taxRate: 0, rentals: [], equipment: [{ desc: "65' Telescopic Boom Lift", unit: 4000, qty: 1, markup: 0.25 }], misc: [] };
+  const pr = { num: 'PFBS-1060', date_sent: null, sent_by: 'Arturo', client: 'Guard Co', property: '1 Guard St', site_address: '1 Guard St', contact_name: 'Ann', contact_email: 'ann@guard.example', status: 'Estimating', items: [{ type: 'Base', qty: 1, description: 'Perimeter windows', amount: 6685, estimate: est }], amount: 6685 };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('guardrails: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, pr);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-1060"]'); await pg.waitForSelector('[data-est="0"]', T);
+  await pg.click('[data-est="0"]'); await pg.waitForSelector('#estTot', T);
+  assert.match(await pg.textContent('#eqLiftWarn'), /looks like a rented lift/, 'lift under PFBS equipment is flagged');
+  await pg.click('[data-eqmove="0"]'); await pg.waitForTimeout(200);
+  assert.equal(await pg.$eval('#eqLiftWarn', e => e.textContent.trim()), '', 'moved: no more warning');
+  assert.ok(await pg.$('[data-e="rentals.0.desc"]'), 'now under Subcontractors / rentals');
+  await pg.click('#estClose'); await pg.waitForTimeout(300);
+  const msgs = []; pg.on('dialog', d => { msgs.push(d.message()); d.dismiss(); });
+  await pg.evaluate(() => document.querySelector('#drawer [data-st="Sent"]')?.click()); await pg.waitForTimeout(400);
+  assert.ok(msgs.some(m => /below its pricing[\s\S]*Perimeter windows: proposal \$6,685\.00, pricing \$/.test(m)), 'asks before sending a line priced below its pricing: ' + msgs.join(' | '));
+  await pg.waitForTimeout(1600); assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1060').status), 'Estimating', 'cancel keeps it from going out'); assert.ok(!(await pg.$('#drawer [data-st="Sent"].on')), 'Sent not selected');
+  await pg.close();
+}
+
+// 38. Settings → Switch-over checklist: automatic steps tick themselves, the owner ticks the rest
+{
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('switch-over: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(() => sessionStorage.clear());
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('#swCard', T);
+  assert.match(await pg.textContent('#swCard'), /Switch-over to the CRM[\s\S]*Daily backups on[\s\S]*HousecallPro cancelled/);
+  await pg.click('#swCard [data-sw="backups"]'); await pg.waitForTimeout(300);
+  assert.ok(await pg.evaluate(() => !!DBX.settings[0].data.switchover?.backups), 'saved');
+  assert.match(await pg.textContent('#swCard li.done'), /Daily backups on/, 'ticked');
   await pg.close();
 }
 

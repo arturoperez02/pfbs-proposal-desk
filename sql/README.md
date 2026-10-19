@@ -34,5 +34,7 @@
 | 030_hcp_invoice_details.sql | Run once: imported HousecallPro invoices show what the job was and where (from HCP's Jobs export); Settings → Invoicing → "Fill in details of imported HCP invoices" fixes ones already imported. Needs 029. |
 | 031_proposal_numbers.sql | Run once: new proposals start at PFBS-0803 and go up from there (never reusing a number). Settings → Proposal numbers shows and changes the next one. Needs 030. |
 | 032_warehouse_materials.sql | Run once: the warehouse gets each job's materials from the pricing, so "Import from CRM Schedule" puts them in the kit and they print on the kit slip (page 2 of the job packet); also sends the visit's end time and the job's lifts (no costs) so the Warehouse can print the whole job packet. Needs 031. |
+| 033_hcp_invoice_link.sql | Run once: open invoices imported from HousecallPro find their CRM job by job # (now and whenever the job # shows up later), so recording the payment in Money marks the job Paid with the payment date and commission starts. Paid HCP history is never linked. Needs 032. |
+| 034_contract_received.sql | Run once: approved jobs get a Contract step (signed contract / PO received / approved by email) before Schedule. Needs 033. |
 
 Client data is never stored in this repository.
