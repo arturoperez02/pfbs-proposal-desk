@@ -623,6 +623,10 @@ function syncFromItems(p){
   const fq=[...new Set(L.map(i=>i.frequency).filter(Boolean))]; p.frequency = fq.length===1 ? fq[0] : (fq.length? '' : p.frequency);
   const auto=estimateTotals(p); if(auto){ p.gp=auto.gp; p.passThrough=auto.pass; }
 }
+// every PDF the CRM makes is named the same way, so the client folder sorts by service and date:
+// "WC 10-9-2026 100 Village Ln Foster City - PFBS-0801.pdf", "... - PFBS-0801 Pricing.pdf", "... - PFBS-0801-CO1.pdf"
+function docName(p, tail='', date){ const code=SVC_CODE[p.service]||SVC_CODE[guessService((p.items||[])[0]?.description)]||'PROP', place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().replace(/\s+/g,' ').slice(0,40);
+  const dt=parse(date||p.dateSent)||today(); return `${code} ${dt.getMonth()+1}-${dt.getDate()}-${dt.getFullYear()} ${place} - ${p.num||'NEW'}${(p.rev||1)>1?' Rev '+p.rev:''}${tail}.pdf`; }
 const SVC_CODE = {'Window Cleaning':'WC','Pressure Wash':'PW','Solar Panel Cleaning':'SP','Janitorial':'JAN','Gutter Cleaning':'GC','Graffiti Removal':'GR','Gates & Doors':'GD','Lights - Decor':'LD','Multiple services':'MULTI'};
 function bdRate(p){ if(p.datePaid && hasVal(p.bdCommRate)) return num(p.bdCommRate); if(!p.bdRep || !p.clientType) return null; const t=S.clientTypes.find(x=>x[0]===p.clientType); if(!t) return null; const g=gpPct(p); return t[1]*((g!=null && g<S.marginFloor)?S.belowFloorShare:1); }
 const FREQ_MONTHS={'Annual':12,'Semi-annual':6,'Quarterly':3,'Bi-monthly':2,'Monthly':12,'Weekly':12};
@@ -3283,9 +3287,7 @@ async function makePdf(p, o={}){
   // footer on every page
   const n=doc.getNumberOfPages();
   for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'}); }
-  const code=SVC_CODE[p.service]||'PROP', place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().replace(/\s+/g,' ').slice(0,40);
-  const dt=parse(p.dateSent)||today();
-  await deliverPdf(doc, `${code} ${dt.getMonth()+1}-${dt.getDate()}-${dt.getFullYear()} ${place} - ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}.pdf`, p, 'Proposal PDF', o);
+  await deliverPdf(doc, docName(p), p, 'Proposal PDF', o);
 }
 async function makeEstimatePdf(p, pairs, o={preview:true}){
   if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
@@ -3361,7 +3363,7 @@ async function makeEstimatePdf(p, pairs, o={preview:true}){
   });
   const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120); doc.text(`PF Building Services · internal pricing · ${p.num||''} · page ${i} of ${pages}`,306,775,{align:'center'}); }
   const place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40);
-  await deliverPdf(doc, `${p.num||'NEW'}${(p.rev||1)>1?' Rev '+p.rev:''} Pricing ${place}.pdf`, p, 'Pricing PDF', o);
+  await deliverPdf(doc, docName(p, ' Pricing'), p, 'Pricing PDF', o);
 }
 async function makeCoPdf(p, co, o={preview:true}){
   if(!window.jspdf){ toast('PDF tools did not load. Reload the page.'); return; }
@@ -3389,7 +3391,7 @@ async function makeCoPdf(p, co, o={preview:true}){
   ['Client Name: _______________________________________     Date: _____________','Signature: __________________________________________________________________','Title / Company: _____________________________________________________________'].forEach(t=>{ doc.text(t,L0,y); y+=22; });
   y+=10; doc.text('PF Building Services: ______________________________     Date: _____________',L0,y);
   doc.setFontSize(8); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'});
-  await deliverPdf(doc, `${id} ${String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().slice(0,40)}.pdf`, p, 'Change order PDF', o);
+  await deliverPdf(doc, docName({...p, rev:1}, '-CO'+co.no, co.date), p, 'Change order PDF', o);
 }
 function fmtLong(s){ const d=parse(s); return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+'/'+d.getFullYear(); }
 

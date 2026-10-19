@@ -1099,7 +1099,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('[data-stshow]'); assert.ok(!(await pg.$eval('#drawer .stages', e => e.hidden)), 'Change by hand shows them');
   await pg.click('#spSaveD'); await pg.waitForTimeout(2500);
   assert.equal(up.length, 2, 'proposal + pricing PDFs uploaded: ' + JSON.stringify(up));
-  assert.ok(up.some(u => /items\/f1:\/.*PFBS-1070\.pdf/.test(u)) && up.some(u => /Pricing/.test(u)), 'both into the found folder: ' + JSON.stringify(up));
+  assert.ok(up.some(u => /items\/f1:\/WC \d+-\d+-\d{4} 9 Elm St - PFBS-1070\.pdf/.test(u)) && up.some(u => /WC \d+-\d+-\d{4} 9 Elm St - PFBS-1070 Pricing\.pdf/.test(u)), 'both into the found folder: ' + JSON.stringify(up));
   assert.ok(mk.length, 'service folder made if missing');
   assert.match(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1070').folder_link), /Folder%20Test%20Co/, 'folder remembered on the job');
   await pg.close();
