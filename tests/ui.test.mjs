@@ -1230,7 +1230,8 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const T1 = 'Jane Q. Example\nProperty Manager\nACME REALTY GROUP\n123 Main Street\nOakland, CA 94607\nM: (510) 555-0199\njane.example@acmerealty.com';
   const T2 = 'SAMPLE PROPERTIES\nJohn Doe\nChief Engineer\njdoe@sampleprops.com';
   await pg.route(/tesseract\.min\.js/, r => r.fulfill({ contentType: 'text/javascript', body: `window.Tesseract={createWorker:async()=>{let n=0;const T=[${JSON.stringify(T1)},${JSON.stringify(T2)}];return {recognize:async()=>({data:{text:T[n++]||''}}),terminate:async()=>{}};}};` }));
-  await pg.addInitScript(() => sessionStorage.clear());
+  await pg.addInitScript(() => { sessionStorage.clear(); window.open = u => { window.__opened = (window.__opened || []).concat(u); return null; }; });
+  pg.on('dialog', d => d.accept());
   await pg.goto(BASE); await pg.waitForTimeout(900);
   await pg.click('#tabs [data-tab="leads"]'); await pg.waitForSelector('#cardBtn', T); await pg.click('#cardBtn');
   await pg.fill('#csEvent', 'Test Expo'); await pg.selectOption('#csRep', { index: 1 });
@@ -1242,7 +1243,14 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('.cardscan [data-a="save"]'); await pg.waitForTimeout(800);
   const rows = await pg.evaluate(() => DBX.prospects.filter(x => /Expo/.test(x.notes || '')).map(x => [x.company, x.contact_name, x.contact_title, x.phone, x.stage]));
   assert.deepEqual(rows, [['ACME REALTY GROUP', 'Jane Q. Example', 'Property Manager', '(510) 555-0199', 'New'], ['SAMPLE PROPERTIES', 'John Doe', 'Chief Engineer (fixed)', null, 'New']], JSON.stringify(rows));
-  assert.ok(!(await pg.$('dialog.cardscan')), 'closes when all are saved');
+  await pg.waitForSelector('#efList', T);   // said yes to "send the great meeting you email now?"
+  assert.match(await pg.textContent('#efMsg'), /2 met · 0 emailed · 2 to go/);
+  await pg.click('.cardscan [data-a="next"]'); await pg.waitForTimeout(300); await pg.click('.cardscan [data-a="next"]'); await pg.waitForTimeout(300);
+  const op = await pg.evaluate(() => window.__opened || []);
+  assert.ok(op.length === 2 && /to=jane\.example%40acmerealty\.com/.test(op[0]) && /Hi%20Jane%2C%0A%0AIt%20was%20great%20meeting%20you%20at%20Test%20Expo/.test(op[0]), 'personal email per person: ' + op[0]);
+  const st = await pg.evaluate(() => DBX.prospects.filter(x => /Expo/.test(x.notes || '')).map(x => [x.stage, (x.touches || []).map(t => t.kind).join('+')]));
+  assert.deepEqual(st, [['Contacted', 'Met+Email'], ['Contacted', 'Met+Email']], JSON.stringify(st));
+  assert.match(await pg.textContent('#efMsg'), /2 emailed · 0 to go/);
   await pg.close();
 }
 
