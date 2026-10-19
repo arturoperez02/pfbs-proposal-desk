@@ -93,6 +93,7 @@ h3.setsec{margin:28px 0 10px;font-size:13px;letter-spacing:.08em;text-transform:
 .board{display:grid;grid-template-columns:repeat(5,minmax(170px,1fr));gap:8px;overflow-x:auto;padding-bottom:4px} .bcol{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:6px;min-width:170px} .bcol h4{margin:2px 4px 6px;font-size:13px;display:flex;justify-content:space-between} .bcard{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin:0 0 6px;cursor:pointer;font:inherit;font-size:12.5px;color:inherit;line-height:1.3} .bcard:hover{border-color:var(--navy,#1F2A6B)} .bcard .note{margin:0;font-size:11.5px} .bmore{font-size:12px;color:var(--muted);padding:2px 4px}
 .hgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px} @media (max-width:800px){ .hgrid{grid-template-columns:1fr} .jflow{flex-wrap:wrap} .jflow>div{flex-basis:33%} }
 .hlist>div{padding:6px 0;border-bottom:1px solid var(--line);font-size:13px} .hlist>div:last-child{border-bottom:0} .hlist a{cursor:pointer}
+.pwform{display:grid;gap:8px;max-width:360px} .pwform .btn{justify-self:start;min-width:120px}
 .offbar{position:fixed;left:16px;bottom:16px;z-index:60;max-width:min(560px,calc(100% - 32px));padding:10px 14px;border-radius:10px;background:#1f2a5c;color:#fff;font-size:14px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.25)} .offbar.off{background:#b45309} .offbar[hidden]{display:none}
 dialog.ask.cardscan{max-width:900px} .eflist{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px} .efrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line)} .efrow.done{opacity:.55} .cslist{display:grid;gap:10px;margin-top:8px} .cscard{display:grid;grid-template-columns:200px 1fr;gap:10px;border:1px solid var(--line);border-radius:8px;padding:8px} .cscard.off{opacity:.45} .cscard img{width:100%;max-height:150px;object-fit:contain;border-radius:4px;background:#eee} .cscard .f{margin:0} @media(max-width:640px){.cscard{grid-template-columns:1fr}}
 dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px} tr.voided td{color:var(--muted,#888)}
@@ -312,16 +313,18 @@ td input,td select{padding:5px 8px}
     <div class="gsearch"><input type="search" id="gq" placeholder="Search jobs, clients, invoices…  ( / )" autocomplete="off" aria-label="Search everything"><div class="gpop" id="gres" hidden></div></div>
     <div id="offBar" class="offbar" hidden role="status"></div><div class="gnew"><button type="button" class="btn small gnewbtn" id="gNew" aria-haspopup="true" aria-expanded="false">+ New</button><div class="gpop gmenu" id="gMenu" hidden></div></div>
   </div>
-  <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Service reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
+  <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Service reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="mySign" title="Password and 6-digit code">My sign-in</button><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
 </div></header>
 
 <main>
   <section id="view-login" hidden>
     <div class="login card">
       <h2>Sign in</h2>
-      <p class="sub">Enter your work email and we'll send you a sign-in link. Only people on the PF Building Services team list can get in.</p>
-      <form id="emailForm" class="emailrow"><input type="email" id="loginEmail" placeholder="you@pfbuildingservices.com" required aria-label="Work email" autocomplete="email"><button class="btn" type="submit">Email me a link</button></form>
-      <p class="sub" id="loginMsg"></p>
+      <p class="sub">Only people on the PF Building Services team list can get in.</p>
+      <form id="pwForm" class="pwform"><label class="f">Work email<input type="email" id="loginEmail" placeholder="you@pfbuildingservices.com" required autocomplete="username"></label>
+        <label class="f">Password<input type="password" id="loginPw" required autocomplete="current-password"></label><button class="btn" type="submit">Sign in</button></form>
+      <p class="sub" id="loginMsg" aria-live="polite"></p>
+      <p class="sub" style="margin-top:14px"><b>First time here, or forgot your password?</b> <button type="button" class="btn ghost small" id="linkBtn">Email me a link</button><br>Click the link in the email, then create your password.</p>
     </div>
   </section>
 
@@ -435,6 +438,7 @@ td input,td select{padding:5px 8px}
 <script src="config.js"></script>
 <script src="sp.js"></script>
 <script src="cards.js"></script>
+<script src="mfa.js"></script>
 <script>
 // Your Supabase keys live in config.js (next to this file), so updating this file never touches them.
 const SUPABASE_URL = window.PFBS_CONFIG?.SUPABASE_URL || '';
@@ -4095,6 +4099,9 @@ function renderSettings(){
   const ta=(id,label,val,help)=>`<div class="card listedit"><h3>${label}</h3><textarea id="${id}" ${ro}>${esc(val)}</textarea><div class="note">${help}</div></div>`;
   $('#settingsBody').innerHTML = `${switchHTML(owner)}
   <div class="card" style="margin-bottom:16px"><h3>Team</h3>
+    <div class="note" style="margin:0 0 10px"><b>Sign-in:</b> add someone here, then they go to the CRM, type their email and click <b>Email me a link</b> to create their password.
+      <span style="display:block;margin-top:6px"><b>Must also use the 6-digit code:</b> ${['Owner','Admin','Senior Estimator','Estimator','BD Rep','Accountant'].map(r=>`<label style="margin-right:12px;white-space:nowrap"><input type="checkbox" data-mfarole="${r}" ${(S.mfaRoles||[]).includes(r)?'checked':''} ${owner?'':'disabled'}> ${r}</label>`).join('')}</span>
+      <span style="display:block;margin-top:4px">They set it up the next time they sign in. Needs database update 035; anyone can also turn it on for themselves under <b>My sign-in</b>.</span></div>
     <div class="tablewrap"><table><thead><tr><th>Name</th><th>Microsoft 365 email</th><th>Role</th><th>Active</th>${owner?'<th></th>':''}</tr></thead><tbody id="teamRows">
     ${TEAM.map(t=>`<tr style="cursor:default" data-email="${esc(t.email)}"><td>${esc(t.name)}</td><td>${esc(t.email)}</td><td>${owner&&t.email!==me.email?`<select data-team="role" aria-label="Role for ${esc(t.name)}">${ROLES.map(r=>`<option ${r===t.role?'selected':''}>${r}</option>`).join('')}</select>`:esc(t.role)}</td><td>${owner&&t.email!==me.email?`<input type="checkbox" data-team="active" ${t.active?'checked':''} aria-label="Active">`:(t.active?'Yes':'No')}</td>${owner?'<td></td>':''}</tr>`).join('')}
     ${owner?`<tr style="cursor:default"><td><input id="nt-name" placeholder="Name" aria-label="New member name"></td><td><input id="nt-email" type="email" placeholder="name@pfbuildingservices.com" aria-label="New member email"></td><td><select id="nt-role" aria-label="New member role">${ROLES.filter(r=>r!=='Owner').map(r=>`<option>${r}</option>`).join('')}</select></td><td></td><td><button class="btn small" id="addMember">Add</button></td></tr>`:''}
@@ -4291,7 +4298,7 @@ $('#settingsBody').addEventListener('click', async e=>{
       spRates:L('s-sprates').map(l=>{ const [a,b]=l.split('|').map(x=>x.trim()); return [a, num(String(b||'').replace('$',''))||0]; }).filter(r=>r[0]),
       matMarkup:(num($('#s-mm').value)||0)/100, taxRate:(num($('#s-tax').value)||0)/100, rentMarkup:(num($('#s-rm').value)||0)/100, equipMarkup:(num($('#s-em').value)||0)/100,
       rentalTax:(num($('#s-rtax').value)||0)/100, misc:S.est.misc, rentalDelivery:num($('#s-rdel').value)||0, rentalPickup:num($('#s-rpu').value)||0, rentalProtection:num($('#s-rpp').value)||0, rentalMisc:num($('#s-rmisc').value)||0, hoursPerDay:num($('#s-hpd').value)||8, targetMargin:(num($('#s-tgt').value)||45)/100, laborCaution:(num($('#s-lc').value)||45)/100, laborMax:Math.max(num($('#s-lm').value)||55, num($('#s-lc').value)||45)/100, burden:(num($('#s-burden').value)||0)/100 };
-    const data={ est, services:L('s-svc'), priceBook:L('s-pb').map(l=>{ const [a,b,c,d2]=l.split('|').map(x=>x.trim()); return [a, num(String(b||'').replace(/[$,]/g,''))??'', c||'', d2||'']; }).filter(r=>r[0]), leadSources:L('s-src'), lostReasons:L('s-lost'), addOns:L('s-addons'), bdTemplates:($('#s-bdt')?.value||'').split(/\n-{3,}\n/).map(b=>b.trim()).filter(Boolean).map(b=>{ const l=b.split('\n'); return [l[0].trim(), (l[1]||'').trim(), l.slice(2).join('\n').trim()]; }).filter(t=>t[0]&&t[2]),
+    const data={ ...S, est, services:L('s-svc'), priceBook:L('s-pb').map(l=>{ const [a,b,c,d2]=l.split('|').map(x=>x.trim()); return [a, num(String(b||'').replace(/[$,]/g,''))??'', c||'', d2||'']; }).filter(r=>r[0]), leadSources:L('s-src'), lostReasons:L('s-lost'), addOns:L('s-addons'), bdTemplates:($('#s-bdt')?.value||'').split(/\n-{3,}\n/).map(b=>b.trim()).filter(Boolean).map(b=>{ const l=b.split('\n'); return [l[0].trim(), (l[1]||'').trim(), l.slice(2).join('\n').trim()]; }).filter(t=>t[0]&&t[2]),
       clarifications:L('s-clar').map(splitPair).map(([a,b])=>[a||'All',b]), terms:L('s-terms').map(splitPair), ack:$('#s-ack').value.trim(), gdClarSeeded:true,
       frequencies:pair('s-freq',(n,v)=>[n,Number(v)||1]), clientTypes:pair('s-ct',(n,v)=>[n,(Number(v)||0)/100]),
       goals:L('s-goals').map(l=>{ const [a,b,c]=l.split('|').map(x=>x.trim()); return [a, num(b), num(String(c||'').replace(/[$,]/g,''))]; }).filter(g=>g[0]),
@@ -5168,12 +5175,34 @@ async function loadProposals(){
 }
 
 // ---------- auth ----------
-$('#emailForm').addEventListener('submit', async e=>{
-  e.preventDefault();
-  const {error}=await sb.auth.signInWithOtp({email:$('#loginEmail').value.trim().toLowerCase(), options:{shouldCreateUser:true, emailRedirectTo: location.origin+location.pathname+location.search}});
-  $('#loginMsg').textContent = error ? error.message : 'Check your email for the sign-in link.';
-});
+// password sign-in; the 6-digit code (if this person uses one) is asked right after, in start() → MFA.gate
+$('#pwForm').addEventListener('submit', async e=>{ e.preventDefault(); $('#loginMsg').textContent='Signing in…';
+  const {error}=await sb.auth.signInWithPassword({email:$('#loginEmail').value.trim().toLowerCase(), password:$('#loginPw').value});
+  $('#loginMsg').textContent = error ? (/invalid/i.test(error.message)?'Wrong email or password. First time, or forgot it? Use "Email me a link" below.':error.message) : ''; });
+// first time / forgot password: an emailed link signs them in, then they create a password (?setpw=1)
+$('#linkBtn').addEventListener('click', async ()=>{ const email=$('#loginEmail').value.trim().toLowerCase(); if(!email.includes('@')){ $('#loginMsg').textContent='Type your work email first.'; $('#loginEmail').focus(); return; }
+  const u=new URL(location.href); u.searchParams.set('setpw','1');
+  const {error}=await sb.auth.signInWithOtp({email, options:{shouldCreateUser:true, emailRedirectTo:u.href}});
+  $('#loginMsg').textContent = error ? error.message : `Check ${email} for the link. It works once and expires in an hour.`; });
 for(const id of ['#signOut','#signOut2']) $(id).addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
+$('#mySign').addEventListener('click', ()=>mySignIn());
+// My sign-in: change the password; turn the 6-digit code on (or off, unless your role must use it)
+async function mySignIn(){
+  const fs=(await MFA.factors(sb)).filter(f=>f.status==='verified'), st=await MFA.status(sb), must=!!st?.required || (S.mfaRoles||[]).includes(role());
+  const r=await formDialog('My sign-in', `<div class="note" style="margin:0 0 8px">Signed in as <b>${esc(me.email)}</b>.</div>
+    <label style="display:block;margin:6px 0"><input type="radio" name="do" value="pw" checked> Change my password</label>
+    ${fs.length?`<div class="note" style="margin:8px 0 4px">✓ The 6-digit code is on (${esc(fs[0].friendly_name||'authenticator app')}).</div>${must?'<div class="note" style="margin:0">Your role must use it, so it stays on. New phone? Ask the owner to reset it.</div>':'<label style="display:block;margin:6px 0"><input type="radio" name="do" value="off"> Turn the 6-digit code off</label>'}`
+      :`<label style="display:block;margin:6px 0"><input type="radio" name="do" value="on"> Turn on the 6-digit code (authenticator app)</label>`}`, 'Next');
+  if(!r) return;
+  if(r.do==='pw'){ if(await MFA.setPassword(sb)) toast('Password changed'); }
+  if(r.do==='on'){ if(await MFA.enroll(sb)) toast('6-digit code is on. You\'ll be asked for it when you sign in.'); }
+  if(r.do==='off' && fs[0] && !must && confirm('Turn off the 6-digit code? Signing in will only need your password.')){ const x=await sb.auth.mfa.unenroll({factorId:fs[0].id}); toast(x.error?x.error.message:'6-digit code turned off'); } }
+// Settings → Team: which roles must use the code (update 035 makes the database enforce it)
+async function saveMfaRoles(){ const roles=[...document.querySelectorAll('[data-mfarole]:checked')].map(x=>x.dataset.mfarole);
+  if(roles.includes('Owner') && !(await MFA.factors(sb)).some(f=>f.status==='verified')){ toast('Set up your own 6-digit code first (My sign-in, top right), so you can still get in.'); renderSettings(); return; }
+  const data={...S, mfaRoles:roles}; const r=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
+  if(r.error){ toast(r.error.message); return; } S.mfaRoles=roles; toast(roles.length?`6-digit code required for: ${roles.join(', ')}`:'Nobody is required to use the code'); }
+document.addEventListener('change', e=>{ if(e.target.dataset && e.target.dataset.mfarole!=null && role()==='Owner') saveMfaRoles(); });
 
 // ---------- click any column heading to sort (smallest ↔ biggest, oldest ↔ newest, A ↔ Z); the choice sticks until the page is reloaded ----------
 const SORTS={};
@@ -5200,6 +5229,8 @@ let started=false;
 async function start(session){
   if(!session){ show('login'); $('#tabs').hidden=true; $('#who').hidden=true; return; }
   if(started) return; started=true;
+  if(window.MFA){ try{ await MFA.gate(sb); }catch(e){ console.warn('2-step check', e); } }
+  if(new URLSearchParams(location.search).get('setpw')==='1'){ const u=new URL(location.href); u.searchParams.delete('setpw'); history.replaceState(null,'',u.href); if(window.MFA) await MFA.setPassword(sb,{first:true}); }
   const email=(session.user.email||'').toLowerCase();
   const {data:m}=await sb.from('team_members').select('*').eq('email',email).eq('active',true).maybeSingle();
   if(!m){ show('blocked'); $('#blockedMsg').textContent=`${email} isn't on the PF Building Services team list. Ask Arturo to add you.`; return; }

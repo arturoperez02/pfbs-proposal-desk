@@ -1277,6 +1277,49 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await ctx.close();
 }
 
+// 45. Sign-in: password, first-time / forgot link → create a password, and the 6-digit code (set up, then asked each sign-in)
+{
+  const mk = async (init, url = '') => { const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('signin: ' + e.message));
+    await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort()); await pg.addInitScript(init); await pg.goto(BASE + url); return pg; };
+  // (a) the sign-in screen: password, or a link for first time / forgot
+  let pg = await mk(() => { window.MOCK_NOSESSION = true; sessionStorage.clear(); });
+  await pg.waitForSelector('#pwForm', T);
+  await pg.fill('#loginEmail', 'Pat@PFBuildingServices.com'); await pg.fill('#loginPw', 'a long password'); await pg.click('#pwForm button[type="submit"]'); await pg.waitForTimeout(200);
+  assert.deepEqual(await pg.evaluate(() => window.__signin), { email: 'pat@pfbuildingservices.com', password: 'a long password' });
+  await pg.click('#linkBtn'); await pg.waitForTimeout(200); assert.match(await pg.textContent('#loginMsg'), /Check pat@pfbuildingservices\.com for the link/);
+  await pg.close();
+  // (b) a role that must use the code, not set up yet: setup screen first, the CRM only after a right code
+  pg = await mk(() => { sessionStorage.clear(); window.MOCK_RPC = { mfa_status: () => ({ data: { member: true, required: true, enrolled: false, aal: 'aal1' }, error: null }) }; });
+  await pg.waitForSelector('#mfaScr img.qr', T);
+  assert.match(await pg.textContent('#mfaScr'), /Set up your 6-digit code[\s\S]*TESTSECRET/);
+  assert.ok(await pg.$eval('#who', e => e.hidden), 'nothing loads before the code');
+  await pg.fill('#mfaScr input.code', '111111'); await pg.click('#mfaScr button[type="submit"]'); await pg.waitForTimeout(200);
+  assert.match(await pg.textContent('#mfaScr .err'), /didn't match/);
+  await pg.fill('#mfaScr input.code', '123 456'); await pg.click('#mfaScr button[type="submit"]');
+  await pg.waitForSelector('#whoName', { state: 'visible', ...T }); assert.ok(!(await pg.$('#mfaScr')), 'in after the right code');
+  await pg.close();
+  // (c) code already set up: asked for it; (d) came from the emailed link: create a password next
+  pg = await mk(() => { sessionStorage.clear(); window.MOCK_FACTORS = [{ id: 'f1', status: 'verified', factor_type: 'totp', friendly_name: 'PFBS CRM' }]; }, '?setpw=1');
+  await pg.waitForSelector('#mfaScr input.code', T); assert.match(await pg.textContent('#mfaScr'), /Enter your 6-digit code/);
+  await pg.fill('#mfaScr input.code', '123456'); await pg.click('#mfaScr button[type="submit"]');
+  await pg.waitForSelector('#mfaScr input[type="password"]', T); assert.match(await pg.textContent('#mfaScr'), /Create your password/);
+  const pw = await pg.$$('#mfaScr input[type="password"]'); await pw[0].fill('short'); await pw[1].fill('short'); await pg.click('#mfaScr button[type="submit"]');
+  assert.match(await pg.textContent('#mfaScr .err'), /at least 10/);
+  await pw[0].fill('blue truck on a roof'); await pw[1].fill('blue truck on a roof'); await pg.click('#mfaScr button[type="submit"]');
+  await pg.waitForSelector('#whoName', { state: 'visible', ...T });
+  assert.equal(await pg.evaluate(() => window.__pw), 'blue truck on a roof'); assert.ok(!/setpw/.test(pg.url()), 'link flag cleared');
+  // (e) Settings → Team: require the code for a role (only once the owner has their own)
+  await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('[data-mfarole="Accountant"]', T);
+  await pg.check('[data-mfarole="Owner"]'); await pg.check('[data-mfarole="Accountant"]'); await pg.waitForTimeout(300);
+  assert.deepEqual(await pg.evaluate(() => DBX.settings[0].data.mfaRoles), ['Owner', 'Accountant']);
+  await pg.close();
+  pg = await mk(() => { sessionStorage.clear(); window.MOCK_AAL = { currentLevel: 'aal1', nextLevel: 'aal1' }; });
+  await pg.waitForSelector('#whoName', { state: 'visible', ...T }); await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('[data-mfarole="Owner"]', T);
+  await pg.click('[data-mfarole="Owner"]'); await pg.waitForTimeout(300);
+  assert.ok(!(await pg.evaluate(() => (DBX.settings[0].data.mfaRoles || []).includes('Owner'))), 'owner without their own code cannot lock themselves out');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

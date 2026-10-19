@@ -14,7 +14,7 @@ idx = idx.replace('if(data && data[0]) COLS=new Set(Object.keys(data[0]));', '/*
 fs.writeFileSync(path.join(B, 'index.html'), idx);
 fs.writeFileSync(path.join(B, 'reports.html'), swap(fs.readFileSync(path.join(R, 'reports.html'), 'utf8')));
 fs.writeFileSync(path.join(B, 'warehouse.html'), swap(fs.readFileSync(path.join(R, 'warehouse.html'), 'utf8')));
-for (const f of ['logo.jpg', 'reports-logo.jpg', 'jobsheet.js', 'sp.js', 'cards.js']) fs.copyFileSync(path.join(R, f), path.join(B, f));
+for (const f of ['logo.jpg', 'reports-logo.jpg', 'jobsheet.js', 'sp.js', 'cards.js', 'mfa.js']) fs.copyFileSync(path.join(R, f), path.join(B, f));
 fs.copyFileSync(path.join(T, 'mock.js'), path.join(B, 'mock.js'));
 for (const f of fs.readdirSync(path.join(T, 'vendor'))) fs.copyFileSync(path.join(T, 'vendor', f), path.join(B, f));
 export default B;

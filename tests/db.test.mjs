@@ -6,6 +6,7 @@ const strip = t => t.replace(/notify pgrst, 'reload schema';/g, '');
 const db = new PGlite();
 await db.exec(`create schema auth; create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true),''),'{}')::jsonb $$;
 create function auth.uid() returns uuid language sql stable as $$ select nullif(auth.jwt()->>'sub','')::uuid $$; create role authenticated; create role anon; grant usage on schema public, auth to authenticated, anon;
+create table auth.mfa_factors(id uuid primary key default gen_random_uuid(), user_id uuid, status text, factor_type text);
 create schema storage; create table storage.buckets(id text primary key, name text, public boolean); create table storage.objects(id serial, bucket_id text, name text, owner uuid, metadata jsonb); alter table storage.objects enable row level security;
 create function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name, '/') $$;`);
 await db.exec(strip(fs.readFileSync(path.join(R, '001_schema.sql'), 'utf8')));
@@ -335,4 +336,30 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   const p = await q1(`select status, date_paid::text d from proposals where num='PFBS-7033'`);
   assert.deepEqual([p.status, p.d], ['Paid', '2026-10-30'], 'paying the HCP invoice in Money marks the job Paid with the payment date');
   console.log('db: HCP invoices link to jobs passed');
+}
+
+// 035: password + 6-digit code. Nothing changes until someone turns the code on or Settings → Security names their role.
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  const as = async c => { await db.exec(`reset role; select set_config('request.jwt.claims','${JSON.stringify(c)}',false); set role authenticated;`); };
+  const OWN = { sub: '00000000-0000-0000-0000-000000000001', email: 'aperez@pfbuildingservices.com' };
+  await as({ ...OWN, aal: 'aal1' });
+  assert.equal((await q1(`select my_role() r`)).r, 'Owner', 'no code set up, no role forced: in as before');
+  assert.equal((await q1(`select mfa_status()->>'required' r`)).r, 'false');
+  await db.exec(`reset role; update settings set data = data || '{"mfaRoles":["Owner"]}' where id = 1`);
+  await as({ ...OWN, aal: 'aal1' });
+  assert.equal((await q1(`select my_role() r`)).r, null, 'Owner must use the code: password alone is not enough');
+  assert.equal((await q1(`select is_manager() m`)).m, false, 'so every rule built on the role stays closed');
+  assert.deepEqual(await q1(`select mfa_status()->>'member' m, mfa_status()->>'required' r`), { m: 'true', r: 'true' }, 'the sign-in screen still learns it must ask for the code');
+  await as({ ...OWN, aal: 'aal2' });
+  assert.equal((await q1(`select my_role() r`)).r, 'Owner', 'with the code: in');
+  assert.equal((await q1(`select is_manager() m`)).m, true);
+  await db.exec(`reset role; update settings set data = data - 'mfaRoles' where id = 1;
+    insert into auth.mfa_factors(user_id, status, factor_type) values ('00000000-0000-0000-0000-000000000002', 'verified', 'totp')`);
+  await as({ sub: '00000000-0000-0000-0000-000000000002', email: 'e@x.com', aal: 'aal1' });
+  assert.equal((await q1(`select my_role() r`)).r, null, 'turned the code on by choice: always needs it');
+  await as({ sub: '00000000-0000-0000-0000-000000000002', email: 'e@x.com', aal: 'aal2' });
+  assert.equal((await q1(`select my_role() r`)).r, 'Estimator');
+  await db.exec('reset role; delete from auth.mfa_factors');
+  console.log('db: 2-step sign-in passed');
 }

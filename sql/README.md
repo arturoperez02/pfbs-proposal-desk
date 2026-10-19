@@ -37,4 +37,5 @@
 | 033_hcp_invoice_link.sql | Run once: open invoices imported from HousecallPro find their CRM job by job # (now and whenever the job # shows up later), so recording the payment in Money marks the job Paid with the payment date and commission starts. Paid HCP history is never linked. Needs 032. |
 | 034_contract_received.sql | Run once: approved jobs get a Contract step (signed contract / PO received / approved by email) before Schedule. Needs 033. |
 
+| 035_two_step_signin.sql | Run once: password + 6-digit code. Anyone who turned on the code must use it, and the roles ticked in Settings → Team must too; without the code the database treats them as signed out. Changes nothing until someone turns it on. Locked out? Run `update public.settings set data = data - 'mfaRoles' where id = 1;` here. Needs 034. |
 Client data is never stored in this repository.

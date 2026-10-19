@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script src="mfa.js"></script>
 <script src="jobsheet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
@@ -1919,6 +1920,7 @@ async function startAppAfterAuth() {
   if (appInitStarted) return;
   appInitStarted = true;
   // signed in, but is this login allowed in the warehouse? (CRM team, or a tablet login in CRM Settings → Warehouse)
+  if (window.MFA) { try { await MFA.gate(db); } catch (e) { console.warn('2-step check', e); } }   // the 6-digit code, for people who use one
   const chk = await db.rpc('can_warehouse');
   if (chk.error || chk.data !== true) {
     appInitStarted = false;

@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script src="sp.js"></script>
+<script src="mfa.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <style>
 :root{--navy:#1F2A6B;--navy2:#2C3A8C;--gold:#C9A227;--bg:#F3F4F8;--card:#fff;--ink:#1d2333;--mut:#667085;--line:#E1E4EC;--ok:#1E8E5A;--warn:#B54708;--bad:#C0322B;--r:12px}
@@ -314,6 +315,7 @@ async function ensureMe() {
   if (ME) return ME;
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { location.href = './?next=' + encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash); throw new ApiError('login'); }
+  if (window.MFA) { try { await MFA.gate(sb); } catch (e) { console.warn('2-step check', e); } }
   const email = (session.user.email || '').toLowerCase();
   const { data: m } = await sb.from('team_members').select('*').eq('email', email).eq('active', true).maybeSingle();
   if (!m || !MANAGERS.includes(m.role)) { document.body.innerHTML = `<main style="padding:40px;font:16px system-ui">Service reports are for the office. <a href="./">Back to the CRM</a></main>`; throw new ApiError('login'); }
