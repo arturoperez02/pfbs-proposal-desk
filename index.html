@@ -873,7 +873,7 @@ function drawDrawer(){
     : (p.status==='Lead' && !isNew) ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>New lead${p.bdRep?' from '+esc(p.bdRep):''}.</b> ${p.sentBy?'Assigned to '+esc(p.sentBy)+'.':'Assign an estimator.'}${p.leadAt?' Logged '+fmtD(p.leadAt)+'.':''}</div>${(isManager()||(role()==='Estimator'&&p.sentBy===me.name))?'<button class="btn small" id="startEst">Start pricing</button>':''}</div>` : '';
   $('#drawer').innerHTML = `
   <div class="dhead"><div class="t">${!isNew && p.hcpJob && outcome(p)==='Won' ? `<div class="jobno">Job #${esc(p.hcpJob)}</div>` : ''}<b id="dTitle" class="num">${isNew?'New proposal':esc(p.num)}</b><div class="sub">${isNew?(newLead?'New lead · the PFBS number is assigned when you save.':'The PFBS number is assigned when you save.'):(outcome(p)==='Won'?'Job for ':'')+esc(p.client||'')+(p.property?' · '+esc(p.property):'')}</div></div>
-    ${!isNew && (isManager() || spOn()) ? `<div class="dmore"><button class="btn ghost small" id="dMore" aria-haspopup="true" aria-label="More actions">⋯</button><div class="dmenu" id="dMenu" hidden>${isManager()?'<button type="button" data-copy="job">Copy to new job</button><button type="button" data-copy="prop">Copy to new proposal</button>':''}${spOn()?'<button type="button" id="spSaveD" title="Files the proposal, pricing, sent invoices and sent service reports in the client\'s SharePoint folder (older jobs, or to retry). New files save themselves.">📁 Save all to client folder</button>':''}</div></div>` : ''}
+    ${!isNew ? `<div class="dmore"><button class="btn ghost small" id="dMore" aria-haspopup="true" aria-label="More actions">⋯</button><div class="dmenu" id="dMenu" hidden>${isManager()?'<button type="button" data-copy="job">Copy to new job</button><button type="button" data-copy="prop">Copy to new proposal</button>':''}<button type="button" id="swSheet">🖨 Site walk sheet</button>${spOn()?'<button type="button" id="swFile">📷 File site walk notes</button>':''}${spOn()?'<button type="button" id="spSaveD" title="Files the proposal, pricing, sent invoices and sent service reports in the client\'s SharePoint folder (older jobs, or to retry). New files save themselves.">📁 Save all to client folder</button>':''}</div></div>` : ''}
     <button class="btn ghost small" id="closeD">Close</button></div>
   <div class="dbody">
     <div id="emBox" class="fubox" hidden></div>
@@ -1517,11 +1517,13 @@ function newItems(){ const r=role(), mgr=isManager(), L=[];
   if(mgr && VISOK) L.push(['event','Event','meeting, training, day off']);
   if(mgr || r==='Accountant') L.push(['customer','Client','a company or homeowner, with contacts and properties']);
   if(canLead()) L.push(['lead','Lead','someone asking for a quote']);
+  if(canCreate() || canLead()) L.push(['walk','Site walk sheet','blank, to print and take on a walk']);
   return L; }
 async function newThing(k){
   $('#gMenu').hidden=true; $('#gNew').setAttribute('aria-expanded','false');
   if(k==='proposal') return openDrawer(null);
   if(k==='lead') return openDrawer(null,{lead:true});
+  if(k==='walk') return siteWalkSheet(null);
   if(k==='job' || k==='recurring') return newJobPage(k==='recurring');
   if(k==='job-old' || k==='recurring-old'){ await openDrawer(null); draft._job=k; draft.status='Approved'; draft.dateSent=iso(today()); draft.dateResolved=iso(today()); DTAB='prop';
     if(k==='recurring' && draft.items[0]) draft.items[0].frequency=(S.frequencies.find(f=>/month/i.test(f[0]))||S.frequencies.find(f=>f[1]>1)||[''])[0];
@@ -2037,6 +2039,8 @@ $('#drawer').addEventListener('click', e=>{
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
   else if(t.id==='saveD') save(null,{stay:true});   // Save changes keeps the proposal open, like HousecallPro
   else if(t.id==='pdfD') makePdf(draft, {preview:true});
+  else if(t.id==='swSheet'){ $('#dMenu').hidden=true; siteWalkSheet(draft); }
+  else if(t.id==='swFile'){ $('#dMenu').hidden=true; fileWalkNotes(draft); }
   else if(t.id==='spSaveD'){ $('#dMenu').hidden=true; spSaveAll(draft).catch(err=>toast('SharePoint: '+err.message)); }
   else if(t.id==='estPdfD') makeEstimatePdf(draft, (draft.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]));
   else if(t.dataset.est!=null) openEst(+t.dataset.est);
@@ -3161,6 +3165,57 @@ async function spFileJob(p){ const saved=[];
   for(const r of reps||[]){ const rep={...(r.doc||{}), id:r.id, approved_at:r.approved_at}; if(!rep.pdf?.path) continue;
     const res=await SP.saveReport(sb, rep, {num:p.num, code:svcCode(p), service:p.service, client:p.client, property:p.property, site_address:p.siteAddress, folder_link:p.folderLink}); saved.push(...res.saved); }
   return saved; }
+// ---- Site walk sheet (Arturo 10/18: he writes on paper on the walk): printed with the job's info filled in and boxes in the
+// same order as the Pricing calculators (drops, floors, windows, sq ft areas, panels, G&D items), so pricing is copied straight down
+async function siteWalkSheet(p){
+  const g=p?guessService((p.items||[])[0]?.description||p.service):'', svc=p?(p.service||g):'';
+  const on=k=>({wc:/Window/i, pw:/Pressure/i, sp:/Solar/i, gd:/Gates/i}[k].test(svc));
+  const r=await formDialog('Site walk sheet', `<div class="note" style="margin:0 0 8px">Prints ${p?'with this job\'s info filled in':'blank'}, with boxes in the same order as the Pricing screen. Which services?</div>
+    ${[['wc','Window cleaning'],['pw','Pressure washing'],['sp','Solar panels'],['gd','Gates & doors']].map(([k,l])=>`<label style="display:block;margin:4px 0"><input type="checkbox" name="${k}" value="1" ${!p||on(k)?'checked':''}> ${l}</label>`).join('')}`, 'Print');
+  if(!r) return; const pick=['wc','pw','sp','gd'].filter(k=>r[k]==='1'); if(!pick.length) return toast('Pick at least one service.');
+  const w=window.open('', '_blank'); if(!w) return toast('Allow pop-ups for this site to print the sheet.');
+  const e=x=>esc(x||''), box=(l,v='',cls='')=>`<div class="bx ${cls}"><span>${l}</span><b>${e(v)}</b></div>`, lines=n=>'<div class="ln"></div>'.repeat(n);
+  const ck=L=>`<div class="cks">${L.map(x=>`<span>☐ ${x}</span>`).join('')}</div>`, rows=(cols,n)=>`<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${`<tr>${cols.map(()=>'<td></td>').join('')}</tr>`.repeat(n)}</tbody></table>`;
+  const S2={
+    wc:`<h2>Window cleaning</h2><div class="g4">${box('# of floors')}${box('# of drops')}${box('Ext. windows')}${box('Int. windows')}</div>
+      ${ck(['Swing stage','Bosun chair / RDS','Water-fed pole','Ladder','Lift needed','Interior','Exterior','Skylights / atrium'])}
+      <div class="g2">${box('Roof anchors (certified? date)')}${box('Frequency asked for')}</div>`,
+    pw:`<h2>Pressure washing</h2>${rows(['Area','Length (ft)','Width (ft)','Sq ft','Surface / stains'],6)}
+      ${ck(['Water on site','Drains / reclaim needed','Gum removal','Degreaser','Sealing','Graffiti'])}`,
+    sp:`<h2>Solar panels</h2><div class="g4">${box('# of panels')}${box('# of arrays / roofs')}${box('Roof access')}${box('Water source')}</div>
+      ${ck(['Roof hatch','Ladder','Lift needed','Tilted / steep','Bird droppings / heavy soil'])}`,
+    gd:`<h2>Gates &amp; doors</h2>${rows(['Item (door, gate, closer, strike…)','Qty','Size / make / model','Problem / work'],6)}`};
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Site walk ${e(p?.num||'')}</title><style>
+    @page{size:letter;margin:.45in} *{box-sizing:border-box} body{font:12px/1.35 Arial,Helvetica,sans-serif;color:#111;margin:0;background:#fff}
+    .top{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1f2a5c;padding-bottom:6px;margin-bottom:8px} .top img{height:42px} .top h1{margin:0;font-size:20px;color:#1f2a5c}
+    h2{font-size:13px;margin:10px 0 4px;padding:3px 6px;background:#1f2a5c;color:#fff;border-radius:3px}
+    .g2,.g3,.g4{display:grid;gap:6px;margin:4px 0} .g2{grid-template-columns:1fr 1fr} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+    .bx{border:1px solid #888;border-radius:3px;padding:2px 6px;min-height:34px} .bx span{display:block;font-size:9.5px;color:#555;text-transform:uppercase;letter-spacing:.03em} .bx b{font-size:12.5px}
+    .bx.tall{min-height:52px} .cks{display:flex;flex-wrap:wrap;gap:4px 16px;margin:4px 0 2px;font-size:12px}
+    table{width:100%;border-collapse:collapse;margin:4px 0} th{font-size:9.5px;text-transform:uppercase;color:#555;text-align:left;border-bottom:1px solid #888;padding:2px 4px} td{border:1px solid #bbb;height:22px}
+    .ln{border-bottom:1px solid #aaa;height:21px} .sk{border:1px solid #888;border-radius:3px;height:230px;position:relative} .sk span{position:absolute;top:2px;left:6px;font-size:9.5px;color:#555;text-transform:uppercase}
+    .ft{margin-top:8px;font-size:10px;color:#555;display:flex;justify-content:space-between} .noprint{margin:10px 0;text-align:center} .noprint button{font:15px Arial;padding:8px 18px}
+    section{break-inside:avoid} @media print{.noprint{display:none}}</style></head><body>
+    <div class="noprint"><button onclick="print()">🖨 Print</button></div>
+    <div class="top"><img src="${new URL('reports-logo.jpg', location.href).href}" alt=""><h1>Site walk${p?.num?' · '+e(p.num):''}</h1></div>
+    <div class="g3">${box('Client',p?.client)}${box('Property',p?.property)}${box('Date walked')}</div>
+    <div class="g3">${box('Site address',String(p?.siteAddress||'').replace(/\n/g,', '),'tall')}${box('Site contact · phone',[p?.contactName,p?.contactPhone].filter(Boolean).join(' · '),'tall')}${box('Estimator',p?.sentBy||me?.name)}</div>
+    <section><h2>Scope of work</h2>${lines(5)}</section>
+    ${pick.map(k=>`<section>${S2[k]}</section>`).join('')}
+    <section><h2>Access, hours &amp; safety</h2><div class="g3">${box('Parking / access / keys','','tall')}${box('Work hours allowed','','tall')}${box('Hazards / PPE','','tall')}</div>
+      ${ck(['Business hours','After hours','Weekends','Lift rental','Permit / street closure','COI needed'])}</section>
+    <section><h2>Notes &amp; sketch</h2><div class="sk"><span>Sketch / notes</span></div></section>
+    <div class="ft"><span>📷 Take wide shots + close-ups, then a photo of this sheet (CRM ⋯ → File site walk notes)</span><span>PF Building Services</span></div>
+    </body></html>`);
+  w.document.close(); }
+// a photo / scan of the walk notes → the client's folder ("WC Site Walk 10-18-2026 … .jpg"), noted on the job
+async function fileWalkNotes(p){
+  const r=await formDialog('File site walk notes', `<label class="f">Photo or scan of the sheet <span class="note" style="margin:0;font-weight:400">more than one page? pick them all</span><input type="file" name="f" accept="image/*,.pdf" multiple></label>`, 'Save to client folder');
+  if(!r || !r.f) return; const files=[...(FILES_LAST||[r.f])];
+  try{ const folder=await spFolderFor(p); if(!folder){ toast('No client folder yet: pick it first.'); return pickFolderFor(p.num); }
+    const names=[]; for(const [i,f] of files.entries()){ const ext=(f.name.match(/\.([a-z0-9]+)$/i)?.[1]||'jpg').toLowerCase(), n=docName({...p, rev:1}, files.length>1?`Site Walk p${i+1}`:'Site Walk', iso(today()), ext); await spUpload(f, n, folder); names.push(n); }
+    await addActivity(p.num,'note',`Site walk notes saved to SharePoint: ${names.join(', ')}`); loadActivity(p.num); toast(`Saved to the client folder (${names.length} file${names.length>1?'s':''})`); }
+  catch(e){ toast("Didn't save to SharePoint: "+e.message); } }
 // open a job right on its SharePoint folder picker; picking files everything it has
 async function pickFolderFor(num){ await openDrawer(num); if(!draft) return; document.querySelector('#drawer [data-dtab="prop"]')?.click();
   SP_THEN=()=>spSaveAll(draft); const b=$('#spBox'); if(!b) return; b.closest('fieldset')?.scrollIntoView({behavior:'smooth',block:'start'}); await spPicker(); }
@@ -3485,12 +3540,13 @@ function renderComm(){
       <div class="note">Payouts can't be edited or deleted. If one is wrong, void it with a reason and record it again; both stay on record.</div></div>
     </div>`;
 }
+let FILES_LAST=null;   // every file picked in the last formDialog file input (multiple)
 function formDialog(title, body, okText){
   return new Promise(res=>{ const d=document.createElement('dialog'); d.className='ask';
     d.innerHTML=`<h3>${title}</h3>${body}<div class="toolbar"><button type="button" class="btn ghost" data-a="x">Cancel</button><button type="button" class="btn" data-a="ok">${okText}</button></div>`;
     document.body.appendChild(d); const done=v=>{ d.close(); d.remove(); res(v); };
     d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='x') done(null);
-      if(a==='ok'){ const v={}; for(const i of d.querySelectorAll('[name]')){ if((i.type==='radio'||i.type==='checkbox') && !i.checked){ if(!(i.name in v)) v[i.name]=''; continue; } if(i.type==='file'){ v[i.name]=i.files?.[0]||null; continue; } v[i.name]=i.value.trim(); } if(d.querySelector('[required]') && [...d.querySelectorAll('[required]')].some(i=>!i.value.trim())){ d.querySelector('[required]').focus(); return; } done(v); } });
+      if(a==='ok'){ const v={}; for(const i of d.querySelectorAll('[name]')){ if((i.type==='radio'||i.type==='checkbox') && !i.checked){ if(!(i.name in v)) v[i.name]=''; continue; } if(i.type==='file'){ v[i.name]=i.files?.[0]||null; FILES_LAST=[...(i.files||[])]; continue; } v[i.name]=i.value.trim(); } if(d.querySelector('[required]') && [...d.querySelectorAll('[required]')].some(i=>!i.value.trim())){ d.querySelector('[required]').focus(); return; } done(v); } });
     d.addEventListener('cancel', e=>{ e.preventDefault(); done(null); }); d.showModal(); d.querySelector('input,select')?.focus(); });
 }
 $('#commPerson').addEventListener('change', e=>{ commPerson=e.target.value; renderComm(); });

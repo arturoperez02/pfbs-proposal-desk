@@ -577,7 +577,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.keyboard.press('Enter'); await pg.waitForSelector('#drawer:not([hidden]) .jflow2', T);
   assert.match(await pg.textContent('.dhead'), /Job #10420/, 'Enter opens it');
   await pg.click('#closeD'); await pg.waitForTimeout(200);
-  await pg.click('#gNew'); assert.deepEqual(await pg.$$eval('#gMenu [data-gnew]', L => L.map(x => x.dataset.gnew)), ['job', 'recurring', 'proposal', 'event', 'customer', 'lead'], 'HCP-style New menu');
+  await pg.click('#gNew'); assert.deepEqual(await pg.$$eval('#gMenu [data-gnew]', L => L.map(x => x.dataset.gnew)), ['job', 'recurring', 'proposal', 'event', 'customer', 'lead', 'walk'], 'HCP-style New menu');
   await pg.click('[data-gnew="job"]'); await pg.waitForSelector('dialog.jobpage', T);
   // new customer, address, a service and a material, a tech, then Save job
   await pg.click('dialog.jobpage [data-a="newcl"]'); await pg.fill('[name="nc_name"]', 'Walk-in Job Co'); await pg.fill('[name="nc_email"]', 'walk@in.example');
@@ -1191,6 +1191,36 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('#closeD'); await pg.click('#tabs [data-tab="home"]'); await pg.waitForSelector('[data-tdg="Jobs with no client folder"]', T);
   await pg.click('[data-tdg="Jobs with no client folder"]'); await pg.click('[data-td-folder="PFBS-1073"]'); await pg.waitForSelector('#spClient', T);
   await pg.close();
+}
+
+// 42. Site walk sheet: printed with the job's info and the Pricing boxes; the notes photo files in the client folder
+{
+  const ctx = await b.newContext({ viewport: { width: 1300, height: 900 } });
+  const pg = await ctx.newPage(); pg.on('pageerror', e => errs.push('site walk: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  const up = [];
+  await pg.route(/msal-browser/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.msal={PublicClientApplication:class{getAllAccounts(){return [{username:"a"}]} async acquireTokenSilent(){return {accessToken:"t"}} async acquireTokenPopup(){return {accessToken:"t"}}}}' }));
+  await pg.route(/graph\.microsoft\.com/, r => { const u = decodeURIComponent(r.request().url()), m = r.request().method(), j = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
+    if (m === 'PUT') { up.push(u); return j({ id: 'x' }); } if (m === 'POST') return j({});
+    if (/\/drives\?/.test(u)) return j({ value: [{ id: 'd1', name: 'Clients', webUrl: 'https://x.sharepoint.com/sites/team/Clients' }] });
+    if (/\/shares\//.test(u)) return j({ id: 'f1', parentReference: { driveId: 'd1' } });
+    return r.fulfill({ status: 404, body: '{}' }); });
+  const pr = { num: 'PFBS-1074', date_sent: '2026-10-18', sent_by: 'Arturo', client: 'Walk Co', property: 'Tower One', site_address: '5 Main St\nOakland, CA', contact_name: 'Pat Site', service: 'Window Cleaning', status: 'Estimating', folder_link: 'https://x.sharepoint.com/sites/team/Clients/Walk%20Co/5%20Main%20St/Window%20Cleaning', items: [{ type: 'Base', qty: 1, description: 'Exterior window cleaning', amount: '' }] };
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); sessionStorage.setItem('pfbs.open', 'PFBS-1074'); }, pr);
+  await pg.goto(BASE + '?sp=1'); await pg.waitForSelector('#dMore', T);
+  await pg.click('#dMore'); await pg.click('#swSheet'); await pg.waitForSelector('dialog.ask [name="wc"]', T);
+  assert.ok(await pg.$eval('dialog.ask [name="wc"]', e => e.checked) && !(await pg.$eval('dialog.ask [name="pw"]', e => e.checked)), 'window cleaning picked from the job');
+  const pop = ctx.waitForEvent('page'); await pg.click('dialog.ask [data-a="ok"]'); const sh = await pop; await sh.waitForLoadState();
+  const txt = await sh.textContent('body');
+  assert.match(txt, /Site walk · PFBS-1074[\s\S]*Walk Co[\s\S]*Tower One[\s\S]*5 Main St, Oakland[\s\S]*Pat Site[\s\S]*# of drops/, 'filled in, with the pricing boxes');
+  assert.ok(!/Pressure washing/.test(txt), 'only the services picked'); await sh.close();
+  await pg.click('#dMore'); await pg.click('#swFile'); await pg.waitForSelector('dialog.ask input[type="file"]', T);
+  await pg.setInputFiles('dialog.ask input[type="file"]', [{ name: 'a.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') }, { name: 'b.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('y') }]);
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(1500);
+  assert.ok(up.some(u => /WC Site Walk p1 \d+-\d+-\d{4} Tower One - PFBS-1074\.jpg/.test(u)) && up.some(u => /Site Walk p2/.test(u)), 'both pages filed: ' + JSON.stringify(up));
+  await pg.click('#closeD'); await pg.click('#gNew'); const pop2 = ctx.waitForEvent('page'); await pg.click('[data-gnew="walk"]'); await pg.click('dialog.ask [data-a="ok"]');
+  const blank = await pop2; await blank.waitForLoadState(); assert.match(await blank.textContent('body'), /Pressure washing[\s\S]*Gates/, 'blank sheet has every service');
+  await ctx.close();
 }
 
 await b.close(); srv.close();
