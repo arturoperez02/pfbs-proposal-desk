@@ -3109,14 +3109,14 @@ SP.S.who = () => me?.email || '';
 async function spPicker(){
   const box=$('#spBox'); if(!box) return; box.hidden=false; box.innerHTML='<div class="note">Connecting to SharePoint…</div>';
   try{
-    const clients=await spChildren('');
+    const clients=await spChildren(''); try{ SP_LIB_URL=(await SP.drive()).webUrl||''; }catch(_){}
     const c=bestMatch(clients, draft.client) || draft.client || '';
     box.innerHTML=`<div class="grid2">
       <label class="f">Client folder<input id="spClient" list="spCl" value="${esc(c)}"></label><datalist id="spCl">${clients.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
       <label class="f">Property folder<input id="spProp" list="spPr" placeholder="e.g. 100 Village Ln, Foster City"></label><datalist id="spPr"></datalist>
       <label class="f">Service folder<input id="spSvc" list="spSv"></label><datalist id="spSv"></datalist>
       <div class="f" style="align-self:end"><button type="button" class="btn small" id="spUse">Use this folder</button></div></div>
-      <div class="note" id="spPathNote"></div>`;
+      <div class="note" id="spPathNote"></div><div class="note" style="margin:2px 0 0">Not in the list? Type the name and it's created. <a href="${esc(SP_LIB_URL||'#')}" target="_blank" rel="noopener">Open the ${esc(SPC.library)} library in SharePoint</a></div>`;
     await spFill(true);
   }catch(e){ box.innerHTML=`<div class="note" style="color:var(--warn)">SharePoint: ${esc(e.message)}</div>`; }
 }
@@ -3135,7 +3135,7 @@ async function spUse(){
   $('#spBox').hidden=true; toast('SharePoint folder set. PDFs will save there.');
   if(SP_THEN){ const f=SP_THEN; SP_THEN=null; await f(); }
 }
-let SP_THEN=null;
+let SP_THEN=null, SP_LIB_URL='';
 async function spSetFolder(url, p=draft){ const num=p?.num; if(!num && p!==draft) return;
   const open = draft && (draft===p || (num && draft.num===num));
   if(open){ draft.folderLink=url; const el=$('#f-folderLink'); if(el) el.value=url; }
@@ -3161,6 +3161,9 @@ async function spFileJob(p){ const saved=[];
   for(const r of reps||[]){ const rep={...(r.doc||{}), id:r.id, approved_at:r.approved_at}; if(!rep.pdf?.path) continue;
     const res=await SP.saveReport(sb, rep, {num:p.num, code:svcCode(p), service:p.service, client:p.client, property:p.property, site_address:p.siteAddress, folder_link:p.folderLink}); saved.push(...res.saved); }
   return saved; }
+// open a job right on its SharePoint folder picker; picking files everything it has
+async function pickFolderFor(num){ await openDrawer(num); if(!draft) return; document.querySelector('#drawer [data-dtab="prop"]')?.click();
+  SP_THEN=()=>spSaveAll(draft); const b=$('#spBox'); if(!b) return; b.closest('fieldset')?.scrollIntoView({behavior:'smooth',block:'start'}); await spPicker(); }
 // Settings → Switch-over: file every job at once (folders found by client + property; the ones it can't place are listed to pick by hand)
 async function spFileAll(){
   const open=P.filter(p=>WON.includes(p.status) && p.status!=='Paid' && !p.cancelledOn), all=P.filter(p=>WON.includes(p.status) && !p.cancelledOn);
@@ -3172,7 +3175,7 @@ async function spFileAll(){
       if(saved.length) await sb.from('proposal_activity').insert({num:p.num, kind:'note', note:`Saved to SharePoint: ${saved.join(', ')}`}); }
     catch(e){ failed.push([p, e.message]); if(/sign|popup|interaction|consent/i.test(e.message)) break; } }
   toast(`${files} files filed for ${L.length-missed.length-failed.length} jobs`);
-  if(missed.length || failed.length) await formDialog('Some jobs need a folder picked', `${missed.length?`<div class="note" style="margin:0 0 6px">No client or property folder found in SharePoint for these. Open each one and pick it once (⋯ → Save all to client folder):</div><ul style="margin:0 0 8px 18px;padding:0">${missed.map(p=>`<li><b>${esc(p.num)}</b> ${esc(p.client||'')} · ${esc(p.property||'')}</li>`).join('')}</ul>`:''}${failed.length?`<div class="note" style="margin:0 0 6px">These didn't save:</div><ul style="margin:0 0 8px 18px;padding:0">${failed.map(([p,m])=>`<li><b>${esc(p.num)}</b> ${esc(m)}</li>`).join('')}</ul>`:''}`, 'OK');
+  if(missed.length || failed.length) await formDialog('Some jobs need a folder picked', `${missed.length?`<div class="note" style="margin:0 0 6px">No client or property folder found in SharePoint for these (the folder may be named differently, or not exist yet). Pick each one once; everything for the job files right after:</div><div style="margin:0 0 8px">${missed.map(p=>`<div class="toolbar" style="margin:2px 0;justify-content:space-between;flex-wrap:nowrap"><span><b>${esc(p.num)}</b> ${esc(p.client||'')} · ${esc(p.property||'')}</span><button type="button" class="btn ghost small" data-pickfolder="${esc(p.num)}">📁 Pick folder</button></div>`).join('')}</div><div class="note" style="margin:0 0 6px">They stay on Home → My to-do (<b>Jobs with no client folder</b>) until each one has a folder.</div>`:''}${failed.length?`<div class="note" style="margin:0 0 6px">These didn't save:</div><ul style="margin:0 0 8px 18px;padding:0">${failed.map(([p,m])=>`<li><b>${esc(p.num)}</b> ${esc(m)}</li>`).join('')}</ul>`:''}`, 'OK');
 }
 // one click: everything the job has goes straight into the client's folder, nothing downloads —
 // the proposal, the pricing (if priced), sent invoices and sent service reports. Same names replace, so it's also the "try again" button.
@@ -3902,6 +3905,7 @@ async function switchToggle(k){ const sw={...(S.switchover||{})}; if(sw[k]) dele
   const data={...S, switchover:sw}; const r=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
   if(r.error) return toast(r.error.message); S.switchover=sw; const c=$('#swCard'); if(c) c.outerHTML=switchHTML(role()==='Owner'); }
 document.addEventListener('click', e=>{ const b=e.target.closest && e.target.closest('[data-sw]'); if(b && role()==='Owner') switchToggle(b.dataset.sw);
+  const pf=e.target.closest && e.target.closest('[data-pickfolder]'); if(pf){ const d=pf.closest('dialog'); if(d){ d.close(); d.remove(); } pickFolderFor(pf.dataset.pickfolder); return; }
   if(e.target.closest && e.target.closest('[data-spall]') && isManager()) spFileAll().catch(err=>toast('SharePoint: '+err.message)); });
 function renderSettings(){
   const owner = role()==='Owner', ro = owner?'':'disabled';
@@ -4924,6 +4928,7 @@ function todoGroups(){
   }
   if(['Owner','Admin'].includes(r)){
     add('Jobs to schedule', P.filter(p=>p.status==='Approved' && after(p.dateResolved) && !p.cancelledOn && !p.onHoldSince && !VIS.some(v=>v.num===p.num)).map(p=>prop(p, `approved ${fmtD(p.dateResolved)}`, 'bad')));
+    if(spOn()) add('Jobs with no client folder', P.filter(p=>WON.includes(p.status) && p.status!=='Paid' && !p.cancelledOn && !SP.isLink(p.folderLink)).map(p=>({folder:p.num, cls:'warn', text:`${p.num} · ${p.client||''}${p.property?' · '+p.property:''}`, why:'pick its SharePoint folder once'})));
     add('Visits with no techs (next 2 weeks)', VIS.filter(v=>v.kind==='job' && v.status==='Scheduled' && !(v.techs||[]).length && v.visit_date>=td && v.visit_date<=in14).map(v=>({vis:v.id, cls:'bad', text:`${fmtD(v.visit_date)} · ${visLabel(v)}`, why:'pick the crew'})));
     add('Double-booked techs (next 2 weeks)', [...dblBooked(VIS.filter(v=>!['Cancelled','Skipped'].includes(v.status) && visEnd(v)>=td && v.visit_date<=in14))].map(id=>VIS.find(v=>v.id===id)).filter(Boolean).map(v=>({vis:v.id, cls:'bad', text:`${fmtD(v.visit_date)} · ${visLabel(v)}`, why:(v.techs||[]).join(', ')})));
     add('Lifts / rentals', P.filter(p=>WON.includes(p.status) && after(p.dateResolved) && p.status!=='Paid' && !p.cancelledOn && rentAlerts(p).length).map(p=>prop(p, rentAlerts(p).map(a=>a[1]).join('; '), rentAlerts(p).some(a=>a[0]==='bad')?'bad':'warn')));
@@ -4953,8 +4958,9 @@ function renderTodo(){
   const n=G.reduce((s,g)=>s+g.items.length,0);
   slot.innerHTML=`<div class="card todo"><div class="toolbar" style="margin:0;justify-content:space-between"><h3 style="margin:0">My to-do <span class="c">${n}</span></h3><span class="note" style="margin:0">${hidden?`${hidden} hidden · <a href="#" data-tdunhide>show them again</a>`:''}${S.crmStart?`${hidden?' · ':''}counting from ${fmtD(S.crmStart)}`:''}</span></div>
     ${!n?'<div class="note" style="margin:6px 0 0">Nothing waiting on you. 👍</div>':`<div class="tdchips">${G.map(g=>`<button type="button" class="tdchip ${g.items.some(i=>i.cls==='bad')?'bad':g.items.some(i=>i.cls==='warn')?'warn':''}" data-tdg="${esc(g.title)}" aria-expanded="${TODO_OPENG.has(g.title)}">${esc(g.title)} <span class="c">${g.items.length}</span></button>`).join('')}</div>
-    ${G.filter(g=>TODO_OPENG.has(g.title)).map(g=>`<div class="tdg"><b>${esc(g.title)}</b>${g.items.map(it=>`<div class="tdrow"><a href="#" class="tdi ${it.cls}" ${it.open?`data-td-open="${esc(it.open)}"`:it.vis?`data-td-vis="${esc(it.vis)}"`:it.pros?`data-td-pros="${esc(it.pros)}"`:`data-td-go="${esc(it.go)}"`}><span>${esc(it.text)}</span><small>${esc(it.why||'')}</small></a><span class="tdact"><button type="button" class="btn ghost small" data-tdsnooze="${esc(tdKey(g,it))}" title="Hide for a week">Snooze</button><button type="button" class="btn ghost small" data-tdmine="${esc(tdKey(g,it))}" title="Hide it from my list">Not mine</button></span></div>`).join('')}</div>`).join('')}`}</div>`; }
-document.addEventListener('click', e=>{ const t=e.target.closest && e.target.closest('[data-tdg],[data-tdsnooze],[data-tdmine],[data-tdunhide],[data-td-open],[data-td-vis],[data-td-pros],[data-td-go]'); if(!t) return; e.preventDefault();
+    ${G.filter(g=>TODO_OPENG.has(g.title)).map(g=>`<div class="tdg"><b>${esc(g.title)}</b>${g.items.map(it=>`<div class="tdrow"><a href="#" class="tdi ${it.cls}" ${it.open?`data-td-open="${esc(it.open)}"`:it.folder?`data-td-folder="${esc(it.folder)}"`:it.vis?`data-td-vis="${esc(it.vis)}"`:it.pros?`data-td-pros="${esc(it.pros)}"`:`data-td-go="${esc(it.go)}"`}><span>${esc(it.text)}</span><small>${esc(it.why||'')}</small></a><span class="tdact"><button type="button" class="btn ghost small" data-tdsnooze="${esc(tdKey(g,it))}" title="Hide for a week">Snooze</button><button type="button" class="btn ghost small" data-tdmine="${esc(tdKey(g,it))}" title="Hide it from my list">Not mine</button></span></div>`).join('')}</div>`).join('')}`}</div>`; }
+document.addEventListener('click', e=>{ const t=e.target.closest && e.target.closest('[data-tdg],[data-tdsnooze],[data-tdmine],[data-tdunhide],[data-td-open],[data-td-folder],[data-td-vis],[data-td-pros],[data-td-go]'); if(!t) return; e.preventDefault();
+  if(t.dataset.tdFolder) return pickFolderFor(t.dataset.tdFolder);
   if(t.dataset.tdg!=null){ const k=t.dataset.tdg; TODO_OPENG.has(k)?TODO_OPENG.delete(k):TODO_OPENG.add(k); renderTodo(); return; }
   if(t.dataset.tdsnooze){ tdSet(t.dataset.tdsnooze, addDays(iso(today()),7)); toast('Snoozed for a week'); renderTodo(); return; }
   if(t.dataset.tdmine){ tdSet(t.dataset.tdmine, 'mine'); toast('Hidden from your list'); renderTodo(); return; }

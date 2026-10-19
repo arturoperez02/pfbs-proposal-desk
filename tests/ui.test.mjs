@@ -1185,6 +1185,11 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.waitForSelector('dialog.ask >> text=Some jobs need a folder picked', T);
   assert.match(await pg.textContent('dialog.ask'), /PFBS-1073/, 'lists the job with no folder');
   assert.ok(up.some(u => /WC Proposal .* - PFBS-1072\.pdf/.test(u)), 'filed the job with a folder: ' + JSON.stringify(up));
+  await pg.click('[data-pickfolder="PFBS-1073"]'); await pg.waitForSelector('#spClient', T);
+  assert.equal(await pg.textContent('#dTitle'), 'PFBS-1073', 'Pick folder opens that job on its folder picker');
+  assert.match(await pg.textContent('#spBox'), /Open the Clients library in SharePoint/, 'link to browse the library');
+  await pg.click('#closeD'); await pg.click('#tabs [data-tab="home"]'); await pg.waitForSelector('[data-tdg="Jobs with no client folder"]', T);
+  await pg.click('[data-tdg="Jobs with no client folder"]'); await pg.click('[data-td-folder="PFBS-1073"]'); await pg.waitForSelector('#spClient', T);
   await pg.close();
 }
 
