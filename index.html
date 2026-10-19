@@ -93,6 +93,7 @@ h3.setsec{margin:28px 0 10px;font-size:13px;letter-spacing:.08em;text-transform:
 .board{display:grid;grid-template-columns:repeat(5,minmax(170px,1fr));gap:8px;overflow-x:auto;padding-bottom:4px} .bcol{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:6px;min-width:170px} .bcol h4{margin:2px 4px 6px;font-size:13px;display:flex;justify-content:space-between} .bcard{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin:0 0 6px;cursor:pointer;font:inherit;font-size:12.5px;color:inherit;line-height:1.3} .bcard:hover{border-color:var(--navy,#1F2A6B)} .bcard .note{margin:0;font-size:11.5px} .bmore{font-size:12px;color:var(--muted);padding:2px 4px}
 .hgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px} @media (max-width:800px){ .hgrid{grid-template-columns:1fr} .jflow{flex-wrap:wrap} .jflow>div{flex-basis:33%} }
 .hlist>div{padding:6px 0;border-bottom:1px solid var(--line);font-size:13px} .hlist>div:last-child{border-bottom:0} .hlist a{cursor:pointer}
+dialog.ask.cardscan{max-width:900px} .cslist{display:grid;gap:10px;margin-top:8px} .cscard{display:grid;grid-template-columns:200px 1fr;gap:10px;border:1px solid var(--line);border-radius:8px;padding:8px} .cscard.off{opacity:.45} .cscard img{width:100%;max-height:150px;object-fit:contain;border-radius:4px;background:#eee} .cscard .f{margin:0} @media(max-width:640px){.cscard{grid-template-columns:1fr}}
 dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px} tr.voided td{color:var(--muted,#888)}
 .btn.small{padding:5px 10px;font-size:13px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -351,7 +352,7 @@ td input,td select{padding:5px 8px}
   <section id="view-leads" hidden>
     <div class="toolbar" style="justify-content:space-between">
       <div><h2>Leads</h2><div class="sub" id="leadsSub">New requests waiting for a proposal, and the prospects BD is working on.</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="prospBtn" hidden>+ Prospect</button><button class="btn" id="leadBtn2" hidden>+ New lead</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="cardBtn" hidden>📇 Scan cards</button><button class="btn ghost" id="prospBtn" hidden>+ Prospect</button><button class="btn" id="leadBtn2" hidden>+ New lead</button></div>
     </div>
     <div id="leadsBody"></div>
   </section>
@@ -432,6 +433,7 @@ td input,td select{padding:5px 8px}
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="config.js"></script>
 <script src="sp.js"></script>
+<script src="cards.js"></script>
 <script>
 // Your Supabase keys live in config.js (next to this file), so updating this file never touches them.
 const SUPABASE_URL = window.PFBS_CONFIG?.SUPABASE_URL || '';
@@ -3176,7 +3178,7 @@ async function siteWalkSheet(p){
   if(!r) return; const pick=['wc','pw','sp','gd'].filter(k=>r[k]==='1'); if(!pick.length) return toast('Pick at least one service.');
   const w=window.open('', '_blank'); if(!w) return toast('Allow pop-ups for this site to print the sheet.');
   const e=x=>esc(x||''), box=(l,v='',cls='')=>`<div class="bx ${cls}"><span>${l}</span><b>${e(v)}</b></div>`, lines=n=>'<div class="ln"></div>'.repeat(n);
-  const ck=L=>`<div class="cks">${L.map(x=>`<span>☐ ${x}</span>`).join('')}</div>`, rows=(cols,n)=>`<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${`<tr>${cols.map(()=>'<td></td>').join('')}</tr>`.repeat(n)}</tbody></table>`;
+  const ck=L=>`<div class="cks">${L.map(x=>`<span><big style="font-size:17px;vertical-align:-1px">☐</big> ${x}</span>`).join('')}</div>`, rows=(cols,n)=>`<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${`<tr>${cols.map(()=>'<td></td>').join('')}</tr>`.repeat(n)}</tbody></table>`;
   const S2={
     wc:`<h2>Window cleaning</h2><div class="g4">${box('# of floors')}${box('# of drops')}${box('Ext. windows')}${box('Int. windows')}</div>
       ${ck(['Swing stage','Bosun chair / RDS','Water-fed pole','Ladder','Lift needed','Interior','Exterior','Skylights / atrium'])}
@@ -3187,15 +3189,15 @@ async function siteWalkSheet(p){
       ${ck(['Roof hatch','Ladder','Lift needed','Tilted / steep','Bird droppings / heavy soil'])}`,
     gd:`<h2>Gates &amp; doors</h2>${rows(['Item (door, gate, closer, strike…)','Qty','Size / make / model','Problem / work'],6)}`};
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Site walk ${e(p?.num||'')}</title><style>
-    @page{size:letter;margin:.45in} *{box-sizing:border-box} body{font:12px/1.35 Arial,Helvetica,sans-serif;color:#111;margin:0;background:#fff}
-    .top{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1f2a5c;padding-bottom:6px;margin-bottom:8px} .top img{height:42px} .top h1{margin:0;font-size:20px;color:#1f2a5c}
-    h2{font-size:13px;margin:10px 0 4px;padding:3px 6px;background:#1f2a5c;color:#fff;border-radius:3px}
+    @page{size:letter;margin:.45in} *{box-sizing:border-box} body{font:13px/1.35 Arial,Helvetica,sans-serif;color:#000;margin:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .top{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #000;padding-bottom:6px;margin-bottom:8px} .top img{height:42px} .top h1{margin:0;font-size:22px;color:#000;font-weight:900}
+    h2{font-size:15px;margin:10px 0 5px;padding:4px 8px;background:#000;color:#fff;border-radius:3px;font-weight:900;letter-spacing:.02em}
     .g2,.g3,.g4{display:grid;gap:6px;margin:4px 0} .g2{grid-template-columns:1fr 1fr} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
-    .bx{border:1px solid #888;border-radius:3px;padding:2px 6px;min-height:34px} .bx span{display:block;font-size:9.5px;color:#555;text-transform:uppercase;letter-spacing:.03em} .bx b{font-size:12.5px}
-    .bx.tall{min-height:52px} .cks{display:flex;flex-wrap:wrap;gap:4px 16px;margin:4px 0 2px;font-size:12px}
-    table{width:100%;border-collapse:collapse;margin:4px 0} th{font-size:9.5px;text-transform:uppercase;color:#555;text-align:left;border-bottom:1px solid #888;padding:2px 4px} td{border:1px solid #bbb;height:22px}
-    .ln{border-bottom:1px solid #aaa;height:21px} .sk{border:1px solid #888;border-radius:3px;height:230px;position:relative} .sk span{position:absolute;top:2px;left:6px;font-size:9.5px;color:#555;text-transform:uppercase}
-    .ft{margin-top:8px;font-size:10px;color:#555;display:flex;justify-content:space-between} .noprint{margin:10px 0;text-align:center} .noprint button{font:15px Arial;padding:8px 18px}
+    .bx{border:2px solid #000;border-radius:3px;padding:2px 6px;min-height:40px} .bx span{display:block;font-size:11px;font-weight:800;color:#000;text-transform:uppercase;letter-spacing:.03em} .bx b{font-size:14px}
+    .bx.tall{min-height:56px} .cks{display:flex;flex-wrap:wrap;gap:5px 18px;margin:5px 0 3px;font-size:13.5px;font-weight:700}
+    table{width:100%;border-collapse:collapse;margin:4px 0} th{font-size:11px;font-weight:800;text-transform:uppercase;color:#000;text-align:left;border:2px solid #000;padding:3px 5px;background:#e8e8e8} td{border:1.5px solid #000;height:26px}
+    .ln{border-bottom:1.5px solid #000;height:24px} .sk{border:2px solid #000;border-radius:3px;height:230px;position:relative} .sk span{position:absolute;top:2px;left:6px;font-size:11px;font-weight:800;color:#000;text-transform:uppercase}
+    .ft{margin-top:8px;font-size:11px;font-weight:700;color:#000;display:flex;justify-content:space-between} .noprint{margin:10px 0;text-align:center} .noprint button{font:15px Arial;padding:8px 18px}
     section{break-inside:avoid} @media print{.noprint{display:none}}</style></head><body>
     <div class="noprint"><button onclick="print()">🖨 Print</button></div>
     <div class="top"><img src="${new URL('reports-logo.jpg', location.href).href}" alt=""><h1>Site walk${p?.num?' · '+e(p.num):''}</h1></div>
@@ -3650,7 +3652,7 @@ const STAGES=['New','Contacted','Meeting set','Walkthrough','Converted','Not now
 async function loadProspects(){ if(!canProspect()) return; const {data,error}=await sb.from('prospects').select('*').order('next_touch',{ascending:true}); prosOK=!error; PROS=data||[]; if(current()==='leads') renderLeads(); }
 const touchDue = x => !['Converted','Not now'].includes(x.stage) && (!x.next_touch || parse(x.next_touch)<=today());
 function renderLeads(){
-  $('#leadBtn2').hidden=!canLead(); $('#prospBtn').hidden=!canProspect();
+  $('#leadBtn2').hidden=!canLead(); $('#prospBtn').hidden=!canProspect(); $('#cardBtn').hidden=!canProspect();
   const leads=P.filter(p=>p.status==='Lead').sort((a,b)=>String(a.leadAt||a.createdAt).localeCompare(String(b.leadAt||b.createdAt)));
   const wait=p=>days(parse(p.leadAt||p.createdAt), today());
   const leadRows = leads.length ? leads.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="hide-sm wrap">${esc((p.leadInfo?.services||[]).join(', '))}</td><td class="hide-sm num">${p.leadInfo?.walkthrough?fmtD(p.leadInfo.walkthrough):''}</td><td class="hide-sm">${esc(p.bdRep)}</td><td>${p.sentBy?esc(p.sentBy):'<span class="flag warn">Not assigned</span>'}</td><td class="r num"><span class="${wait(p)>3?'flag bad':''}">${wait(p)}</span></td></tr>`).join('')
@@ -3766,6 +3768,55 @@ $('#leadsBody').addEventListener('click', e=>{
 $('#leadsBody').addEventListener('keydown', e=>{ if(e.key!=='Enter') return; const r=e.target.closest('tr[data-id]'); if(r) openDrawer(r.dataset.id); const q=e.target.closest('tr[data-pid]'); if(q) openProspect(+q.dataset.pid); });
 $('#leadBtn2').addEventListener('click', ()=>openDrawer(null,{lead:true}));
 $('#prospBtn').addEventListener('click', ()=>openProspect(null));
+$('#cardBtn').addEventListener('click', ()=>scanCards());
+// ---- Business cards → prospects (Arturo 10/18, trade shows): photos are read on the device (cards.js, free), checked by a person, saved in one go
+function scanCards(){
+  const d=document.createElement('dialog'); d.className='ask cardscan'; const C=[], mgr=isManager(), reps=TEAM.filter(t=>t.active&&['BD Rep','Owner','Admin','Senior Estimator'].includes(t.role)).map(t=>t.name);
+  const nt=addDays(iso(today()),2);
+  d.innerHTML=`<div class="toolbar" style="justify-content:space-between;margin:0 0 6px"><h3 style="margin:0">📇 Scan business cards</h3><button type="button" class="btn ghost small" data-a="x">Close</button></div>
+    <div class="note" style="margin:0 0 8px">One card per photo works best: flat, filling the picture, good light. Take them one after another, or pick photos you already took. Check each card, then save them all.</div>
+    <div class="grid2"><label class="f">Where you met them<input id="csEvent" placeholder="e.g. BOMA Oakland Expo 10/2026"></label>
+    <label class="f">BD rep<select id="csRep">${(mgr?['',...reps]:[me.name]).map(n=>`<option ${n===(role()==='BD Rep'?me.name:'')?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
+    <label class="f">First follow-up<input type="date" id="csNext" value="${nt}"></label>
+    <label class="f">Add cards<input type="file" id="csFiles" accept="image/*" multiple></label></div>
+    <div id="csList" class="cslist"></div>
+    <div class="toolbar" style="justify-content:flex-end;margin-top:8px"><span class="note" id="csMsg" style="margin:0;flex:1"></span><button type="button" class="btn" data-a="save" disabled>Save as prospects</button></div>`;
+  document.body.appendChild(d);
+  const F=[['company','Company'],['contact_name','Name'],['contact_title','Title'],['email','Email'],['phone','Phone'],['address','Address'],['website','Website']];
+  const norm=v=>String(v||'').toLowerCase().replace(/[^a-z0-9@.]+/g,'');
+  const dup=c=>{ const em=norm(c.email), nm=norm(c.contact_name), co=norm(c.company);
+    const hit=(PROS||[]).find(x=>(em&&norm(x.email)===em) || (nm&&co&&norm(x.contact_name)===nm&&norm(x.company)===co)); if(hit) return `already a prospect: ${hit.company}`;
+    const p=P.find(x=>em&&norm(x.contactEmail)===em); return p?`already on ${p.num} (${p.client||''})`:''; };
+  const draw=()=>{ $('#csList').innerHTML=C.map((c,i)=>`<div class="cscard ${c.skip?'off':''}" data-i="${i}"><img src="${c.url}" alt="card ${i+1}"><div class="csf">
+      ${c.reading?'<div class="note" style="margin:0">Reading…</div>':''}${c.err?`<div class="note" style="margin:0;color:var(--warn)">${esc(c.err)} — type it in.</div>`:''}
+      <div class="grid2">${F.map(([k,l])=>`<label class="f">${l}<input data-k="${k}" value="${esc(c.f[k]||'')}"></label>`).join('')}</div>
+      <div class="toolbar" style="margin:4px 0 0;justify-content:space-between"><span class="note" style="margin:0;${c.dup?'color:var(--warn)':''}">${c.dup?'⚠ '+esc(c.dup):''}</span><label style="font-size:13px"><input type="checkbox" data-skip ${c.skip?'checked':''}> Skip this card</label></div></div></div>`).join('');
+    const n=C.filter(c=>!c.skip&&!c.reading).length; d.querySelector('[data-a="save"]').disabled=!n||C.some(c=>c.reading); d.querySelector('[data-a="save"]').textContent=`Save ${n||''} as prospect${n===1?'':'s'}`; };
+  const close=async()=>{ d.close(); d.remove(); C.forEach(c=>URL.revokeObjectURL(c.url)); await CARDS.done(); };
+  d.addEventListener('cancel', e=>{ e.preventDefault(); if(!C.length || confirm('Close without saving these cards?')) close(); });
+  d.addEventListener('input', e=>{ const box=e.target.closest('[data-i]'); if(!box||!e.target.dataset.k) return; const c=C[+box.dataset.i]; c.f[e.target.dataset.k]=e.target.value; });
+  d.addEventListener('change', async e=>{
+    if(e.target.dataset.skip!=null){ C[+e.target.closest('[data-i]').dataset.i].skip=e.target.checked; draw(); return; }
+    if(e.target.id!=='csFiles') return; const files=[...e.target.files]; e.target.value='';
+    const add=files.map(f=>({file:f, url:URL.createObjectURL(f), f:{}, reading:true})); C.push(...add); draw();
+    for(const c of add){ $('#csMsg').textContent=`Reading card ${C.indexOf(c)+1} of ${C.length}… (the first one takes longer)`;
+      try{ c.f=CARDS.parse(await CARDS.read(c.file)); if(!c.f.company && !c.f.contact_name && !c.f.email) c.err="Couldn't read this one"; }
+      catch(err){ c.err=err.message||"Couldn't read this one"; }
+      c.reading=false; c.dup=dup(c.f); draw(); }
+    $('#csMsg').textContent=`${C.length} card${C.length===1?'':'s'}. Check the fields, then save.`; });
+  d.addEventListener('click', async e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(!a) return;
+    if(a==='x'){ if(!C.length || confirm('Close without saving these cards?')) close(); return; }
+    if(a!=='save') return;
+    const ev=$('#csEvent').value.trim(), rep=$('#csRep').value||null, next=$('#csNext').value||null, L=C.filter(c=>!c.skip);
+    if(mgr && !rep){ toast('Pick the BD rep.'); $('#csRep').focus(); return; }
+    const bad=L.find(c=>!(c.f.company||'').trim() && !(c.f.contact_name||'').trim()); if(bad){ toast('Each card needs at least a company or a name.'); return; }
+    e.target.disabled=true; let n=0;
+    for(const c of L){ const x=c.f, note=[ev?`Met at ${ev}.`:'', x.website?`Website: ${x.website}`:''].filter(Boolean).join(' ');
+      const row={company:(x.company||'').trim()||(x.contact_name||'').trim(), contact_name:x.contact_name||null, contact_title:x.contact_title||null, email:x.email||null, phone:x.phone||null, address:x.address||null,
+        stage:'New', next_touch:next, last_touch:iso(today()), bd_rep:rep, notes:note||null, touches:[{date:iso(today()), kind:'Met', note:ev?`Card from ${ev}`:'Business card scanned', by:me.name}]};
+      const {error}=await sb.from('prospects').insert(row); if(error){ toast(error.message); break; } n++; c.skip=true; }
+    await loadProspects(); toast(`${n} prospect${n===1?'':'s'} saved${next?` · first follow-up ${fmtD(next)}`:''}`); if(n===L.length) close(); else { e.target.disabled=false; draw(); } });
+  d.showModal(); }
 
 // ---------- My Sales (BD dashboard) ----------
 let salesPer='month', salesRep=null;

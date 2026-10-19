@@ -1223,6 +1223,29 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await ctx.close();
 }
 
+// 43. Business cards → prospects: each photo is read, checked, and saved in one go (the reader is a stand-in here)
+{
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('cards: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  const T1 = 'Jane Q. Example\nProperty Manager\nACME REALTY GROUP\n123 Main Street\nOakland, CA 94607\nM: (510) 555-0199\njane.example@acmerealty.com';
+  const T2 = 'SAMPLE PROPERTIES\nJohn Doe\nChief Engineer\njdoe@sampleprops.com';
+  await pg.route(/tesseract\.min\.js/, r => r.fulfill({ contentType: 'text/javascript', body: `window.Tesseract={createWorker:async()=>{let n=0;const T=[${JSON.stringify(T1)},${JSON.stringify(T2)}];return {recognize:async()=>({data:{text:T[n++]||''}}),terminate:async()=>{}};}};` }));
+  await pg.addInitScript(() => sessionStorage.clear());
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="leads"]'); await pg.waitForSelector('#cardBtn', T); await pg.click('#cardBtn');
+  await pg.fill('#csEvent', 'Test Expo'); await pg.selectOption('#csRep', { index: 1 });
+  const jpg = fs.readFileSync(path.join(B, 'logo.jpg'));
+  await pg.setInputFiles('#csFiles', [{ name: 'a.jpg', mimeType: 'image/jpeg', buffer: jpg }, { name: 'b.jpg', mimeType: 'image/jpeg', buffer: jpg }]);
+  await pg.waitForFunction(() => /Save 2 as prospects/.test(document.querySelector('.cardscan [data-a="save"]').textContent), null, T);
+  assert.equal(await pg.$eval('.cscard[data-i="0"] [data-k="email"]', e => e.value), 'jane.example@acmerealty.com');
+  await pg.fill('.cscard[data-i="1"] [data-k="contact_title"]', 'Chief Engineer (fixed)');
+  await pg.click('.cardscan [data-a="save"]'); await pg.waitForTimeout(800);
+  const rows = await pg.evaluate(() => DBX.prospects.filter(x => /Expo/.test(x.notes || '')).map(x => [x.company, x.contact_name, x.contact_title, x.phone, x.stage]));
+  assert.deepEqual(rows, [['ACME REALTY GROUP', 'Jane Q. Example', 'Property Manager', '(510) 555-0199', 'New'], ['SAMPLE PROPERTIES', 'John Doe', 'Chief Engineer (fixed)', null, 'New']], JSON.stringify(rows));
+  assert.ok(!(await pg.$('dialog.cardscan')), 'closes when all are saved');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
