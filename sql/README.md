@@ -38,4 +38,5 @@
 | 034_contract_received.sql | Run once: approved jobs get a Contract step (signed contract / PO received / approved by email) before Schedule. Needs 033. |
 
 | 035_two_step_signin.sql | Run once: password + 6-digit code. Anyone who turned on the code must use it, and the roles ticked in Settings → Team must too; without the code the database treats them as signed out. Changes nothing until someone turns it on. Locked out? Run `update public.settings set data = data - 'mfaRoles' where id = 1;` here. Needs 034. |
+| 036_code_reset_feedback.sql | Run once: Settings → Team → **Reset 6-digit code** for someone who lost or changed phones (owner only, logged), and the **Feedback** button: anyone sends a note from the page they're on; the Owner and Admin read it (Feedback inbox, Home → My to-do) and mark it done. Needs 035. |
 Client data is never stored in this repository.

@@ -1116,7 +1116,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
       if (m === 'POST') return j({});
       if (/\/drives\?/.test(u)) return j({ value: [{ id: 'd1', name: 'Clients', webUrl: 'https://x.sharepoint.com/sites/team/Clients' }] });
       if (/\/shares\//.test(u)) return j({ id: 'f1', parentReference: { driveId: 'd1' } });
-      if (/items\/f1:\/Photos /.test(u)) return j({ id: 'ph1' });
+      if (/items\/f1:\/(Photos |Site photos)/.test(u)) return j({ id: 'ph1' });
       return r.fulfill({ status: 404, body: '{}' }); });
   };
   // (a) approving a service report files the PDF and its photos
@@ -1136,10 +1136,10 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const pc = await b.newPage({ viewport: { width: 1300, height: 900 }, acceptDownloads: true }); pc.on('pageerror', e => errs.push('sp job: ' + e.message));
   await pc.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
   const up2 = []; await fakeSp(pc, up2);
-  const pr = { num: 'PFBS-1071', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Demo Client', property: '9 Oak St', service: 'Window Cleaning', status: 'Invoiced', date_resolved: '2026-10-10', hcp_job: '10971', folder_link: FOLDER, items: [{ type: 'Base', qty: 1, description: 'Exterior windows', amount: 1200 }] };
+  const pr = { num: 'PFBS-1071', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Demo Client', property: '9 Oak St', service: 'Window Cleaning', status: 'Invoiced', date_resolved: '2026-10-10', hcp_job: '10971', folder_link: FOLDER, photos: [{ path: 'PFBS-1071/1.jpg', caption: 'Front entrance' }], items: [{ type: 'Base', qty: 1, description: 'Exterior windows', amount: 1200 }] };
   const inv = [{ id: 'i71', inv_no: 5001, num: 'PFBS-1071', status: 'Sent', invoice_date: '2026-10-27', terms_days: 30, due_date: '2099-01-01', total: 1200, paid: 0, items: [{ description: 'Exterior windows', amount: 1200 }], bill_to: { name: 'Demo Client', email: 'ap@example.com' } }];
   const sr = [{ id: 'sr71', num: 'PFBS-1071', status: 'approved', approved_at: '2026-10-24T20:00:00Z', doc: { service_dates: '10/24/2026', pdf: { path: 'pdf/sr71/1/x.pdf' }, photos: [] } }];
-  await pc.addInitScript(([x, i, r]) => { window.MOCK_EXTRA = [x]; window.MOCK_INV = i; window.MOCK_SR = r; window.__ST = { 'pdf/sr71/1/x.pdf': new Blob(['%PDF-1.4 fake'], { type: 'application/pdf' }) }; sessionStorage.clear(); sessionStorage.setItem('pfbs.open', 'PFBS-1071'); }, [pr, inv, sr]);
+  await pc.addInitScript(([x, i, r]) => { window.MOCK_EXTRA = [x]; window.MOCK_INV = i; window.MOCK_SR = r; window.__ST = { 'pdf/sr71/1/x.pdf': new Blob(['%PDF-1.4 fake'], { type: 'application/pdf' }), 'PFBS-1071/1.jpg': new Blob(['jpg'], { type: 'image/jpeg' }) }; sessionStorage.clear(); sessionStorage.setItem('pfbs.open', 'PFBS-1071'); }, [pr, inv, sr]);
   await pc.goto(BASE + '?sp=1'); await pc.waitForSelector('#dMore', T); await pc.waitForTimeout(500);
   await pc.click('[data-jf="contract"]'); await pc.waitForSelector('dialog.ask input[type="file"]', T);
   await pc.setInputFiles('dialog.ask input[type="file"]', { name: 'signed.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 signed') });
@@ -1150,6 +1150,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.ok(up2.some(u => /WC Proposal .* - PFBS-1071\.pdf$/.test(u)), 'proposal: ' + JSON.stringify(up2));
   assert.ok(up2.some(u => /WC Invoice 5001 10-27-2026 9 Oak St - PFBS-1071\.pdf$/.test(u)), 'sent invoice: ' + JSON.stringify(up2));
   assert.ok(up2.some(u => /WC Service Report 10-24-2026 9 Oak St - PFBS-1071\.pdf$/.test(u)), 'sent report: ' + JSON.stringify(up2));
+  assert.ok(up2.some(u => /^ph1:\/01 Front entrance\.jpg$/.test(u)), 'site photo in Site photos: ' + JSON.stringify(up2));
   await pc.close();
 }
 
@@ -1317,6 +1318,26 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.waitForSelector('#whoName', { state: 'visible', ...T }); await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('[data-mfarole="Owner"]', T);
   await pg.click('[data-mfarole="Owner"]'); await pg.waitForTimeout(300);
   assert.ok(!(await pg.evaluate(() => (DBX.settings[0].data.mfaRoles || []).includes('Owner'))), 'owner without their own code cannot lock themselves out');
+  await pg.close();
+}
+
+// 46. Owner resets a lost-phone code; anyone sends feedback from where they are; Owner / Admin read it and mark it done
+{
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('feedback: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort()); pg.on('dialog', d => d.type() === 'prompt' ? d.accept('Fixed the colors') : d.accept());
+  await pg.addInitScript(() => { sessionStorage.clear(); window.MOCK_RPC = { reset_mfa: a => { window.__reset = a.p_email; return { data: 1, error: null }; } }; });
+  await pg.goto(BASE); await pg.waitForSelector('#whoName', { state: 'visible', ...T });
+  await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('[data-mfareset="e@x.com"]', T);
+  assert.ok(!(await pg.$('[data-mfareset="aperez@pfbuildingservices.com"]')), 'not on your own row');
+  await pg.click('[data-mfareset="e@x.com"]'); await pg.waitForTimeout(300);
+  assert.equal(await pg.evaluate(() => window.__reset), 'e@x.com'); assert.match(await pg.textContent('#toast'), /reset/);
+  await pg.click('#fbBtn'); await pg.waitForSelector('#fbMsg', T);
+  assert.match(await pg.textContent('dialog.ask'), /From: Arturo · Settings/);
+  await pg.fill('#fbMsg', 'The lift chip is hard to see'); await pg.click('dialog.ask [data-a="send"]'); await pg.waitForTimeout(400);
+  assert.deepEqual(await pg.evaluate(() => DBX.feedback.map(x => [x.page, x.message])), [['Settings', 'The lift chip is hard to see']]);
+  assert.match(await pg.textContent('dialog.ask'), /Inbox[\s\S]*1 new[\s\S]*The lift chip is hard to see/, 'owner sees it in the inbox');
+  await pg.click('dialog.ask [data-fbdone]'); await pg.waitForTimeout(400);
+  assert.deepEqual(await pg.evaluate(() => [DBX.feedback[0].done_by, DBX.feedback[0].reply]), ['Arturo', 'Fixed the colors']);
   await pg.close();
 }
 

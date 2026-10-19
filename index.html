@@ -179,7 +179,7 @@ dialog.ask.invview{width:min(1100px,97vw);max-width:none;max-height:94vh;overflo
 }
 @media (prefers-reduced-motion:no-preference){aside.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
 
-.who{display:flex;align-items:center;gap:10px;color:#C8CDE0;font-size:13px}
+.who{display:flex;align-items:center;gap:10px;color:#C8CDE0;font-size:13px;flex-wrap:wrap;justify-content:flex-end;min-width:0;max-width:100%}
 .btn.onbar{color:#fff;border-color:#4A5A8C}
 .login{max-width:440px;margin:48px auto;display:grid;gap:14px}
 .btn.wide{width:100%;padding:12px}
@@ -313,7 +313,7 @@ td input,td select{padding:5px 8px}
     <div class="gsearch"><input type="search" id="gq" placeholder="Search jobs, clients, invoices…  ( / )" autocomplete="off" aria-label="Search everything"><div class="gpop" id="gres" hidden></div></div>
     <div id="offBar" class="offbar" hidden role="status"></div><div class="gnew"><button type="button" class="btn small gnewbtn" id="gNew" aria-haspopup="true" aria-expanded="false">+ New</button><div class="gpop gmenu" id="gMenu" hidden></div></div>
   </div>
-  <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Service reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="mySign" title="Password and 6-digit code">My sign-in</button><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
+  <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Service reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="fbBtn" title="Something confusing, broken or missing? Tell Arturo">Feedback</button><button class="btn ghost small onbar" id="mySign" title="Password and 6-digit code">My sign-in</button><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
 </div></header>
 
 <main>
@@ -1947,7 +1947,8 @@ $('#pho').addEventListener('click', async e=>{ const t=e.target.closest('button'
     const {error}=await sb.storage.from(PH_BUCKET).upload(path, blob, {contentType:'image/jpeg'});
     if(error){ t.disabled=false; t.textContent='Add photo'; toast(/bucket|not found/i.test(error.message)?'Run database update 008 to turn on photos.':error.message); return; }
     PHURL[path]=URL.createObjectURL(blob); draft.photos=[...(draft.photos||[]), {path, caption:$('#phCap').value.trim()}];
-    if(await savePhotos()) toast('Photo added. It prints on the client PDF.');
+    if(await savePhotos()){ toast('Photo added. It prints on the client PDF.');
+      if(spOn() && SP.isLink(draft.folderLink)){ const p=draft; spFilePhotos(p, p.folderLink, path).then(n=>{ if(n.length) addActivity(p.num,'note',`Site photo saved to SharePoint: ${n[0]}`); }).catch(err=>addActivity(p.num,'note',`Site photo didn't save to SharePoint (${err.message}). ⋯ → Save all to client folder tries again.`)); } }
     PH=null; $('#pho').hidden=true; $('#phBox').innerHTML=photosHTML(draft, canEditDraft()); }
 });
 $('#drawer').addEventListener('change', async e=>{
@@ -3197,10 +3198,17 @@ async function spFindFolder(p){
 }
 // the job's folder: the one it has, else found without asking (and remembered on the job); '' when it can't tell
 async function spFolderFor(p){ if(SP.isLink(p.folderLink)) return p.folderLink; const url=await spFindFolder(p); if(url) await spSetFolder(url, p); return url||''; }
+// the proposal's site photos, full size, in "<folder>/Site photos" ("01 Front entrance.jpg"); same names replace
+async function spFilePhotos(p, folder, only){ const L=(p.photos||[]).map((ph,i)=>[ph,i]).filter(([ph])=>!only || ph.path===only); if(!L.length || !folder) return [];
+  const t=await SP.target(folder, 'Site photos'), out=[];
+  for(const [ph,i] of L){ const {data,error}=await sb.storage.from(PH_BUCKET).download(ph.path); if(error||!data) continue;
+    const n=`${String(i+1).padStart(2,'0')}${ph.caption?' '+SP.place(ph.caption):''}.jpg`; await SP.put(t, n, new Blob([data],{type:'image/jpeg'})); out.push('Site photos/'+n); }
+  return out; }
 // everything a job has, into its folder (p.folderLink set): proposal, pricing (if priced), sent / paid CRM invoices, sent service reports → the file names
 async function spFileJob(p){ const saved=[];
   await makePdf(p, {spOnly:true, saved});
   const pairs=(p.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]); if(pairs.length) await makeEstimatePdf(p, pairs, {spOnly:true, saved});
+  saved.push(...await spFilePhotos(p, p.folderLink));
   const {data:invs}=await sb.from('invoices').select('*').eq('num',p.num);
   for(const v of (invs||[]).filter(v=>v.source!=='hcp' && ['Sent','Paid'].includes(v.status))){ const doc=await makeInvoicePdf(v,p); if(doc){ const n=invSpName(v,p); await spUpload(doc.output('blob'), n, p.folderLink); saved.push(n); } }
   const {data:reps}=await sb.from('service_reports').select('id,doc,status,approved_at').eq('num',p.num).eq('status','approved');
@@ -4103,7 +4111,7 @@ function renderSettings(){
       <span style="display:block;margin-top:6px"><b>Must also use the 6-digit code:</b> ${['Owner','Admin','Senior Estimator','Estimator','BD Rep','Accountant'].map(r=>`<label style="margin-right:12px;white-space:nowrap"><input type="checkbox" data-mfarole="${r}" ${(S.mfaRoles||[]).includes(r)?'checked':''} ${owner?'':'disabled'}> ${r}</label>`).join('')}</span>
       <span style="display:block;margin-top:4px">They set it up the next time they sign in. Needs database update 035; anyone can also turn it on for themselves under <b>My sign-in</b>.</span></div>
     <div class="tablewrap"><table><thead><tr><th>Name</th><th>Microsoft 365 email</th><th>Role</th><th>Active</th>${owner?'<th></th>':''}</tr></thead><tbody id="teamRows">
-    ${TEAM.map(t=>`<tr style="cursor:default" data-email="${esc(t.email)}"><td>${esc(t.name)}</td><td>${esc(t.email)}</td><td>${owner&&t.email!==me.email?`<select data-team="role" aria-label="Role for ${esc(t.name)}">${ROLES.map(r=>`<option ${r===t.role?'selected':''}>${r}</option>`).join('')}</select>`:esc(t.role)}</td><td>${owner&&t.email!==me.email?`<input type="checkbox" data-team="active" ${t.active?'checked':''} aria-label="Active">`:(t.active?'Yes':'No')}</td>${owner?'<td></td>':''}</tr>`).join('')}
+    ${TEAM.map(t=>`<tr style="cursor:default" data-email="${esc(t.email)}"><td>${esc(t.name)}</td><td>${esc(t.email)}</td><td>${owner&&t.email!==me.email?`<select data-team="role" aria-label="Role for ${esc(t.name)}">${ROLES.map(r=>`<option ${r===t.role?'selected':''}>${r}</option>`).join('')}</select>`:esc(t.role)}</td><td>${owner&&t.email!==me.email?`<input type="checkbox" data-team="active" ${t.active?'checked':''} aria-label="Active">`:(t.active?'Yes':'No')}</td>${owner?`<td>${t.email!==me.email?`<button type="button" class="btn ghost small" data-mfareset="${esc(t.email)}" title="Lost or new phone: they set the code up again at their next sign-in">Reset 6-digit code</button>`:''}</td>`:''}</tr>`).join('')}
     ${owner?`<tr style="cursor:default"><td><input id="nt-name" placeholder="Name" aria-label="New member name"></td><td><input id="nt-email" type="email" placeholder="name@pfbuildingservices.com" aria-label="New member email"></td><td><select id="nt-role" aria-label="New member role">${ROLES.filter(r=>r!=='Owner').map(r=>`<option>${r}</option>`).join('')}</select></td><td></td><td><button class="btn small" id="addMember">Add</button></td></tr>`:''}
     </tbody></table></div>
     <div class="note">Only people listed here can sign in. Turning someone off removes their access right away. Estimators see only their own proposals; BD reps see only proposals credited to them.</div></div>
@@ -5116,6 +5124,7 @@ function todoGroups(){
   }
   if(['Owner','Admin'].includes(r)){
     add('Jobs to schedule', P.filter(p=>p.status==='Approved' && after(p.dateResolved) && !p.cancelledOn && !p.onHoldSince && !VIS.some(v=>v.num===p.num)).map(p=>prop(p, `approved ${fmtD(p.dateResolved)}`, 'bad')));
+    if(fbReader()) add('Feedback to read', FB.filter(x=>!x.done_at).map(x=>({fb:x.id, cls:'warn', text:`${x.by_name||x.by_email}: ${String(x.message).slice(0,70)}${x.message.length>70?'…':''}`, why:[x.page,x.num].filter(Boolean).join(' · ')})));
     if(spOn()) add('Jobs with no client folder', P.filter(p=>WON.includes(p.status) && p.status!=='Paid' && !p.cancelledOn && !SP.isLink(p.folderLink)).map(p=>({folder:p.num, cls:'warn', text:`${p.num} · ${p.client||''}${p.property?' · '+p.property:''}`, why:'pick its SharePoint folder once'})));
     add('Visits with no techs (next 2 weeks)', VIS.filter(v=>v.kind==='job' && v.status==='Scheduled' && !(v.techs||[]).length && v.visit_date>=td && v.visit_date<=in14).map(v=>({vis:v.id, cls:'bad', text:`${fmtD(v.visit_date)} · ${visLabel(v)}`, why:'pick the crew'})));
     add('Double-booked techs (next 2 weeks)', [...dblBooked(VIS.filter(v=>!['Cancelled','Skipped'].includes(v.status) && visEnd(v)>=td && v.visit_date<=in14))].map(id=>VIS.find(v=>v.id===id)).filter(Boolean).map(v=>({vis:v.id, cls:'bad', text:`${fmtD(v.visit_date)} · ${visLabel(v)}`, why:(v.techs||[]).join(', ')})));
@@ -5146,9 +5155,10 @@ function renderTodo(){
   const n=G.reduce((s,g)=>s+g.items.length,0);
   slot.innerHTML=`<div class="card todo"><div class="toolbar" style="margin:0;justify-content:space-between"><h3 style="margin:0">My to-do <span class="c">${n}</span></h3><span class="note" style="margin:0">${hidden?`${hidden} hidden · <a href="#" data-tdunhide>show them again</a>`:''}${S.crmStart?`${hidden?' · ':''}counting from ${fmtD(S.crmStart)}`:''}</span></div>
     ${!n?'<div class="note" style="margin:6px 0 0">Nothing waiting on you. 👍</div>':`<div class="tdchips">${G.map(g=>`<button type="button" class="tdchip ${g.items.some(i=>i.cls==='bad')?'bad':g.items.some(i=>i.cls==='warn')?'warn':''}" data-tdg="${esc(g.title)}" aria-expanded="${TODO_OPENG.has(g.title)}">${esc(g.title)} <span class="c">${g.items.length}</span></button>`).join('')}</div>
-    ${G.filter(g=>TODO_OPENG.has(g.title)).map(g=>`<div class="tdg"><b>${esc(g.title)}</b>${g.items.map(it=>`<div class="tdrow"><a href="#" class="tdi ${it.cls}" ${it.open?`data-td-open="${esc(it.open)}"`:it.folder?`data-td-folder="${esc(it.folder)}"`:it.vis?`data-td-vis="${esc(it.vis)}"`:it.pros?`data-td-pros="${esc(it.pros)}"`:`data-td-go="${esc(it.go)}"`}><span>${esc(it.text)}</span><small>${esc(it.why||'')}</small></a><span class="tdact"><button type="button" class="btn ghost small" data-tdsnooze="${esc(tdKey(g,it))}" title="Hide for a week">Snooze</button><button type="button" class="btn ghost small" data-tdmine="${esc(tdKey(g,it))}" title="Hide it from my list">Not mine</button></span></div>`).join('')}</div>`).join('')}`}</div>`; }
-document.addEventListener('click', e=>{ const t=e.target.closest && e.target.closest('[data-tdg],[data-tdsnooze],[data-tdmine],[data-tdunhide],[data-td-open],[data-td-folder],[data-td-vis],[data-td-pros],[data-td-go]'); if(!t) return; e.preventDefault();
+    ${G.filter(g=>TODO_OPENG.has(g.title)).map(g=>`<div class="tdg"><b>${esc(g.title)}</b>${g.items.map(it=>`<div class="tdrow"><a href="#" class="tdi ${it.cls}" ${it.open?`data-td-open="${esc(it.open)}"`:it.fb?`data-td-fb="${esc(it.fb)}"`:it.folder?`data-td-folder="${esc(it.folder)}"`:it.vis?`data-td-vis="${esc(it.vis)}"`:it.pros?`data-td-pros="${esc(it.pros)}"`:`data-td-go="${esc(it.go)}"`}><span>${esc(it.text)}</span><small>${esc(it.why||'')}</small></a><span class="tdact"><button type="button" class="btn ghost small" data-tdsnooze="${esc(tdKey(g,it))}" title="Hide for a week">Snooze</button><button type="button" class="btn ghost small" data-tdmine="${esc(tdKey(g,it))}" title="Hide it from my list">Not mine</button></span></div>`).join('')}</div>`).join('')}`}</div>`; }
+document.addEventListener('click', e=>{ const t=e.target.closest && e.target.closest('[data-tdg],[data-tdsnooze],[data-tdmine],[data-tdunhide],[data-td-open],[data-td-fb],[data-td-folder],[data-td-vis],[data-td-pros],[data-td-go]'); if(!t) return; e.preventDefault();
   if(t.dataset.tdFolder) return pickFolderFor(t.dataset.tdFolder);
+  if(t.dataset.tdFb) return openFeedback();
   if(t.dataset.tdg!=null){ const k=t.dataset.tdg; TODO_OPENG.has(k)?TODO_OPENG.delete(k):TODO_OPENG.add(k); renderTodo(); return; }
   if(t.dataset.tdsnooze){ tdSet(t.dataset.tdsnooze, addDays(iso(today()),7)); toast('Snoozed for a week'); renderTodo(); return; }
   if(t.dataset.tdmine){ tdSet(t.dataset.tdmine, 'mine'); toast('Hidden from your list'); renderTodo(); return; }
@@ -5186,6 +5196,37 @@ $('#linkBtn').addEventListener('click', async ()=>{ const email=$('#loginEmail')
   $('#loginMsg').textContent = error ? error.message : `Check ${email} for the link. It works once and expires in an hour.`; });
 for(const id of ['#signOut','#signOut2']) $(id).addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
 $('#mySign').addEventListener('click', ()=>mySignIn());
+$('#fbBtn').addEventListener('click', ()=>openFeedback());
+// ---- Feedback (update 036): anyone sends it from the page they're on (screen + open job filled in); Owner / Admin read it, reply and mark it done
+let FB=[], FBOK=true;
+const fbReader = () => ['Owner','Admin'].includes(role());
+async function loadFeedback(){ if(!fbReader()) return; const r=await sb.from('feedback').select('*').order('at',{ascending:false}).limit(300); FBOK=!r.error; FB=r.data||[]; if(current()==='home') renderTodo?.(); }
+function openFeedback(){
+  const tab=document.querySelector('#tabs [aria-selected="true"]')?.textContent?.trim()||current(), num=(draft && !isNew && !$('#drawer').hidden)?draft.num:'';
+  const d=document.createElement('dialog'); d.className='ask cardscan'; let showDone=false;
+  const list=()=>{ const L=FB.filter(x=>showDone||!x.done_at);
+    return `<h3 style="margin:16px 0 6px">Inbox <span class="note" style="margin:0;font-weight:400">${FB.filter(x=>!x.done_at).length} new</span> <label style="font-size:13px;font-weight:400;margin-left:10px"><input type="checkbox" id="fbDone" ${showDone?'checked':''}> show done</label></h3>
+      <div class="eflist" style="max-height:340px">${L.map(x=>`<div class="efrow ${x.done_at?'done':''}" style="align-items:flex-start"><span><b>${esc(x.by_name||x.by_email)}</b> <small>${esc(new Date(x.at).toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'}))} · ${esc(x.page||'')}${x.num?` · <a href="#" data-fbopen="${esc(x.num)}">${esc(x.num)}</a>`:''}</small><br>${esc(x.message)}${x.reply?`<br><small>↳ ${esc(x.reply)}</small>`:''}</span>
+        <span>${x.done_at?`<small>✓ ${esc(x.done_by||'')}</small>`:`<button type="button" class="btn ghost small" data-fbdone="${x.id}">Done</button>`}</span></div>`).join('')||'<div class="efrow"><span class="note" style="margin:0">Nothing here.</span></div>'}</div>`; };
+  const draw=()=>{ d.innerHTML=`<div class="toolbar" style="justify-content:space-between;margin:0 0 6px"><h3 style="margin:0">Feedback</h3><button type="button" class="btn ghost small" data-a="x">Close</button></div>
+    <div class="note" style="margin:0 0 6px">Something confusing, broken, or missing? Say it in your own words. It goes to ${fbReader()?'this inbox':'Arturo'} with the screen${num?' and job':''} you're on.</div>
+    <textarea id="fbMsg" rows="4" placeholder="e.g. On the schedule I can't tell which visits still need a lift" aria-label="Your feedback"></textarea>
+    <div class="toolbar" style="justify-content:space-between;margin-top:6px"><span class="note" style="margin:0">From: ${esc(me.name)} · ${esc(tab)}${num?' · '+esc(num):''}</span><button type="button" class="btn" data-a="send">Send</button></div>
+    ${fbReader()?(FBOK?list():'<div class="note">Run database update 036 in Supabase to turn on the inbox.</div>'):''}`; };
+  draw(); document.body.appendChild(d);
+  d.addEventListener('cancel', e=>{ e.preventDefault(); d.close(); d.remove(); });
+  d.addEventListener('change', e=>{ if(e.target.id==='fbDone'){ showDone=e.target.checked; const m=$('#fbMsg').value; draw(); $('#fbMsg').value=m; } });
+  d.addEventListener('click', async e=>{ const a=e.target.closest('[data-a]')?.dataset.a;
+    if(a==='x'){ d.close(); d.remove(); return; }
+    const o=e.target.closest('[data-fbopen]'); if(o){ e.preventDefault(); d.close(); d.remove(); openDrawer(o.dataset.fbopen); return; }
+    const dn=e.target.closest('[data-fbdone]'); if(dn){ const reply=prompt('Optional: a short note (what you did about it)','')||null;
+      const {error}=await sb.from('feedback').update({done_at:new Date().toISOString(), done_by:me.name, reply}).eq('id',dn.dataset.fbdone); if(error) return toast(error.message);
+      await loadFeedback(); const m=$('#fbMsg').value; draw(); $('#fbMsg').value=m; renderTodo?.(); return; }
+    if(a==='send'){ const msg=$('#fbMsg').value.trim(); if(!msg){ $('#fbMsg').focus(); return; }
+      const {error}=await sb.from('feedback').insert({page:tab, num:num||null, message:msg});
+      if(error) return toast(/relation|schema cache|does not exist/i.test(error.message)?'Feedback needs database update 036 in Supabase.':error.message);
+      toast('Thanks! Sent.'); if(fbReader()){ await loadFeedback(); draw(); } else { d.close(); d.remove(); } } });
+  d.showModal(); $('#fbMsg')?.focus(); }
 // My sign-in: change the password; turn the 6-digit code on (or off, unless your role must use it)
 async function mySignIn(){
   const fs=(await MFA.factors(sb)).filter(f=>f.status==='verified'), st=await MFA.status(sb), must=!!st?.required || (S.mfaRoles||[]).includes(role());
@@ -5203,6 +5244,12 @@ async function saveMfaRoles(){ const roles=[...document.querySelectorAll('[data-
   const data={...S, mfaRoles:roles}; const r=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
   if(r.error){ toast(r.error.message); return; } S.mfaRoles=roles; toast(roles.length?`6-digit code required for: ${roles.join(', ')}`:'Nobody is required to use the code'); }
 document.addEventListener('change', e=>{ if(e.target.dataset && e.target.dataset.mfarole!=null && role()==='Owner') saveMfaRoles(); });
+// lost / new phone: the owner removes their authenticator; they set it up again at the next sign-in (update 036, logged)
+document.addEventListener('click', async e=>{ const b=e.target.closest && e.target.closest('[data-mfareset]'); if(!b || role()!=='Owner') return;
+  const em=b.dataset.mfareset, t=TEAM.find(x=>x.email===em); if(!confirm(`Reset the 6-digit code for ${t?.name||em}?\n\nUse this when they lost or changed phones. The next time they sign in, they scan a new QR code.`)) return;
+  const r=await sb.rpc('reset_mfa',{p_email:em});
+  if(r.error) return toast(/function|schema cache/i.test(r.error.message)?'Run database update 036 in Supabase first.':r.error.message);
+  toast(r.data ? `${t?.name||em}'s code is reset. They set it up again at next sign-in.` : `${t?.name||em} didn't have a code set up.`); });
 
 // ---------- click any column heading to sort (smallest ↔ biggest, oldest ↔ newest, A ↔ Z); the choice sticks until the page is reloaded ----------
 const SORTS={};
@@ -5252,7 +5299,7 @@ async function start(session){
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===startTab); show(startTab);
   if(startTab===last){ try{ CLSEL=sessionStorage.getItem('pfbs.client')||null; CLTAB=sessionStorage.getItem('pfbs.cltab')||'profile'; }catch(_){} }
   let reopen=''; try{ reopen=sessionStorage.getItem('pfbs.open')||''; }catch(_){}
-  await loadProposals(); if(reopen && P.some(p=>p.num===reopen)) openDrawer(reopen); OFF.bar(); OFF.flush(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); loadKits(); sb.rpc('crm_job_numbers').then(r=>{ JOBNO_ON=!r.error && r.data===true; }); if(isManager()) loadOpenInvoices();
+  await loadProposals(); if(reopen && P.some(p=>p.num===reopen)) openDrawer(reopen); OFF.bar(); OFF.flush(); loadFeedback(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); loadKits(); sb.rpc('crm_job_numbers').then(r=>{ JOBNO_ON=!r.error && r.data===true; }); if(isManager()) loadOpenInvoices();
   window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })

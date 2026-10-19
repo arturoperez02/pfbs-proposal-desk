@@ -6,6 +6,7 @@ const strip = t => t.replace(/notify pgrst, 'reload schema';/g, '');
 const db = new PGlite();
 await db.exec(`create schema auth; create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true),''),'{}')::jsonb $$;
 create function auth.uid() returns uuid language sql stable as $$ select nullif(auth.jwt()->>'sub','')::uuid $$; create role authenticated; create role anon; grant usage on schema public, auth to authenticated, anon;
+create table auth.users(id uuid primary key, email text);
 create table auth.mfa_factors(id uuid primary key default gen_random_uuid(), user_id uuid, status text, factor_type text);
 create schema storage; create table storage.buckets(id text primary key, name text, public boolean); create table storage.objects(id serial, bucket_id text, name text, owner uuid, metadata jsonb); alter table storage.objects enable row level security;
 create function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name, '/') $$;`);
@@ -362,4 +363,30 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.equal((await q1(`select my_role() r`)).r, 'Estimator');
   await db.exec('reset role; delete from auth.mfa_factors');
   console.log('db: 2-step sign-in passed');
+}
+
+// 036: the owner resets a lost-phone code; anyone sends feedback, the owner reads it
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  const as = async c => { await db.exec(`reset role; select set_config('request.jwt.claims','${JSON.stringify(c)}',false); set role authenticated;`); };
+  const OWN = { sub: '00000000-0000-0000-0000-000000000001', email: 'aperez@pfbuildingservices.com' }, EST = { sub: '00000000-0000-0000-0000-000000000002', email: 'e@x.com' };
+  await db.exec(`reset role; insert into auth.users values ('00000000-0000-0000-0000-000000000002','e@x.com') on conflict do nothing;
+    insert into auth.mfa_factors(user_id, status, factor_type) values ('00000000-0000-0000-0000-000000000002','verified','totp')`);
+  await as({ ...EST, aal: 'aal2' });
+  await assert.rejects(db.query(`select reset_mfa('e@x.com')`), /Only the owner/, 'an estimator cannot reset codes');
+  await as(OWN);
+  assert.equal((await q1(`select reset_mfa('E@X.com ') n`)).n, 1, 'owner resets it');
+  await assert.rejects(db.query(`select reset_mfa('aperez@pfbuildingservices.com')`), /My sign-in/, 'not your own');
+  await db.exec('reset role');
+  assert.equal((await q1(`select count(*)::int c from auth.mfa_factors`)).c, 0);
+  assert.match((await q1(`select new_value v from admin_log where area='Team' and item='e@x.com' order by id desc limit 1`)).v, /code reset/);
+  await as({ ...EST, aal: 'aal1' });
+  await db.exec(`insert into feedback(page, num, message) values ('Schedule', 'PFBS-0775', 'The lift chip is hard to see')`);
+  assert.equal((await q1(`select by_name n from feedback`)).n, 'Test Est', 'who sent it is filled in');
+  await assert.rejects(db.query(`insert into feedback(by_email, message) values ('aperez@pfbuildingservices.com', 'pretend')`), undefined, 'cannot send as someone else');
+  await as(OWN);
+  assert.equal((await q1(`select count(*)::int c from feedback`)).c, 1, 'owner reads it');
+  await db.exec(`update feedback set done_at = now(), done_by = 'Arturo'`);
+  await db.exec('reset role');
+  console.log('db: code reset & feedback passed');
 }
