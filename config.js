@@ -5,8 +5,8 @@ window.PFBS_CONFIG = {
 
   // SharePoint auto-save (optional). From Microsoft Entra → App registrations → PFBS Proposal Desk → Overview.
   // These are IDs, not secrets. Leave blank to turn SharePoint saving off.
-  SP_CLIENT_ID: '',   // Application (client) ID
-  SP_TENANT_ID: '',   // Directory (tenant) ID
+  SP_CLIENT_ID: 'ecfd1c5f-60c4-4bc9-be82-5f5b5073f705',   // Application (client) ID
+  SP_TENANT_ID: 'ab8d6915-bd2b-4bfb-8203-c06f6ad57b2f',   // Directory (tenant) ID
   SP_SITE: 'pfwindowcleaning.sharepoint.com:/sites/team',
   SP_LIBRARY: 'Clients'
 };
