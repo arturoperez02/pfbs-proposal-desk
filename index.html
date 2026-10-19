@@ -93,6 +93,7 @@ h3.setsec{margin:28px 0 10px;font-size:13px;letter-spacing:.08em;text-transform:
 .board{display:grid;grid-template-columns:repeat(5,minmax(170px,1fr));gap:8px;overflow-x:auto;padding-bottom:4px} .bcol{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:6px;min-width:170px} .bcol h4{margin:2px 4px 6px;font-size:13px;display:flex;justify-content:space-between} .bcard{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin:0 0 6px;cursor:pointer;font:inherit;font-size:12.5px;color:inherit;line-height:1.3} .bcard:hover{border-color:var(--navy,#1F2A6B)} .bcard .note{margin:0;font-size:11.5px} .bmore{font-size:12px;color:var(--muted);padding:2px 4px}
 .hgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px} @media (max-width:800px){ .hgrid{grid-template-columns:1fr} .jflow{flex-wrap:wrap} .jflow>div{flex-basis:33%} }
 .hlist>div{padding:6px 0;border-bottom:1px solid var(--line);font-size:13px} .hlist>div:last-child{border-bottom:0} .hlist a{cursor:pointer}
+.offbar{position:fixed;left:16px;bottom:16px;z-index:60;max-width:min(560px,calc(100% - 32px));padding:10px 14px;border-radius:10px;background:#1f2a5c;color:#fff;font-size:14px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.25)} .offbar.off{background:#b45309} .offbar[hidden]{display:none}
 dialog.ask.cardscan{max-width:900px} .eflist{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px} .efrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line)} .efrow.done{opacity:.55} .cslist{display:grid;gap:10px;margin-top:8px} .cscard{display:grid;grid-template-columns:200px 1fr;gap:10px;border:1px solid var(--line);border-radius:8px;padding:8px} .cscard.off{opacity:.45} .cscard img{width:100%;max-height:150px;object-fit:contain;border-radius:4px;background:#eee} .cscard .f{margin:0} @media(max-width:640px){.cscard{grid-template-columns:1fr}}
 dialog.ask{border:1px solid var(--line);border-radius:10px;padding:20px;max-width:440px;width:calc(100% - 32px);background:var(--card,#fff);color:var(--ink)} dialog.ask::backdrop{background:rgba(15,20,40,.45)} dialog.ask h3{margin:0 0 6px} dialog.ask .toolbar{justify-content:flex-end;margin-top:14px} tr.voided td{color:var(--muted,#888)}
 .btn.small{padding:5px 10px;font-size:13px}
@@ -309,7 +310,7 @@ td input,td select{padding:5px 8px}
   </nav>
   <div class="gbar" id="gbar" hidden>
     <div class="gsearch"><input type="search" id="gq" placeholder="Search jobs, clients, invoices…  ( / )" autocomplete="off" aria-label="Search everything"><div class="gpop" id="gres" hidden></div></div>
-    <div class="gnew"><button type="button" class="btn small gnewbtn" id="gNew" aria-haspopup="true" aria-expanded="false">+ New</button><div class="gpop gmenu" id="gMenu" hidden></div></div>
+    <div id="offBar" class="offbar" hidden role="status"></div><div class="gnew"><button type="button" class="btn small gnewbtn" id="gNew" aria-haspopup="true" aria-expanded="false">+ New</button><div class="gpop gmenu" id="gMenu" hidden></div></div>
   </div>
   <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Service reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
 </div></header>
@@ -724,6 +725,7 @@ async function openDrawer(id, opts={}){
   DTAB = (['orders','home','schedule'].includes(current()) || role()==='Admin') ? 'job' : 'prop';
   PR=null; isNew=!id; newLead=!!opts.lead; orig = id ? P.find(p=>p.num===id) : null;
   draft = orig ? structuredClone(orig) : newLead ? {num:'', dateSent:null, sentBy: role()==='Estimator'?me.name:'', bdRep: role()==='BD Rep'?me.name:'', leadSource: role()==='BD Rep'?'BD rep':'', status:'Lead', items:[]} : {num:'', dateSent:iso(today()), sentBy: me.name, status:'Estimating', items:[{type:'Service',service:'',qty:1,frequency:'',amount:'',description:'',note:''}]};
+  if(orig && OFF.get()[orig.num]) draft=fromRow({...toRow(orig), ...OFF.get()[orig.num].diff});   // changes made offline, not saved yet
   hist=[]; fillClientBlanks(); drawDrawer();
   $('#scrim').hidden=false; $('#drawer').hidden=false; $('#closeD')?.focus();
   if(id && outcome(draft)==='Won' && isManager()) loadInvoices(id);
@@ -776,9 +778,13 @@ async function autoSave(force, d=draft, o=orig){
   AUTO.busy=true; const n=o.num, msg=t=>{ if(draft===d && $('#dmsg')) $('#dmsg').textContent=t; };
   try{
     msg('Saving…'); syncFromItems(d); d.actualsSummary=actSummary(d); d.yearValue=isRecurring(d)?Math.round((annual(d)||0)*100)/100:null;
-    await ensureClient(d);
+    OFF.keep(n, toRow(d), toRow(o));
+    if(!navigator.onLine){ msg(OFF.MSG); return; }
+    try{ await ensureClient(d); }catch(e){ if(OFF.net(e)){ msg(OFF.MSG); return; } throw e; }
     const row=toRow(d); if(!canPayComm()){ delete row.comm_paid_on; delete row.est_comm_paid_on; }
-    const res=await sb.from('proposals').update(row).eq('num',n).select().single();
+    let res; try{ res=await sb.from('proposals').update(row).eq('num',n).select().single(); }catch(e){ res={error:e}; }
+    if(res.error && OFF.net(res.error)){ msg(OFF.MSG); return; }
+    if(!res.error) OFF.drop(n, row);
     if(res.error){ msg(/column|schema cache/i.test(res.error.message||'')?'The database is missing an update. Run the newest file in the sql folder, then save again.':(res.error.message||'Could not save.')); return; }
     const saved=fromRow(res.data), i=P.findIndex(x=>x.num===n); if(i>=0) P[i]=saved;
     // fields the server filled (e.g. the job # given at approval) come back into the open form unless you changed them meanwhile
@@ -789,6 +795,35 @@ async function autoSave(force, d=draft, o=orig){
   } finally { AUTO.busy=false; }
 }
 setInterval(()=>{ autoSave().catch(()=>{ AUTO.busy=false; }); }, 1000);
+// ---- Offline-safe saving (Arturo 10/18): every unsaved change to a proposal / job is kept on this computer (localStorage) until the
+// database has it. Lost connection: a banner says so, and it saves by itself when the connection is back, even after a refresh or closing it.
+// Only the fields that changed are sent, so someone else's edits to other fields are not overwritten.
+const OFF = {
+  KEY:'pfbs.offline', MSG:'Offline: your changes are kept on this computer and save by themselves when the connection is back.',
+  get(){ try{ return JSON.parse(localStorage.getItem(this.KEY)||'{}')||{}; }catch(_){ return {}; } },
+  put(m){ try{ localStorage.setItem(this.KEY, JSON.stringify(m)); }catch(_){} this.bar(); },
+  net:e=>!navigator.onLine || /fetch|network|load failed|timed? ?out|connection|offline/i.test(String(e?.message||e||'')),
+  keep(num, now, base){ const m=this.get(), old=m[num], b=old?old.base:base, diff={};
+    for(const k of Object.keys(now)) if(JSON.stringify(now[k]??null)!==JSON.stringify(b[k]??null)) diff[k]=now[k];
+    if(Object.keys(diff).length) m[num]={diff, base:b, at:new Date().toISOString(), by:me?.name||''}; else delete m[num]; this.put(m); },
+  drop(num, sent){ const m=this.get(); if(m[num] && (!sent || Object.entries(m[num].diff).every(([k,v])=>!(k in sent) || JSON.stringify(sent[k]??null)===JSON.stringify(v??null)))){ delete m[num]; this.put(m); } },
+  bar(){ const n=Object.keys(this.get()).length, off=!navigator.onLine, b=$('#offBar'); if(!b) return;
+    b.hidden=!off && !n; b.className='offbar'+(off?' off':'');
+    b.textContent = off ? `Offline${n?` · ${n} proposal${n===1?'':'s'} / job${n===1?'':'s'} with changes kept on this computer`:''}. They save by themselves when the connection is back.` : `Saving ${n} change${n===1?'':'s'} made while offline…`; },
+  busy:false,
+  async flush(){ if(this.busy || !navigator.onLine || !me) return; const m=this.get(), L=Object.keys(m).filter(n=>!(draft && !isNew && draft.num===n && !$('#drawer').hidden)); if(!L.length){ this.bar(); return; }
+    this.busy=true; let done=0;
+    try{ for(const n of L){ const it=m[n], row={...it.diff}; if(!canPayComm()){ delete row.comm_paid_on; delete row.est_comm_paid_on; }
+        let res; try{ res=await sb.from('proposals').update(row).eq('num',n).select().single(); }catch(e){ res={error:e}; }
+        if(res.error){ if(OFF.net(res.error)) break; console.warn('offline change not saved', n, res.error); continue; }
+        const i=P.findIndex(x=>x.num===n); if(i>=0) P[i]=fromRow(res.data); this.drop(n); done++;
+        await sb.from('proposal_activity').insert({num:n, kind:'note', note:`Changes made offline saved (${new Date(it.at).toLocaleString('en-US',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})}, ${it.by||'—'})`}); } }
+    finally{ this.busy=false; this.bar(); }
+    if(done){ toast(`${done} change${done===1?'':'s'} made offline ${done===1?'is':'are'} saved`); renderAll(); } }
+};
+window.addEventListener('online', ()=>{ OFF.bar(); OFF.flush(); });
+window.addEventListener('offline', ()=>{ OFF.bar(); const m=$('#dmsg'); if(m && draft && !isNew) m.textContent=OFF.MSG; });
+setInterval(()=>OFF.flush(), 15000);
 function closeDrawer(){ if(draft && orig && !isNew) autoSave(true, draft, orig).catch(()=>{});   // closing never loses a change
   try{ sessionStorage.removeItem('pfbs.open'); }catch(_){} $('#scrim').hidden=true; $('#drawer').hidden=true; draft=null; PR=null; }
 function calc1(p){ const g=marginPct(p); if(g==null) return ''; return `<div class="gpline">Gross profit margin <b class="num" style="color:${g<S.marginFloor?'var(--bad)':'inherit'}">${pct(g)}</b>${g<S.marginFloor?` <span style="color:var(--bad)">· below the ${pct(S.marginFloor)} floor: needs owner approval; commission pays at a reduced rate</span>`:''}</div>`; }
@@ -5186,7 +5221,7 @@ async function start(session){
   for(const x of document.querySelectorAll('#tabs [data-tab]')) x.setAttribute('aria-selected', x.dataset.tab===startTab); show(startTab);
   if(startTab===last){ try{ CLSEL=sessionStorage.getItem('pfbs.client')||null; CLTAB=sessionStorage.getItem('pfbs.cltab')||'profile'; }catch(_){} }
   let reopen=''; try{ reopen=sessionStorage.getItem('pfbs.open')||''; }catch(_){}
-  await loadProposals(); if(reopen && P.some(p=>p.num===reopen)) openDrawer(reopen); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); loadKits(); sb.rpc('crm_job_numbers').then(r=>{ JOBNO_ON=!r.error && r.data===true; }); if(isManager()) loadOpenInvoices();
+  await loadProposals(); if(reopen && P.some(p=>p.num===reopen)) openDrawer(reopen); OFF.bar(); OFF.flush(); loadProspects(); loadPayouts(); loadPendingReports(); loadClients(); loadSchedule(); loadMoney(); loadKits(); sb.rpc('crm_job_numbers').then(r=>{ JOBNO_ON=!r.error && r.data===true; }); if(isManager()) loadOpenInvoices();
   window.addEventListener('focus', ()=>{ clearTimeout(start.f); start.f=setTimeout(loadPendingReports, 300); });
   sb.channel('pfbs-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'proposals'},()=>{ clearTimeout(start.t); start.t=setTimeout(()=>{ loadProposals(); loadPendingReports(); },400); })

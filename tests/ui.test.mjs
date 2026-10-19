@@ -1254,6 +1254,29 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 44. Offline-safe saving: changes typed with no connection stay on this computer and save by themselves when it's back
+{
+  const ctx = await b.newContext({ viewport: { width: 1300, height: 900 } }); const pg = await ctx.newPage(); pg.on('pageerror', e => errs.push('offline: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  const pr = { num: 'PFBS-1075', date_sent: '2026-10-18', sent_by: 'Arturo', client: 'Offline Co', property: '1 Net St', status: 'Estimating', notes: '', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: 900 }] };
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; if (!sessionStorage.getItem('t44')) { sessionStorage.clear(); localStorage.removeItem('pfbs.offline'); sessionStorage.setItem('t44', '1'); } sessionStorage.setItem('pfbs.open', 'PFBS-1075'); }, pr);
+  await pg.goto(BASE); await pg.waitForSelector('#f-notes', T);
+  await ctx.setOffline(true); await pg.waitForTimeout(200);
+  assert.ok(await pg.$eval('#offBar', e => !e.hidden && /Offline/.test(e.textContent)), 'banner says offline');
+  await pg.fill('#f-notes', 'typed with no internet'); await pg.waitForTimeout(2600);
+  assert.match(await pg.textContent('#dmsg'), /kept on this computer/);
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1075').notes), '', 'not in the database yet');
+  assert.match(await pg.evaluate(() => localStorage.getItem('pfbs.offline')), /typed with no internet/, 'kept on this computer');
+  await pg.click('#closeD'); await pg.waitForTimeout(300);
+  assert.match(await pg.textContent('#offBar'), /1 proposal/, 'still waiting after closing it');
+  await ctx.setOffline(false); await pg.waitForTimeout(1500);
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1075').notes), 'typed with no internet', 'saved when the connection came back');
+  assert.ok(await pg.$eval('#offBar', e => e.hidden), 'banner gone');
+  assert.equal(await pg.evaluate(() => localStorage.getItem('pfbs.offline')), '{}');
+  assert.ok(await pg.evaluate(() => DBX.proposal_activity.some(a => a.num === 'PFBS-1075' && /made offline saved/.test(a.note))), 'noted on the job');
+  await ctx.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
