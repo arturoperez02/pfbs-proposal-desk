@@ -296,3 +296,14 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.equal(Number((await one(`select next_proposal_no() n`)).n), Math.max(mx + 1, 803));
   console.log('db: proposal numbers passed');
 }
+// ---------- the warehouse gets the job's materials (update 032) ----------
+{
+  const items = [
+    { type: 'Base', description: 'Exterior windows', estimate: { materials: [{ desc: 'WFS Resin Refill', qty: 1 }, { desc: 'Squeegee rubber', qty: '0' }] } },
+    { type: 'Base', description: 'Interior windows', estimate: { materials: [{ desc: 'wfs resin refill', qty: 2 }, { desc: 'Drop cloth', qty: 3 }] } },
+    { type: 'Add-on', description: 'Screens', estimate: { materials: [{ desc: 'Screen brush', qty: 1 }] } },
+    { type: 'Add-on', description: 'Gutters', accepted: true, estimate: { materials: [{ desc: 'Bags', qty: 10 }] } }];
+  const m = (await db.query(`select pfbs_materials($1::jsonb, null) m`, [JSON.stringify(items)])).rows[0].m;
+  assert.deepEqual(m.map(x => [x.desc, Number(x.qty)]), [['WFS Resin Refill', 3], ['Drop cloth', 3], ['Bags', 10]], 'counted lines only, added up by name, no zero qty, not-accepted add-ons left out');
+  console.log('db: warehouse materials passed');
+}

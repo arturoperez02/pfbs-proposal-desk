@@ -33,5 +33,6 @@
 | 029_invoice_reminders.sql | Run once: payment reminders. The Money tab (and Home) list the reminders due (before / on / after the due date, set in Settings → Invoicing) and remember which were sent. Needs 028. |
 | 030_hcp_invoice_details.sql | Run once: imported HousecallPro invoices show what the job was and where (from HCP's Jobs export); Settings → Invoicing → "Fill in details of imported HCP invoices" fixes ones already imported. Needs 029. |
 | 031_proposal_numbers.sql | Run once: new proposals start at PFBS-0803 and go up from there (never reusing a number). Settings → Proposal numbers shows and changes the next one. Needs 030. |
+| 032_warehouse_materials.sql | Run once: the warehouse gets each job's materials from the pricing, so "Import from CRM Schedule" puts them in the kit and they print on the kit slip (page 2 of the job packet). Needs 031. |
 
 Client data is never stored in this repository.

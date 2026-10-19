@@ -371,7 +371,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
 // 16. Warehouse tab: same sign-in, CRM schedule import, packed kit shows on the CRM job
 {
   const today = new Date().toISOString().slice(0, 10);
-  const vis = { id: 'v-wh-1', job_no: '10305', num: 'PFBS-0998', visit_date: today, client: 'Kit Co', property: '3 Kit Ave', address: '3 Kit Ave, Fremont', techs: ['Rigo', 'Israel'], work: ['Pressure Washing'], equipment: ['Boom Lift'], vehicle: 'Truck 2', notes: '', scope: ['Wash plaza'] };
+  const vis = { id: 'v-wh-1', job_no: '10305', num: 'PFBS-0998', visit_date: today, client: 'Kit Co', property: '3 Kit Ave', address: '3 Kit Ave, Fremont', techs: ['Rigo', 'Israel'], work: ['Pressure Washing'], equipment: ['Boom Lift'], materials: [{ desc: 'Degreaser 5 gal', qty: 2 }], vehicle: 'Truck 2', notes: '', scope: ['Wash plaza'] };
   const pg = await b.newPage({ viewport: { width: 1100, height: 900 } }); pg.on('pageerror', e => errs.push('warehouse page: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
   await pg.addInitScript(v => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [v], error: null }) }; }, vis);
@@ -385,6 +385,9 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('.sched-job-card');
   assert.equal(await pg.$eval('#co-jobnum', e => e.value), '10305'); assert.equal(await pg.$eval('#co-jobnum', e => e.dataset.visit), 'v-wh-1', 'remembers the CRM visit');
   assert.equal(await pg.$eval('#co-names', e => e.value), 'Rigo, Israel');
+  const km = await pg.evaluate(() => { templates.push({ id: 'tpw', name: 'Pressure Washing', template_items: [{ item_name: 'Surface cleaner', quantity: 1, quantity_mode: 'fixed' }] }); selectedTemplateIds = ['tpw']; calcKit(); selectedTemplateIds = ['tpw']; calcKit(); return { t: templates.length, m: coJobMaterials.length, items: coItems.map(i => i.name + ':' + i.qty) }; });
+  assert.equal(km.m, 1, 'the job\'s materials came over from the CRM');
+  assert.ok(km.items.includes('Degreaser 5 gal:2') && km.items.includes('Surface cleaner:1') && km.items.length === 2, 'materials go into the kit: ' + km.items.join(', '));
   await pg.close();
   const p2 = await b.newPage({ viewport: { width: 1100, height: 900 } }); p2.on('pageerror', e => errs.push('warehouse denied: ' + e.message));
   await p2.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
@@ -769,7 +772,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const pr = { num: 'PFBS-1016', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Late Lift Co', status: 'Approved', date_resolved: '2026-10-10', hcp_job: '10238', parts: [], items: [{ type: 'Base', qty: 1, description: 'Perimeter windows', amount: 9338, estimate: est }] };
   const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('late lift: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
-  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = [{ id: 'lv1', num: 'PFBS-1016', kind: 'job', status: 'Scheduled', visit_date: '2026-12-28', start_time: '06:00', end_time: '14:30', techs: ['Rigo Perez'], work: [], equipment: [], notes: 'Gate code 4455' }]; sessionStorage.clear(); }, pr);
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; window.MOCK_KITS = [{ id: 'kk1', visit_id: 'lv1', status: 'packed' }]; window.MOCK_KIT_ITEMS = [{ job_id: 'kk1', item_name: 'WFS Resin Refill', quantity: 1 }, { job_id: 'kk1', item_name: 'Squeegee 18"', quantity: 2 }, { job_id: 'kk1', item_name: 'Squeegee old', quantity: 1, is_removed: true }, { job_id: 'kk1', item_name: 'Water-fed pole', quantity: 2 }]; window.MOCK_VIS = [{ id: 'lv1', num: 'PFBS-1016', kind: 'job', status: 'Scheduled', visit_date: '2026-12-28', start_time: '06:00', end_time: '14:30', techs: ['Rigo Perez'], work: [], equipment: [], notes: 'Gate code 4455' }]; sessionStorage.clear(); }, pr);
   await pg.goto(BASE); await pg.waitForTimeout(900);
   await pg.click('#tabs [data-tab="home"]'); await pg.waitForTimeout(200);
   assert.match(await pg.textContent('#homeBody'), /Lifts \/ rentals to handle[\s\S]*Late Lift Co/, 'Home flags the lift even before it is saved on the job');
@@ -796,13 +799,16 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('[data-hopen="PFBS-1016"]'); await pg.waitForTimeout(700);
   const parts = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1016').parts || []);
   assert.equal(parts.filter(x => x.kind === 'rental').length, 1, 'opening the job does not add the lift twice');
-  // printed job sheet for the warehouse + supervisor, EN / ES
+  // printed job packet: page 1 job sheet (no materials list), page 2 the warehouse kit slip, EN / ES, nothing repeated
   await pg.click('#jfSheet'); await pg.waitForSelector('#jsWrap .jspage', T);
-  let js = await pg.textContent('#jsWrap .jspage');
+  let js = await pg.textContent('#jsWrap');
   assert.ok(/Hoja de trabajo|Job sheet/.test(js) && /65' Boom Lift/.test(js) && /Sunbelt/.test(js) && /R-5521/.test(js), 'sheet shows the lift with its reservation');
-  await pg.click('#jsWrap [data-js="en"]'); js = await pg.textContent('#jsWrap .jspage');
-  assert.ok(/Job sheet/.test(js) && /Scope of work[\s\S]*Perimeter windows/.test(js) && /Back from the job/.test(js) && !/\$|9,338/.test(js) && /Gate code 4455/.test(js) && /Rigo Perez/.test(js) && !/Site contact|Contacto/.test(js), 'English sheet: scope, crew, notes, back-from-job, no prices');
-  await pg.click('#jsWrap [data-js="es"]'); assert.match(await pg.textContent('#jsWrap .jspage'), /Alcance del trabajo[\s\S]*Al regresar del trabajo/, 'Spanish toggle');
+  await pg.click('#jsWrap [data-js="en"]'); js = await pg.textContent('#jsWrap');
+  assert.ok(/Job sheet/.test(js) && /Scope of work[\s\S]*Perimeter windows/.test(js) && /Back from the job/.test(js) && !/\$|9,338/.test(js) && /Gate code 4455/.test(js) && /Rigo Perez/.test(js) && !/Site contact|Contacto/.test(js), 'English sheet: scope, crew, notes, back-from-job, no prices, no site contact');
+  assert.ok(/Kit[\s\S]*3 items — see the kit slip \(page 2\)/.test(js) && (await pg.$$('#jsWrap .jspage')).length === 2, 'kit line on page 1, kit slip on page 2');
+  const p2 = await pg.textContent('#jsWrap .jsp2'); assert.ok(/Kit slip/.test(p2) && /WFS Resin Refill/.test(p2) && /Squeegee/.test(p2) && !/Squeegee old/.test(p2) && !/Rigo Perez|Gate code|Village/.test(p2), 'kit slip: items only, removed ones left out, no repeated job info');
+  assert.ok(!/Materials|PACKED|Packed/.test(await pg.textContent('#jsWrap .jspage:not(.jsp2)')), 'page 1 no longer lists materials');
+  await pg.click('#jsWrap [data-js="es"]'); assert.match(await pg.textContent('#jsWrap'), /Alcance del trabajo[\s\S]*Al regresar del trabajo[\s\S]*Hoja del kit/, 'Spanish toggle');
   await pg.click('#jsWrap [data-js="x"]'); assert.ok(!(await pg.$('#jsWrap')), 'closes');
   await pg.close();
 }
