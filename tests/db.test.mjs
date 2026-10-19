@@ -307,3 +307,11 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.deepEqual(m.map(x => [x.desc, Number(x.qty)]), [['WFS Resin Refill', 3], ['Drop cloth', 3], ['Bags', 10]], 'counted lines only, added up by name, no zero qty, not-accepted add-ons left out');
   console.log('db: warehouse materials passed');
 }
+{
+  const parts = [{ kind: 'rental', desc: "65' Boom Lift", vendor: 'Sunbelt', reservationNo: 'R-1', estCost: 2000, finalCost: 2100 }, { desc: 'Resin', status: 'To order' }];
+  const r = (await db.query(`select pfbs_rentals($1::jsonb, '[]'::jsonb) r`, [JSON.stringify(parts)])).rows[0].r;
+  assert.deepEqual([r.length, r[0].desc, r[0].vendor, r[0].reservationNo, 'estCost' in r[0], 'finalCost' in r[0]], [1, "65' Boom Lift", 'Sunbelt', 'R-1', false, false], 'saved lifts, never costs');
+  const r2 = (await db.query(`select pfbs_rentals('[]'::jsonb, $1::jsonb) r`, [JSON.stringify([{ estimate: { rentals: [{ desc: '25 scissor', qty: 1, unit: 300 }, { desc: 'unused', qty: 0 }] } }])])).rows[0].r;
+  assert.deepEqual(r2.map(x => x.desc), ['25 scissor'], 'falls back to the lifts in the pricing');
+  console.log('db: warehouse job packet data passed');
+}

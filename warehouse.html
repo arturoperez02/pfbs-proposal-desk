@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script src="jobsheet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
@@ -689,8 +690,8 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
               <button class="btn btn-p btn-sm" onclick="printDymoLabel()">🖨 Print Dymo Label</button>
-              <button class="btn btn-s btn-sm" onclick="printSlipLastJob('en')">🖨 EN Slip</button>
-              <button class="btn btn-s btn-sm" onclick="printSlipLastJob('es')">🖨 ES Slip</button>
+              <button class="btn btn-s btn-sm" onclick="printSlipLastJob('en')">🖨 Job packet EN</button>
+              <button class="btn btn-s btn-sm" onclick="printSlipLastJob('es')">🖨 Job packet ES</button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
               <button class="btn btn-p" style="flex:1" onclick="startAnotherJob()">+ Start Another Job</button>
@@ -2189,7 +2190,7 @@ function crmJob(v) {
     jobNum: v.job_no || '', date: v.visit_date || '', endDate: v.end_date || '', start: v.start_time || '',
     client: [v.client, v.property].filter(Boolean).join(' · '), address: v.address || '',
     type: ((v.work || []).length ? v.work : (v.scope || []))[0] || '', types: (v.work || []).length ? v.work : (v.scope || []), techs: v.techs || [], vehicle: v.vehicle || '',
-    equipment: v.equipment || [], scope: v.scope || [], materials: v.materials || [], notes: v.notes || '', jobStatus: 'scheduled' };
+    equipment: v.equipment || [], scope: v.scope || [], materials: v.materials || [], notes: v.notes || '', jobStatus: 'scheduled', _raw: v };
 }
 function startChecklistFromCrm(idx) {
   const sj = (window._toPack || [])[idx]; if (!sj) return;
@@ -7317,9 +7318,10 @@ function getSlipWarnings(items, templateId, es) {
 // from the dashboard's Today's Active Jobs card — previously the only way
 // to get a material list PDF was from the checkout wizard at the moment of
 // packing, with no way back to it once a job was already active.
-function printActiveJobSlip(jobId, lang) {
+async function printActiveJobSlip(jobId, lang) {
   const j = jobs.find(x => x.id === jobId);
   if (!j) return;
+  if (j.visit_id && await printJobPacket(j, lang || ((localStorage.getItem('kt_wh_lang') || 'en') === 'es' ? 'es' : 'en'))) return;
   const es = lang === 'es' || (!lang && (localStorage.getItem('kt_wh_lang') || 'en') === 'es');
   const rows = [
     [es?'Proyecto':'Project', j.building_client || j.site_address || '--'],
@@ -7334,8 +7336,25 @@ function printActiveJobSlip(jobId, lang) {
   showPrint(buildSlipHTML(es?'Recibo de Materiales':'Kit Checkout Slip', rows, items, j.keys||[], es, getSlipWarnings(items, j.template_id, es)));
 }
 
-function printSlipLastJob(lang) {
+// The whole job packet (page 1 job sheet from the CRM schedule, page 2 this kit) for kits packed from a CRM visit.
+// The warehouse is the last to touch the kit, so it prints the packet. Only schedule info comes over: never prices.
+async function crmVisitFor(job) {
+  if (!job || !job.visit_id) return null;
+  let hit = (scheduledJobsCache || []).find(x => x.visit_id === job.visit_id);
+  if (!hit) { try { const { data } = await db.rpc('warehouse_jobs', { p_days: 60 }); hit = (data || []).map(crmJob).find(x => x.visit_id === job.visit_id); } catch (e) {} }
+  return hit ? hit._raw : null;
+}
+async function printJobPacket(job, lang) {
+  const v = await crmVisitFor(job); if (!v) return false;
+  const items = (job.job_items || []).filter(i => !i.is_removed && !i.removed).map(i => ({ name: i.item_name || i.name, name_es: i.item_name_es || i.name_es, qty: i.quantity || i.qty || 1 }));
+  JP.open({ job: v.job_no || job.hcp_job_number || '', num: v.num || '', client: [v.client, v.property].filter(Boolean).join(' · '), address: v.address || job.site_address || '',
+    date: v.visit_date, endDate: v.end_date, skipWeekends: v.skip_weekends, start: v.start_time, end: v.end_time, techs: v.techs || [], vehicle: v.vehicle || job.vehicle,
+    scope: v.scope || [], notes: v.notes, rentals: v.rentals || [], kit: { items } }, lang === 'es' ? 'es' : 'en');
+  return true;
+}
+async function printSlipLastJob(lang) {
   if (!lastJob) return;
+  if (lastJob.visit_id && await printJobPacket(lastJob, lang)) return;
   const es=lang==='es';
   const rows=[
     [es?'Proyecto':'Project', es?lastJob.projName:lastJob.projName],

@@ -387,6 +387,11 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.equal(await pg.$eval('#co-names', e => e.value), 'Rigo, Israel');
   const km = await pg.evaluate(() => { templates.push({ id: 'tpw', name: 'Pressure Washing', template_items: [{ item_name: 'Surface cleaner', quantity: 1, quantity_mode: 'fixed' }] }); selectedTemplateIds = ['tpw']; calcKit(); selectedTemplateIds = ['tpw']; calcKit(); return { t: templates.length, m: coJobMaterials.length, items: coItems.map(i => i.name + ':' + i.qty) }; });
   assert.equal(km.m, 1, 'the job\'s materials came over from the CRM');
+  // the warehouse prints the whole job packet: page 1 from the CRM schedule, page 2 its kit
+  assert.ok(await pg.evaluate(() => printJobPacket({ visit_id: 'v-wh-1', job_items: [{ item_name: 'Surface cleaner', quantity: 1 }, { item_name: 'Old hose', quantity: 1, is_removed: true }] }, 'en')), 'packet printed');
+  const wp = await pg.textContent('#jsWrap');
+  assert.ok(/Job sheet/.test(wp) && /10305/.test(wp) && /Kit Co/.test(wp) && /Kit slip[\s\S]*Surface cleaner/.test(wp) && !/Old hose/.test(wp) && !/\$/.test(wp), 'warehouse packet: job sheet + kit slip, no prices');
+  await pg.click('#jsWrap [data-js="x"]');
   assert.ok(km.items.includes('Degreaser 5 gal:2') && km.items.includes('Surface cleaner:1') && km.items.length === 2, 'materials go into the kit: ' + km.items.join(', '));
   await pg.close();
   const p2 = await b.newPage({ viewport: { width: 1100, height: 900 } }); p2.on('pageerror', e => errs.push('warehouse denied: ' + e.message));
