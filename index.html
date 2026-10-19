@@ -3846,7 +3846,7 @@ function switchSteps(){ const sw=S.switchover||{};
     ['hcp','HousecallPro cancelled','Export HCP\'s customers, jobs and invoices one last time, then cancel.', null]
   ].map(([k,t,how,auto])=>({k,t,how,auto, done: auto!=null ? auto : !!sw[k], on: sw[k]||null})); }
 function switchHTML(owner){ const L=switchSteps(), n=L.filter(x=>x.done).length;
-  return `<div class="card" style="margin-bottom:16px" id="swCard"><h3>Switch-over to the CRM <span class="note" style="margin:0;font-weight:400">${n} of ${L.length} done</span></h3>
+  return `<div class="card" style="margin-bottom:16px;grid-column:1/-1" id="swCard"><h3>Switch-over to the CRM <span class="note" style="margin:0;font-weight:400">${n} of ${L.length} done</span></h3>
     <div class="swbar"><span style="width:${Math.round(n/L.length*100)}%"></span></div>
     <ol class="swlist">${L.map(x=>`<li class="${x.done?'done':''}"><span class="swi">${x.done?'✓':''}</span><div><b>${esc(x.t)}</b>${x.on?` <span class="note" style="margin:0">· ${fmtD(x.on)}</span>`:''}<div class="note" style="margin:0">${esc(x.how)}</div></div>
       ${x.auto==null&&owner?`<button type="button" class="btn ghost small" data-sw="${x.k}">${x.done?'Undo':'Mark done'}</button>`:x.auto!=null?'<span class="note" style="margin:0">checks itself</span>':''}</li>`).join('')}</ol></div>`; }
@@ -3988,6 +3988,7 @@ function organizeSettings(){
   const extra=document.createElement('div'); extra.className='card listedit'; extra.innerHTML='<h3>Proposal &amp; links</h3>';
   for(const id of ['#s-exp','#s-rpt']){ const l=root.querySelector(id)?.closest('label'); if(l) extra.appendChild(l); }
   const groups=[
+    ['Switch-over', ['Switch-over to the CRM']],
     ['Team', ['Team','CRM start date']],
     ['Schedule & crew', ['Crew','Proposal numbers','Job numbers','Equipment (schedule)','Vehicles','Spanish words','Work types (schedule)']],
     ['Price book & lists', ['Price book','Job types','Frequencies','Lead sources','Lost reasons','Add-on suggestions','BD email templates']],

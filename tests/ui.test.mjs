@@ -1054,6 +1054,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.addInitScript(() => sessionStorage.clear());
   await pg.goto(BASE); await pg.waitForTimeout(900);
   await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('#swCard', T);
+  assert.equal(await pg.evaluate(() => document.querySelector('#settingsBody h3.setsec')?.textContent), 'Switch-over', 'first section at the top, with its own jump link');
   assert.match(await pg.textContent('#swCard'), /Switch-over to the CRM[\s\S]*Daily backups on[\s\S]*HousecallPro cancelled/);
   await pg.click('#swCard [data-sw="backups"]'); await pg.waitForTimeout(300);
   assert.ok(await pg.evaluate(() => !!DBX.settings[0].data.switchover?.backups), 'saved');
