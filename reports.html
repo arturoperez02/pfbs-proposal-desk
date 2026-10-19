@@ -8,6 +8,7 @@
 <link rel="icon" href="logo.jpg">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script src="sp.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <style>
 :root{--navy:#1F2A6B;--navy2:#2C3A8C;--gold:#C9A227;--bg:#F3F4F8;--card:#fff;--ink:#1d2333;--mut:#667085;--line:#E1E4EC;--ok:#1E8E5A;--warn:#B54708;--bad:#C0322B;--r:12px}
@@ -842,11 +843,27 @@ async function approveFlow() {
     const res = await api(`/api/reports/${r.id}/approve`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: blob });
     state.report = res.report;
     showReport(r.id);
+    spFile(state.report, blob);   // files it in the client's SharePoint folder in the background; never holds up the email
     await emailFlow(state.report, blob);
   } catch (e) {
     if (e.message !== 'login') toast('Approve failed: ' + e.message, 5000);
     btn.disabled = false; btn.textContent = 'Approve & email';
   }
+}
+
+// the approved report (PDF + full-size photos in "Photos <date>") goes into the job's SharePoint client folder (sp.js, shared with the CRM)
+async function spFile(r, pdf) {
+  if (!window.SP || !SP.on() || !r.num) return;
+  SP.S.who = () => ME?.email || '';
+  const note = m => sb.from('proposal_activity').insert({ num: r.num, kind: 'note', note: m });
+  try {
+    const { data: job } = await sb.from('proposals').select('num,service,client,property,site_address,folder_link').eq('num', r.num).maybeSingle();
+    if (!job) return;
+    const res = await SP.saveReport(sb, r, job, { pdf, photos: true });
+    if (!res.folder) { toast('Not filed in SharePoint: no client folder found. Pick it on the job in the CRM (Files), then click 📁 Save to client folder.', 7000); return; }
+    toast('Filed in the client folder: ' + res.saved.join(', '), 5000);
+    await note('Service report saved to SharePoint: ' + res.saved.join(', '));
+  } catch (e) { toast("Didn't save to SharePoint: " + e.message, 6000); await note(`Service report didn't save to SharePoint (${e.message}). 📁 Save to client folder on the job tries again.`); }
 }
 
 // ---------------------------------------------------------------- PDF (matches the Word master template)

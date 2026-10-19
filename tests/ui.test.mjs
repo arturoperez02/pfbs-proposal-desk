@@ -1105,6 +1105,54 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 40. Filed automatically in the client's SharePoint folder: the approved service report (+ photos), the contract / PO file,
+//     and 📁 Save to client folder re-files everything the job has (proposal, pricing, sent invoices, sent reports)
+{
+  const FOLDER = 'https://x.sharepoint.com/sites/team/Clients/Demo%20Client/9%20Oak%20St/Window%20Cleaning';
+  const fakeSp = async (pg, up) => {
+    await pg.route(/msal-browser/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.msal={PublicClientApplication:class{getAllAccounts(){return [{username:"a"}]} async acquireTokenSilent(){return {accessToken:"t"}} async acquireTokenPopup(){return {accessToken:"t"}}}}' }));
+    await pg.route(/graph\.microsoft\.com/, r => { const u = decodeURIComponent(r.request().url()), m = r.request().method(), j = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
+      if (m === 'PUT') { up.push(u.replace(/^.*\/items\//, '').replace(/:\/content.*$/, '')); return j({ id: 'x' }); }
+      if (m === 'POST') return j({});
+      if (/\/drives\?/.test(u)) return j({ value: [{ id: 'd1', name: 'Clients', webUrl: 'https://x.sharepoint.com/sites/team/Clients' }] });
+      if (/\/shares\//.test(u)) return j({ id: 'f1', parentReference: { driveId: 'd1' } });
+      if (/items\/f1:\/Photos /.test(u)) return j({ id: 'ph1' });
+      return r.fulfill({ status: 404, body: '{}' }); });
+  };
+  // (a) approving a service report files the PDF and its photos
+  const pg = await b.newPage({ viewport: { width: 430, height: 900 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('sp report: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  const up = []; await fakeSp(pg, up);
+  await pg.addInitScript(([x, F]) => { window.MOCK_EXTRA = [{ ...x, service: 'Window Cleaning', folder_link: F }]; window.MOCK_RPC = { report_approved: () => ({ data: { ok: true }, error: null }) }; }, [job, FOLDER]);
+  await pg.goto(BASE + 'reports.html?num=PFBS-0963&sp=1'); await pg.waitForTimeout(1000);
+  await pg.setInputFiles('#file', path.join(B, 'logo.jpg')); await pg.waitForTimeout(1500);
+  await pg.click('#approve', T); await pg.click('.overlay [data-a="1"]', T); await pg.waitForSelector('#emTo', T); await pg.waitForTimeout(1500);
+  assert.ok(up.some(u => /^f1:\/WC Service Report \d+-\d+-\d{4} 9 Oak Plaza - PFBS-0963\.pdf$/.test(u)), 'report PDF filed: ' + JSON.stringify(up));
+  assert.ok(up.some(u => /^ph1:\/01.*\.jpg$/.test(u)), 'photo filed in Photos <date>: ' + JSON.stringify(up));
+  assert.ok(await pg.evaluate(() => DBX.proposal_activity.some(a => a.num === 'PFBS-0963' && /Service report saved to SharePoint/.test(a.note))), 'noted on the job');
+  await pg.close();
+
+  // (b) the CRM: contract file → folder; Save to client folder re-files invoices + reports too
+  const pc = await b.newPage({ viewport: { width: 1300, height: 900 }, acceptDownloads: true }); pc.on('pageerror', e => errs.push('sp job: ' + e.message));
+  await pc.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  const up2 = []; await fakeSp(pc, up2);
+  const pr = { num: 'PFBS-1071', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Demo Client', property: '9 Oak St', service: 'Window Cleaning', status: 'Invoiced', date_resolved: '2026-10-10', hcp_job: '10971', folder_link: FOLDER, items: [{ type: 'Base', qty: 1, description: 'Exterior windows', amount: 1200 }] };
+  const inv = [{ id: 'i71', inv_no: 5001, num: 'PFBS-1071', status: 'Sent', invoice_date: '2026-10-27', terms_days: 30, due_date: '2099-01-01', total: 1200, paid: 0, items: [{ description: 'Exterior windows', amount: 1200 }], bill_to: { name: 'Demo Client', email: 'ap@example.com' } }];
+  const sr = [{ id: 'sr71', num: 'PFBS-1071', status: 'approved', approved_at: '2026-10-24T20:00:00Z', doc: { service_dates: '10/24/2026', pdf: { path: 'pdf/sr71/1/x.pdf' }, photos: [] } }];
+  await pc.addInitScript(([x, i, r]) => { window.MOCK_EXTRA = [x]; window.MOCK_INV = i; window.MOCK_SR = r; window.__ST = { 'pdf/sr71/1/x.pdf': new Blob(['%PDF-1.4 fake'], { type: 'application/pdf' }) }; sessionStorage.clear(); sessionStorage.setItem('pfbs.open', 'PFBS-1071'); }, [pr, inv, sr]);
+  await pc.goto(BASE + '?sp=1'); await pc.waitForSelector('#spSaveD', T); await pc.waitForTimeout(500);
+  await pc.click('[data-jf="contract"]'); await pc.waitForSelector('dialog.ask input[type="file"]', T);
+  await pc.setInputFiles('dialog.ask input[type="file"]', { name: 'signed.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 signed') });
+  await pc.click('dialog.ask [data-a="ok"]'); await pc.waitForTimeout(1500);
+  assert.ok(up2.some(u => /^f1:\/WC Contract \d+-\d+-\d{4} 9 Oak St - PFBS-1071\.pdf$/.test(u)), 'contract filed: ' + JSON.stringify(up2));
+  up2.length = 0;
+  await pc.click('#spSaveD'); await pc.waitForTimeout(3000);
+  assert.ok(up2.some(u => /WC Proposal .* - PFBS-1071\.pdf$/.test(u)), 'proposal: ' + JSON.stringify(up2));
+  assert.ok(up2.some(u => /WC Invoice 5001 10-27-2026 9 Oak St - PFBS-1071\.pdf$/.test(u)), 'sent invoice: ' + JSON.stringify(up2));
+  assert.ok(up2.some(u => /WC Service Report 10-24-2026 9 Oak St - PFBS-1071\.pdf$/.test(u)), 'sent report: ' + JSON.stringify(up2));
+  await pc.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

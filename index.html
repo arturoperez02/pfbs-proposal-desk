@@ -431,6 +431,7 @@ td input,td select{padding:5px 8px}
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="config.js"></script>
+<script src="sp.js"></script>
 <script>
 // Your Supabase keys live in config.js (next to this file), so updating this file never touches them.
 const SUPABASE_URL = window.PFBS_CONFIG?.SUPABASE_URL || '';
@@ -625,9 +626,9 @@ function syncFromItems(p){
 }
 // every PDF the CRM makes is named the same way, so the client folder sorts by service and date:
 // "WC Proposal 10-9-2026 100 Village Ln Foster City - PFBS-0801.pdf", "WC Pricing 10-9-2026 ...", "WC Change Order 1 10-20-2026 ..." (the kind of paper right after the service, so techs never grab the wrong one)
-function docName(p, kind='Proposal', date){ const code=SVC_CODE[p.service]||SVC_CODE[guessService((p.items||[])[0]?.description)]||'PROP', place=String(p.property||p.client||'').replace(/[^A-Za-z0-9 ]+/g,'').trim().replace(/\s+/g,' ').slice(0,40);
-  const dt=parse(date||p.dateSent)||today(); return `${code} ${kind} ${dt.getMonth()+1}-${dt.getDate()}-${dt.getFullYear()} ${place} - ${p.num||'NEW'}${(p.rev||1)>1?' Rev '+p.rev:''}.pdf`; }
-const SVC_CODE = {'Window Cleaning':'WC','Pressure Wash':'PW','Solar Panel Cleaning':'SP','Janitorial':'JAN','Gutter Cleaning':'GC','Graffiti Removal':'GR','Gates & Doors':'GD','Lights - Decor':'LD','Multiple services':'MULTI'};
+const svcCode = p => SVC_CODE[p.service]||SVC_CODE[guessService((p.items||[])[0]?.description)]||'PROP';
+function docName(p, kind='Proposal', date, ext='pdf'){ return SP.name(svcCode(p), kind, parse(date||p.dateSent)||today(), p.property||p.client, (p.num||'NEW')+((p.rev||1)>1?' Rev '+p.rev:''), ext); }
+const SVC_CODE = SP.CODE;
 function bdRate(p){ if(p.datePaid && hasVal(p.bdCommRate)) return num(p.bdCommRate); if(!p.bdRep || !p.clientType) return null; const t=S.clientTypes.find(x=>x[0]===p.clientType); if(!t) return null; const g=gpPct(p); return t[1]*((g!=null && g<S.marginFloor)?S.belowFloorShare:1); }
 const FREQ_MONTHS={'Annual':12,'Semi-annual':6,'Quarterly':3,'Bi-monthly':2,'Monthly':12,'Weekly':12};
 function addMonths(s,m){ const d=parse(s); const t=new Date(d.getFullYear(), d.getMonth()+m, d.getDate()); return iso(t); }
@@ -1634,13 +1635,17 @@ async function contractStep(p){
   const r=await formDialog('Contract / PO received', `<div class="f"><b>What came in</b>${kinds.map((k,i)=>`<label style="display:block;font-weight:400;margin:4px 0"><input type="radio" name="kind" value="${esc(k)}" ${cur.startsWith(k)||(!cur&&i===0)?'checked':''}> ${esc(k)}</label>`).join('')}</div>
     <div class="grid2"><label class="f">Date received<input type="date" name="on" value="${esc(p.contractOn||iso(today()))}"></label><label class="f">PO # <span class="note" style="margin:0;font-weight:400">if any</span><input name="po" value="${esc(p.poNumber||'')}"></label></div>
     ${p.contractOn?'<label class="f" style="font-weight:400"><input type="checkbox" name="clear" value="1"> Not received after all (clear it)</label>':''}
-    <div class="note" style="margin:0">Keep the signed copy in the client's folder.</div>`, 'Save');
+    ${spOn()?`<label class="f">Signed copy <span class="note" style="margin:0;font-weight:400">PDF or a photo; saved in the client's folder</span><input type="file" name="file" accept=".pdf,image/*"></label>`:'<div class="note" style="margin:0">Keep the signed copy in the client\'s folder.</div>'}`, 'Save');
   if(!r) return;
   const clear=r.clear==='1', k2=r.kind||kinds[0], note=clear?null:(k2+(r.po&&k2!=='Approved by email (no contract)'?' · PO '+r.po:'')), on=clear?null:(r.on||iso(today()));
   const row={contract_on:on, contract_note:note}; if(r.po && r.po!==(p.poNumber||'')) row.po_number=r.po;
   const {error}=await sb.from('proposals').update(row).eq('num',p.num); if(error) return toast(/column|schema cache/i.test(error.message||'')?'Run database update 034 in Supabase first.':error.message);
   for(const o of [draft, orig, P.find(x=>x.num===p.num)]) if(o){ o.contractOn=on; o.contractNote=note; if(row.po_number) o.poNumber=row.po_number; }
-  await addActivity(p.num,'note', clear?'Contract / PO cleared':`Contract / PO received ${fmtD(on)}: ${note}`); toast(clear?'Cleared':'Contract / PO saved'); $('#jfBox').innerHTML=jobFlowHTML(draft); loadActivity(p.num); renderAll(); }
+  await addActivity(p.num,'note', clear?'Contract / PO cleared':`Contract / PO received ${fmtD(on)}: ${note}`); toast(clear?'Cleared':'Contract / PO saved');
+  if(r.file && !clear){ const f=r.file, ext=(f.name.match(/\.([a-z0-9]+)$/i)?.[1]||'pdf').toLowerCase(), kind=k2==='PO received'?('PO'+(r.po?' '+r.po.replace(/[^A-Za-z0-9-]+/g,''):'')):k2==='Signed contract'?'Contract':'Approval';
+    try{ const folder=await spFolderFor(p); if(!folder) toast("No client folder found in SharePoint. Pick it once in Files, then attach again.");
+      else { const n=docName({...p, rev:1}, kind, on, ext); await spUpload(f, n, folder); await addActivity(p.num,'note',`${kind} saved to SharePoint: ${n}`); toast('Contract / PO saved and filed in the client folder'); } }
+    catch(e){ toast("Saved, but the file didn't go to SharePoint: "+e.message); await addActivity(p.num,'note',`Contract file didn't save to SharePoint (${e.message})`); } } $('#jfBox').innerHTML=jobFlowHTML(draft); loadActivity(p.num); renderAll(); }
 async function jobStep(k){ const p=P.find(x=>x.num===draft.num)||draft, st=jobState(p), inv=(INV[p.num]||[]).filter(v=>v.status!=='Void'), lastInv=inv[inv.length-1], openInv=inv.find(v=>v.status==='Sent');
   if(!isManager()) return;
   if(k==='contract') return contractStep(p);
@@ -2676,6 +2681,7 @@ async function makeInvoicePdf(v, p){
     doc.text(`PF Building Services | License #${invS('license')}`,L0,765); doc.text(String(invS('website')),306,765,{align:'center'}); if(pages>1) doc.text(`Page ${i} of ${pages}`,R0,765,{align:'right'}); }
   doc.setTextColor(0); return doc;
 }
+const invSpName = (v,p) => docName({...p, rev:1}, 'Invoice '+v.inv_no, v.invoice_date);
 const invFile = (v,p) => `Invoice ${v.inv_no} - ${invPlace(v,p).replace(/[\\/:*?"<>|]+/g,' ').trim()}.pdf`;
 // the editor: everything in one place, filled from the job; saving writes PO# and billing back to the job so it is typed once
 function invEdit(p, v, o={}){
@@ -2758,7 +2764,7 @@ function invEdit(p, v, o={}){
         if(!String(row.bill_to?.email||'').includes('@')){ toast('Add the billing email first.'); d.querySelector('[name="bill_email"]').focus(); return; }
         const saved=ro?v:await save(); if(!saved) return;
         const doc=await makeInvoicePdf(saved,p); if(!doc) return;
-        close(); await deliverPdf(doc, invFile(saved,p), p, `Invoice #${saved.inv_no}`); invSendBox(saved,p);
+        close(); await deliverPdf(doc, invFile(saved,p), p, `Invoice #${saved.inv_no}`, {spName:invSpName(saved,p)}); invSendBox(saved,p);
       }
     } finally { b.disabled=false; }
   });
@@ -3084,31 +3090,9 @@ async function saveClient(c){
 }
 // ---------- SharePoint: save PDFs straight into the client's folder ----------
 // Needs SP_CLIENT_ID and SP_TENANT_ID in config.js (an Entra "Single-page application" registration; no secret).
-const SPC = { clientId: window.PFBS_CONFIG?.SP_CLIENT_ID || '', tenant: window.PFBS_CONFIG?.SP_TENANT_ID || '',
-  site: window.PFBS_CONFIG?.SP_SITE || 'pfwindowcleaning.sharepoint.com:/sites/team', library: window.PFBS_CONFIG?.SP_LIBRARY || 'Clients' };
-const SP_SCOPES=['Files.ReadWrite.All','Sites.ReadWrite.All'];
-const SVC_FOLDER={'Window Cleaning':'Window Cleaning','Pressure Wash':'Presure Wash','Solar Panel Cleaning':'Solar Panel Cleaning','Gates & Doors':'G&D','Gutter Cleaning':'Gutter Cleaning','Janitorial':'Janitorial','Graffiti Removal':'Graffiti Removal','Lights - Decor':'Lights - Decor'};
-let MSAL=null, SP_DRIVE=null;
-const spOn = () => !!(SPC.clientId && SPC.tenant);
-function loadScript(src){ return new Promise((ok,bad)=>{ const e=document.createElement('script'); e.src=src; e.onload=ok; e.onerror=()=>bad(new Error('Could not load '+src)); document.head.appendChild(e); }); }
-async function spToken(){
-  if(!MSAL){ if(!window.msal) await loadScript('https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js');
-    MSAL=new msal.PublicClientApplication({auth:{clientId:SPC.clientId, authority:'https://login.microsoftonline.com/'+SPC.tenant, redirectUri:new URL('auth.html', location.href).href}, cache:{cacheLocation:'localStorage'}});
-    if(MSAL.initialize) await MSAL.initialize(); }
-  const acct=MSAL.getAllAccounts().find(a=>(a.username||'').toLowerCase()===(me?.email||'').toLowerCase()) || MSAL.getAllAccounts()[0];
-  if(acct){ try{ return (await MSAL.acquireTokenSilent({scopes:SP_SCOPES, account:acct})).accessToken; }catch(_){} }
-  return (await MSAL.acquireTokenPopup({scopes:SP_SCOPES, loginHint:me?.email})).accessToken;
-}
-async function graph(path, opt={}){
-  const tok=await spToken(); const r=await fetch(path.startsWith('http')?path:'https://graph.microsoft.com/v1.0'+path, {...opt, headers:{Authorization:'Bearer '+tok, ...(opt.headers||{})}});
-  if(!r.ok){ let m=r.status+''; try{ m=(await r.json()).error?.message||m; }catch(_){} const e=new Error(m); e.status=r.status; throw e; }
-  return r.status===204 ? null : r.json();
-}
-async function spDrive(){ if(SP_DRIVE) return SP_DRIVE; const d=await graph(`/sites/${SPC.site}:/drives?$select=id,name,webUrl`);
-  SP_DRIVE=(d.value||[]).find(x=>x.name===SPC.library || decodeURIComponent(x.webUrl||'').endsWith('/'+SPC.library)); if(!SP_DRIVE) throw new Error(`Library "${SPC.library}" not found on the site`); return SP_DRIVE; }
-const encPath = p => p.split('/').map(encodeURIComponent).join('/');
-async function spChildren(path){ const d=await spDrive(); try{ const r=await graph(`/drives/${d.id}/root${path?':/'+encPath(path)+':':''}/children?$select=name,folder&$top=500`); return (r.value||[]).filter(x=>x.folder).map(x=>x.name).sort((a,b)=>a.localeCompare(b)); }catch(e){ if(e.status===404) return []; throw e; } }
-function bestMatch(list, ...hints){ const n=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); for(const h of hints){ const k=n(h); if(!k) continue; const hit=list.find(x=>n(x)===k) || list.find(x=>n(x).startsWith(k)||k.startsWith(n(x))&&n(x).length>3) || list.find(x=>n(x).includes(k.split(' ').slice(0,2).join(' '))); if(hit) return hit; } return ''; }
+const SPC = SP.C();   // SharePoint lives in sp.js (shared with service reports)
+const SVC_FOLDER = SP.FOLDER, spOn = SP.on, graph = (p,o)=>SP.graph(p,o), spChildren = p=>SP.children(p), bestMatch = SP.bestMatch, spEnsure = p=>SP.ensure(p), spUpload = (blob,name,url,sub)=>SP.upload(blob,name,url,sub);
+SP.S.who = () => me?.email || '';
 async function spPicker(){
   const box=$('#spBox'); if(!box) return; box.hidden=false; box.innerHTML='<div class="note">Connecting to SharePoint…</div>';
   try{
@@ -3132,10 +3116,6 @@ async function spFill(guess){
   if(guess && !$('#spSvc').value) $('#spSvc').value = SVC_FOLDER[draft.service] || SVC_FOLDER[guessService((draft.items||[])[0]?.description)] || '';
   $('#spPathNote').textContent = `${SPC.library} / ${[cl,pr,$('#spSvc').value.trim()].filter(Boolean).join(' / ')}${props.length&&pr&&!props.includes(pr)?' · new property folder will be created':''}`;
 }
-async function spEnsure(path){ const d=await spDrive(); let parent=''; for(const part of path.split('/').filter(Boolean)){
-  try{ await graph(`/drives/${d.id}/root${parent?':/'+encPath(parent)+':':''}/children`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:part, folder:{}, '@microsoft.graph.conflictBehavior':'fail'})}); }catch(e){ if(e.status!==409) throw e; }
-  parent = parent ? parent+'/'+part : part; }
-  return graph(`/drives/${d.id}/root:/${encPath(parent)}?$select=id,webUrl`); }
 async function spUse(){
   const parts=[$('#spClient').value.trim(), $('#spProp').value.trim(), $('#spSvc').value.trim()]; if(!parts[0]||!parts[1]){ toast('Pick the client and property folders.'); return; }
   const it=await spEnsure(parts.filter(Boolean).join('/')); await spSetFolder(it.webUrl);
@@ -3143,22 +3123,25 @@ async function spUse(){
   if(SP_THEN){ const f=SP_THEN; SP_THEN=null; await f(); }
 }
 let SP_THEN=null;
-async function spSetFolder(url){ draft.folderLink=url; const el=$('#f-folderLink'); if(el) el.value=url;
-  if(!isNew && draft.num){ const {error}=await sb.from('proposals').update({folder_link:url}).eq('num',draft.num); if(!error){ const o=P.find(x=>x.num===draft.num); if(o) o.folderLink=url; if(orig&&orig.num===draft.num) orig.folderLink=url; } }
-  const l=$('#spLine'); if(l) l.innerHTML=spLine(draft); const b=$('#spPick'); if(b) b.textContent='Change SharePoint folder'; }
+async function spSetFolder(url, p=draft){ const num=p?.num; if(!num && p!==draft) return;
+  const open = draft && (draft===p || (num && draft.num===num));
+  if(open){ draft.folderLink=url; const el=$('#f-folderLink'); if(el) el.value=url; }
+  if(num && !(open && isNew)){ const {error}=await sb.from('proposals').update({folder_link:url}).eq('num',num); if(!error){ for(const o of [P.find(x=>x.num===num), orig&&orig.num===num?orig:null, p]) if(o) o.folderLink=url; } }
+  if(open){ const l=$('#spLine'); if(l) l.innerHTML=spLine(draft); const b=$('#spPick'); if(b) b.textContent='Change SharePoint folder'; } }
 // the folder without asking: another proposal for the same property + service already has one, or the client and property folders already exist in SharePoint
 async function spFindFolder(p){
-  const k=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(), svc=SVC_FOLDER[p.service] || SVC_FOLDER[guessService((p.items||[])[0]?.description)] || '';
+  const k=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const twin=P.find(x=>x.num!==p.num && /sharepoint\.com/.test(x.folderLink||'') && (x.service||'')===(p.service||'') &&
     ((p.propertyId && x.propertyId===p.propertyId) || (k(x.client)===k(p.client) && k(x.property)===k(p.property) && k(p.property))));
   if(twin) return twin.folderLink;
-  const cl=bestMatch(await spChildren(''), p.client); if(!cl) return '';
-  const pr=bestMatch(await spChildren(cl), String(p.siteAddress||'').split(/\n|,/)[0], p.property); if(!pr) return '';
-  return (await spEnsure([cl,pr,svc].filter(Boolean).join('/'))).webUrl;
+  return SP.find(p.client, [String(p.siteAddress||'').split(/\n|,/)[0], p.property], p.service || guessService((p.items||[])[0]?.description));
 }
-// one click: the proposal PDF (and the pricing PDF, if it was priced) go straight into the client's folder, nothing downloads
+// the job's folder: the one it has, else found without asking (and remembered on the job); '' when it can't tell
+async function spFolderFor(p){ if(SP.isLink(p.folderLink)) return p.folderLink; const url=await spFindFolder(p); if(url) await spSetFolder(url, p); return url||''; }
+// one click: everything the job has goes straight into the client's folder, nothing downloads —
+// the proposal, the pricing (if priced), sent invoices and sent service reports. Same names replace, so it's also the "try again" button.
 async function spSaveAll(p){
-  if(!/sharepoint\.com/.test(p.folderLink||'')){
+  if(!SP.isLink(p.folderLink)){
     toast('Finding the client folder…'); const url=await spFindFolder(p);
     if(!url){ SP_THEN=()=>spSaveAll(draft); const b=$('#spBox'); b?.closest('fieldset')?.scrollIntoView({behavior:'smooth',block:'start'}); await spPicker();
       toast('Pick the client folder once. The PDFs save right after.'); return; }
@@ -3167,18 +3150,16 @@ async function spSaveAll(p){
   toast('Saving to SharePoint…'); const saved=[];
   await makePdf(p, {spOnly:true, saved});
   const pairs=(p.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]); if(pairs.length) await makeEstimatePdf(p, pairs, {spOnly:true, saved});
+  for(const v of (INV[p.num]||[]).filter(v=>v.source!=='hcp' && ['Sent','Paid'].includes(v.status))){ const doc=await makeInvoicePdf(v,p); if(doc){ const n=invSpName(v,p); await spUpload(doc.output('blob'), n, p.folderLink); saved.push(n); } }
+  if(p.num){ const {data:reps}=await sb.from('service_reports').select('id,doc,status,approved_at').eq('num',p.num).eq('status','approved');
+    for(const r of reps||[]){ const rep={...(r.doc||{}), id:r.id, approved_at:r.approved_at}; if(!rep.pdf?.path) continue;
+      const res=await SP.saveReport(sb, rep, {num:p.num, code:svcCode(p), service:p.service, client:p.client, property:p.property, site_address:p.siteAddress, folder_link:p.folderLink}); saved.push(...res.saved); } }
   if(!saved.length){ toast('Nothing was saved.'); return; }
   const where=decodeURIComponent(p.folderLink.split('/sites/')[1]||'').split('/').slice(2).join(' / ');
   toast(`Saved to SharePoint (${where}): ${saved.length} file${saved.length>1?'s':''}`);
   if(p.num) addActivity(p.num,'note',`Saved to SharePoint: ${saved.join(', ')}`).then(()=>{ if(draft&&draft.num===p.num) loadActivity(p.num); });
 }
 function spLine(p){ if(!spOn()) return ''; return /^https:\/\/[^/]*sharepoint\.com\//.test(p.folderLink||'') ? `PDFs save to <a href="${esc(p.folderLink)}" target="_blank" rel="noopener">${esc(decodeURIComponent(p.folderLink.split('/sites/')[1]||p.folderLink).split('/').slice(1).join(' / '))}</a>` : 'Pick the client folder once and every PDF from this proposal saves there.'; }
-async function spUpload(blob, name, folderUrl){
-  const d=await spDrive(); const share='u!'+btoa(unescape(encodeURIComponent(folderUrl))).replace(/=+$/,'').replace(/\//g,'_').replace(/\+/g,'-');
-  const folder=await graph(`/shares/${share}/driveItem?$select=id,parentReference`);
-  const driveId=folder.parentReference?.driveId || d.id;
-  return graph(`/drives/${driveId}/items/${folder.id}:/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=replace`, {method:'PUT', headers:{'Content-Type':'application/pdf'}, body:blob});
-}
 // look at a PDF before it downloads (Download PDF / Pricing PDF / change order / invoice preview)
 function pdfPreview(doc, name, onDownload){ const url=doc.output('bloburl'), d=document.createElement('dialog'); d.className='ask pdfprev';
   d.innerHTML=`<div class="toolbar" style="margin:0 0 8px;justify-content:space-between;flex-wrap:wrap"><b style="font-size:15px">${esc(name)}</b><span style="display:flex;gap:8px"><button type="button" class="btn ghost" data-a="x">Close</button><a class="btn ghost" href="${url}" target="_blank" rel="noopener">Open in new tab</a>${onDownload?'<button type="button" class="btn" data-a="dl">Download</button>':''}</span></div><iframe src="${url}" title="PDF preview"></iframe>`;
@@ -3188,13 +3169,15 @@ function pdfPreview(doc, name, onDownload){ const url=doc.output('bloburl'), d=d
   d.showModal(); }
 async function deliverPdf(doc, name, p, what, o={}){
   if(o.preview){ pdfPreview(doc, name, ()=>deliverPdf(doc, name, p, what)); return; }
-  if(o.spOnly){ await spUpload(doc.output('blob'), name, p.folderLink); o.saved?.push(name); return; }
+  const spName=o.spName||name;
+  if(o.spOnly){ await spUpload(doc.output('blob'), spName, p.folderLink); o.saved?.push(spName); return; }
   doc.save(name);
-  if(!spOn()){ toast(`${what} downloaded`); return; }
-  if(!/sharepoint\.com/.test(p.folderLink||'')){ toast(`${what} downloaded. Set the SharePoint folder (Files) to also save it there.`); return; }
-  try{ const r=await spUpload(doc.output('blob'), name, p.folderLink); toast(`${what} downloaded and saved to SharePoint`);
-    if(p.num) addActivity(p.num,'note',`${what} saved to SharePoint: ${name}`).then(()=>{ if(draft&&draft.num===p.num) loadActivity(p.num); }); }
-  catch(e){ toast(`${what} downloaded. SharePoint save failed: ${e.message}`); }
+  if(!spOn() || !p.num){ toast(`${what} downloaded`); return; }
+  const note=m=>addActivity(p.num,'note',m).then(()=>{ if(draft&&draft.num===p.num) loadActivity(p.num); });
+  try{ const folder=await spFolderFor(p);
+    if(!folder){ toast(`${what} downloaded. No client folder found in SharePoint: pick it once (Files → Choose SharePoint folder).`); return; }
+    await spUpload(doc.output('blob'), spName, folder); toast(`${what} downloaded and saved to the client folder`); note(`${what} saved to SharePoint: ${spName}`); }
+  catch(e){ toast(`${what} downloaded. Didn't save to SharePoint: ${e.message}`); note(`${what} didn't save to SharePoint (${e.message}). 📁 Save to client folder tries again.`); }
 }
 async function makePdf(p, o={}){
   if(!window.jspdf){ toast('PDF tools did not load. Check your connection and reload.'); return; }
@@ -3474,7 +3457,7 @@ function formDialog(title, body, okText){
     d.innerHTML=`<h3>${title}</h3>${body}<div class="toolbar"><button type="button" class="btn ghost" data-a="x">Cancel</button><button type="button" class="btn" data-a="ok">${okText}</button></div>`;
     document.body.appendChild(d); const done=v=>{ d.close(); d.remove(); res(v); };
     d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='x') done(null);
-      if(a==='ok'){ const v={}; for(const i of d.querySelectorAll('[name]')){ if((i.type==='radio'||i.type==='checkbox') && !i.checked){ if(!(i.name in v)) v[i.name]=''; continue; } v[i.name]=i.value.trim(); } if(d.querySelector('[required]') && [...d.querySelectorAll('[required]')].some(i=>!i.value.trim())){ d.querySelector('[required]').focus(); return; } done(v); } });
+      if(a==='ok'){ const v={}; for(const i of d.querySelectorAll('[name]')){ if((i.type==='radio'||i.type==='checkbox') && !i.checked){ if(!(i.name in v)) v[i.name]=''; continue; } if(i.type==='file'){ v[i.name]=i.files?.[0]||null; continue; } v[i.name]=i.value.trim(); } if(d.querySelector('[required]') && [...d.querySelectorAll('[required]')].some(i=>!i.value.trim())){ d.querySelector('[required]').focus(); return; } done(v); } });
     d.addEventListener('cancel', e=>{ e.preventDefault(); done(null); }); d.showModal(); d.querySelector('input,select')?.focus(); });
 }
 $('#commPerson').addEventListener('change', e=>{ commPerson=e.target.value; renderComm(); });
