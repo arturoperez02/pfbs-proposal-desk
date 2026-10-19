@@ -1153,6 +1153,41 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pc.close();
 }
 
+// 41. Catch up old reminders in one go; File all jobs in SharePoint; short Contract label
+{
+  const d0 = new Date(Date.now() - 40 * 864e5).toISOString().slice(0, 10);
+  const inv = [{ id: 'h1', inv_no: 900, source: 'hcp', status: 'Sent', invoice_date: d0, due_date: d0, terms_days: 0, total: 100, paid: 0, items: [], bill_to: { name: 'Old Co' } },
+    { id: 'h2', inv_no: 901, source: 'hcp', status: 'Sent', invoice_date: d0, due_date: d0, terms_days: 0, total: 200, paid: 0, items: [], bill_to: { name: 'Old Co' } },
+    { id: 'c1', inv_no: 1600, status: 'Sent', invoice_date: d0, due_date: d0, terms_days: 0, total: 300, paid: 0, items: [], bill_to: { name: 'New Co' } }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('catch-up: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  const up = [];
+  await pg.route(/msal-browser/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.msal={PublicClientApplication:class{getAllAccounts(){return [{username:"a"}]} async acquireTokenSilent(){return {accessToken:"t"}} async acquireTokenPopup(){return {accessToken:"t"}}}}' }));
+  await pg.route(/graph\.microsoft\.com/, r => { const u = decodeURIComponent(r.request().url()), m = r.request().method(), j = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
+    if (m === 'PUT') { up.push(u); return j({ id: 'x' }); } if (m === 'POST') return j({});
+    if (/\/drives\?/.test(u)) return j({ value: [{ id: 'd1', name: 'Clients', webUrl: 'https://x.sharepoint.com/sites/team/Clients' }] });
+    if (/\/shares\//.test(u)) return j({ id: 'f1', parentReference: { driveId: 'd1' } });
+    if (/root\/children/.test(u)) return j({ value: [] });
+    return r.fulfill({ status: 404, body: '{}' }); });
+  const jobA = { num: 'PFBS-1072', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Filed Co', property: '1 A St', service: 'Window Cleaning', status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10972', contract_on: '2026-10-11', contract_note: 'Approved by email (no contract)', folder_link: 'https://x.sharepoint.com/sites/team/Clients/Filed%20Co/1%20A%20St/Window%20Cleaning', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: 500 }] };
+  const jobB = { ...jobA, num: 'PFBS-1073', client: 'Nowhere Co', property: '2 B St', hcp_job: '10973', folder_link: null, contract_on: null, contract_note: null };
+  await pg.addInitScript(([i, a, c]) => { window.MOCK_INV = i; window.MOCK_EXTRA = [a, c]; if (!sessionStorage.getItem('t41')) { sessionStorage.clear(); sessionStorage.setItem('t41', '1'); } }, [inv, jobA, jobB]);
+  await pg.goto(BASE + '?sp=1'); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="money"]'); await pg.waitForTimeout(400);
+  await pg.click('[data-mf="Reminder due"]'); await pg.waitForSelector('[data-mcatch]', T);
+  await pg.click('[data-mcatch]'); await pg.waitForSelector('dialog.ask [name="which"]', T); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
+  const rem = await pg.evaluate(() => Object.fromEntries(DBX.invoices.filter(v => ['h1', 'h2', 'c1'].includes(v.id)).map(v => [v.id, (v.reminders || []).length])));
+  assert.deepEqual(rem, { h1: 1, h2: 1, c1: 0 }, 'only the HousecallPro ones skipped: ' + JSON.stringify(rem));
+  await pg.evaluate(() => { sessionStorage.setItem('pfbs.open', 'PFBS-1072'); }); await pg.reload(); await pg.waitForSelector('#jfBox', T);
+  assert.match(await pg.textContent('#jfBox'), /By email/, 'short contract label');
+  await pg.click('#closeD'); await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('[data-spall]', T);
+  await pg.click('[data-spall]'); await pg.waitForSelector('dialog.ask [name="which"]', T); await pg.click('dialog.ask [data-a="ok"]');
+  await pg.waitForSelector('dialog.ask >> text=Some jobs need a folder picked', T);
+  assert.match(await pg.textContent('dialog.ask'), /PFBS-1073/, 'lists the job with no folder');
+  assert.ok(up.some(u => /WC Proposal .* - PFBS-1072\.pdf/.test(u)), 'filed the job with a folder: ' + JSON.stringify(up));
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

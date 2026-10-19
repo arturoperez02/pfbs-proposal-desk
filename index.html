@@ -1589,7 +1589,7 @@ function jobFlowHTML(p){
   const step=(k,icon,label,state,detail)=>`<div class="jfw">${m0&&undo[k]?`<button type="button" class="jfundo" data-jfu="${k}" title="${k==='sched'?'Take this job off the schedule':'Mark it not finished'}">UNDO</button>`:''}<button type="button" class="jfs ${state}" data-jf="${k}"><span class="jfi">${icon}</span><b>${label}</b><small>${detail||''}</small></button></div>`;
   const conOk=!!p.contractOn || after(2), scheduled=st.vs.length||after(1);
   const steps=[
-    step('contract','📝','Contract', conOk?'ok':(scheduled?'':'now'), p.contractOn?`${fmtD(p.contractOn)}${p.contractNote?' · '+esc(String(p.contractNote).slice(0,24)):''}`:after(2)?'':scheduled?'not recorded':'waiting'),
+    step('contract','📝','Contract', conOk?'ok':(scheduled?'':'now'), p.contractOn?`${fmtD(p.contractOn)}${p.contractNote?' · '+esc(conShort(p.contractNote)):''}`:after(2)?'':scheduled?'not recorded':'waiting'),
     step('sched','📅','Schedule', scheduled?'ok':(conOk?'now':''), st.next?`${fmtD(st.next.visit_date)}${st.next.start_time?' · '+t12(st.next.start_time):''}`:st.vs.length?`${st.vs.length} visit${st.vs.length===1?'':'s'}`:'not scheduled'),
     step('finish','■','Finish', doneAll||doneV.length?'ok':(st.vs.length?'now':''), lastDone&&(doneAll||lastDone.status==='Done')?`${isRecurring(p)&&doneV.length>1?doneV.length+' done · ':''}${fmtD(visEnd(lastDone))}`:st.vs.length?'mark finished':''),
     step('inv','➤','Invoice', inv.length||after(2)?'ok':(st.col==='To invoice'?'now':''), lastInv?`#${esc(lastInv.inv_no)} · ${lastInv.status==='Draft'?'draft':'sent '+fmtD(lastInv.invoice_date)}`:after(2)?'in HousecallPro':'create'),
@@ -1629,6 +1629,8 @@ async function jobUndo(k){ const p=P.find(x=>x.num===draft.num)||draft; if(!isMa
   }
   await loadSchedule(); $('#jfBox').innerHTML=jobFlowHTML(draft); loadActivity(p.num); renderAll(); }
 // Contract / PO received (update 034): clients approve by email or send their own contract / PO
+// the short label under the Contract step ("PO 4455", "By email", …); the full note stays in Activity
+const conShort = n => { n=String(n||''); const po=n.match(/PO ([^·]+)$/); return po?'PO '+po[1].trim():/^Signed/.test(n)?'Signed':/^PO/.test(n)?'PO':/email/i.test(n)?'By email':/^Booked directly/.test(n)?'Booked direct':n.slice(0,16); };
 async function contractStep(p){
   if(COLS && !COLS.has('contract_on')) return toast('Run database update 034 in Supabase first.');
   const kinds=['Signed contract','PO received','Approved by email (no contract)'], cur=p.contractNote||'';
@@ -2607,6 +2609,17 @@ function remEmail(v,p,day){ const e=invEmail(v,p), late=daysLate(v), dd=fmtD(inv
   const when = late<0 ? `is due on ${dd}` : late===0 ? `is due today (${dd})` : `was due on ${dd} and is now ${late} day${late===1?'':'s'} past due`;
   return {to:e.to, subject:`${late>0?'Past due':'Payment reminder'}: invoice #${v.inv_no} – ${place}`,
     body:`${e.body.split('\n')[0]}\n\nThis is a friendly reminder that invoice #${v.inv_no} for ${place}, balance ${usd(invBal(v))}, ${when}. A copy is attached.\n\n${invFacts(v,p)}\n\nWe accept checks and ACH. If payment is already on its way, please disregard this message.\n\nThank you.`}; }
+// one-time clean-up when switching from HousecallPro: reminders already handled outside the CRM stop asking
+async function remCatchUp(){
+  const due=MINV.filter(v=>remDue(v)!=null), hcp=due.filter(v=>v.source==='hcp'); if(!due.length) return toast('No reminders due.');
+  const r=await formDialog('Catch up payment reminders', `<div class="note" style="margin:0 0 8px">${due.length} reminder${due.length===1?' is':'s are'} due today${hcp.length?`, ${hcp.length} on invoices from HousecallPro`:''}. Use this for the ones you've already followed up on outside the CRM. Nothing is deleted: each invoice keeps a note that it was skipped.</div>
+    <div class="f"><b>Which invoices</b><label style="display:block;font-weight:400;margin:4px 0"><input type="radio" name="which" value="hcp" ${hcp.length?'checked':'disabled'}> Only the ones from HousecallPro (${hcp.length})</label><label style="display:block;font-weight:400;margin:4px 0"><input type="radio" name="which" value="all" ${hcp.length?'':'checked'}> All ${due.length} on this list</label></div>
+    <div class="f"><b>Then</b><label style="display:block;font-weight:400;margin:4px 0"><input type="radio" name="how" value="next" checked> Skip today's reminder: the next one still comes on its day if it's still unpaid</label><label style="display:block;font-weight:400;margin:4px 0"><input type="radio" name="how" value="stop"> Stop reminders on these (we chase them another way)</label></div>
+    <label class="f">Note<input name="why" value="Caught up when switching to the CRM"></label>`, 'Catch up');
+  if(!r) return; const L=r.which==='all'?due:hcp, top=Math.max(...remDays()); let n=0;
+  for(const v of L){ const day=r.how==='stop'?top:remDue(v), rem=[...(v.reminders||[]), {day, at:new Date().toISOString(), skipped:true, note:r.why||'', by:me.name}];
+    const {error}=await sb.from('invoices').update({reminders:rem}).eq('id',v.id); if(error){ toast(error.message); break; } v.reminders=rem; n++; }
+  toast(`${n} invoice${n===1?'':'s'} caught up`); renderAll(); }
 async function remindBox(v, day){
   const p=P.find(x=>x.num===v.num) || moneyPseudo(v);
   if(!String(v.bill_to?.email||'').includes('@')){   // imported HousecallPro invoices: take the email from the client record (AP email, else its main contact) and keep it on the invoice
@@ -3138,6 +3151,29 @@ async function spFindFolder(p){
 }
 // the job's folder: the one it has, else found without asking (and remembered on the job); '' when it can't tell
 async function spFolderFor(p){ if(SP.isLink(p.folderLink)) return p.folderLink; const url=await spFindFolder(p); if(url) await spSetFolder(url, p); return url||''; }
+// everything a job has, into its folder (p.folderLink set): proposal, pricing (if priced), sent / paid CRM invoices, sent service reports → the file names
+async function spFileJob(p){ const saved=[];
+  await makePdf(p, {spOnly:true, saved});
+  const pairs=(p.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]); if(pairs.length) await makeEstimatePdf(p, pairs, {spOnly:true, saved});
+  const {data:invs}=await sb.from('invoices').select('*').eq('num',p.num);
+  for(const v of (invs||[]).filter(v=>v.source!=='hcp' && ['Sent','Paid'].includes(v.status))){ const doc=await makeInvoicePdf(v,p); if(doc){ const n=invSpName(v,p); await spUpload(doc.output('blob'), n, p.folderLink); saved.push(n); } }
+  const {data:reps}=await sb.from('service_reports').select('id,doc,status,approved_at').eq('num',p.num).eq('status','approved');
+  for(const r of reps||[]){ const rep={...(r.doc||{}), id:r.id, approved_at:r.approved_at}; if(!rep.pdf?.path) continue;
+    const res=await SP.saveReport(sb, rep, {num:p.num, code:svcCode(p), service:p.service, client:p.client, property:p.property, site_address:p.siteAddress, folder_link:p.folderLink}); saved.push(...res.saved); }
+  return saved; }
+// Settings → Switch-over: file every job at once (folders found by client + property; the ones it can't place are listed to pick by hand)
+async function spFileAll(){
+  const open=P.filter(p=>WON.includes(p.status) && p.status!=='Paid' && !p.cancelledOn), all=P.filter(p=>WON.includes(p.status) && !p.cancelledOn);
+  const r=await formDialog('File jobs in SharePoint', `<div class="note" style="margin:0 0 8px">Each job's proposal, pricing, sent invoices and sent service reports go into its client folder. Same names are replaced, so running it twice is fine. It takes a few seconds per job; keep this tab open.</div>
+    <label style="display:block;margin:4px 0"><input type="radio" name="which" value="open" checked> Open jobs (${open.length}): not paid yet</label><label style="display:block;margin:4px 0"><input type="radio" name="which" value="all"> All jobs (${all.length}), paid ones too</label>`, 'Start');
+  if(!r) return; const L=r.which==='all'?all:open, missed=[], failed=[]; let n=0, files=0;
+  for(const p of L){ n++; toast(`Filing ${n} of ${L.length}: ${p.num} ${p.client||''}…`);
+    try{ const folder=await spFolderFor(p); if(!folder){ missed.push(p); continue; } const saved=await spFileJob(p); files+=saved.length;
+      if(saved.length) await sb.from('proposal_activity').insert({num:p.num, kind:'note', note:`Saved to SharePoint: ${saved.join(', ')}`}); }
+    catch(e){ failed.push([p, e.message]); if(/sign|popup|interaction|consent/i.test(e.message)) break; } }
+  toast(`${files} files filed for ${L.length-missed.length-failed.length} jobs`);
+  if(missed.length || failed.length) await formDialog('Some jobs need a folder picked', `${missed.length?`<div class="note" style="margin:0 0 6px">No client or property folder found in SharePoint for these. Open each one and pick it once (⋯ → Save all to client folder):</div><ul style="margin:0 0 8px 18px;padding:0">${missed.map(p=>`<li><b>${esc(p.num)}</b> ${esc(p.client||'')} · ${esc(p.property||'')}</li>`).join('')}</ul>`:''}${failed.length?`<div class="note" style="margin:0 0 6px">These didn't save:</div><ul style="margin:0 0 8px 18px;padding:0">${failed.map(([p,m])=>`<li><b>${esc(p.num)}</b> ${esc(m)}</li>`).join('')}</ul>`:''}`, 'OK');
+}
 // one click: everything the job has goes straight into the client's folder, nothing downloads —
 // the proposal, the pricing (if priced), sent invoices and sent service reports. Same names replace, so it's also the "try again" button.
 async function spSaveAll(p){
@@ -3147,13 +3183,7 @@ async function spSaveAll(p){
       toast('Pick the client folder once. The PDFs save right after.'); return; }
     await spSetFolder(url); p=draft;
   }
-  toast('Saving to SharePoint…'); const saved=[];
-  await makePdf(p, {spOnly:true, saved});
-  const pairs=(p.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]); if(pairs.length) await makeEstimatePdf(p, pairs, {spOnly:true, saved});
-  for(const v of (INV[p.num]||[]).filter(v=>v.source!=='hcp' && ['Sent','Paid'].includes(v.status))){ const doc=await makeInvoicePdf(v,p); if(doc){ const n=invSpName(v,p); await spUpload(doc.output('blob'), n, p.folderLink); saved.push(n); } }
-  if(p.num){ const {data:reps}=await sb.from('service_reports').select('id,doc,status,approved_at').eq('num',p.num).eq('status','approved');
-    for(const r of reps||[]){ const rep={...(r.doc||{}), id:r.id, approved_at:r.approved_at}; if(!rep.pdf?.path) continue;
-      const res=await SP.saveReport(sb, rep, {num:p.num, code:svcCode(p), service:p.service, client:p.client, property:p.property, site_address:p.siteAddress, folder_link:p.folderLink}); saved.push(...res.saved); } }
+  toast('Saving to SharePoint…'); const saved=await spFileJob(p);
   if(!saved.length){ toast('Nothing was saved.'); return; }
   const where=decodeURIComponent(p.folderLink.split('/sites/')[1]||'').split('/').slice(2).join(' / ');
   toast(`Saved to SharePoint (${where}): ${saved.length} file${saved.length>1?'s':''}`);
@@ -3866,12 +3896,13 @@ function switchSteps(){ const sw=S.switchover||{};
 function switchHTML(owner){ const L=switchSteps(), n=L.filter(x=>x.done).length;
   return `<div class="card" style="margin-bottom:16px;grid-column:1/-1" id="swCard"><h3>Switch-over to the CRM <span class="note" style="margin:0;font-weight:400">${n} of ${L.length} done</span></h3>
     <div class="swbar"><span style="width:${Math.round(n/L.length*100)}%"></span></div>
-    <ol class="swlist">${L.map(x=>`<li class="${x.done?'done':''}"><span class="swi">${x.done?'✓':''}</span><div><b>${esc(x.t)}</b>${x.on?` <span class="note" style="margin:0">· ${fmtD(x.on)}</span>`:''}<div class="note" style="margin:0">${esc(x.how)}</div></div>
+    <ol class="swlist">${L.map(x=>`<li class="${x.done?'done':''}"><span class="swi">${x.done?'✓':''}</span><div><b>${esc(x.t)}</b>${x.on?` <span class="note" style="margin:0">· ${fmtD(x.on)}</span>`:''}<div class="note" style="margin:0">${esc(x.how)}</div>${x.k==='sp'&&x.done&&isManager()?'<button type="button" class="btn ghost small" data-spall style="margin-top:4px">📁 File all jobs in SharePoint…</button>':''}</div>
       ${x.auto==null&&owner?`<button type="button" class="btn ghost small" data-sw="${x.k}">${x.done?'Undo':'Mark done'}</button>`:x.auto!=null?'<span class="note" style="margin:0">checks itself</span>':''}</li>`).join('')}</ol></div>`; }
 async function switchToggle(k){ const sw={...(S.switchover||{})}; if(sw[k]) delete sw[k]; else sw[k]=iso(today());
   const data={...S, switchover:sw}; const r=await sb.from('settings').update({data, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1);
   if(r.error) return toast(r.error.message); S.switchover=sw; const c=$('#swCard'); if(c) c.outerHTML=switchHTML(role()==='Owner'); }
-document.addEventListener('click', e=>{ const b=e.target.closest && e.target.closest('[data-sw]'); if(b && role()==='Owner') switchToggle(b.dataset.sw); });
+document.addEventListener('click', e=>{ const b=e.target.closest && e.target.closest('[data-sw]'); if(b && role()==='Owner') switchToggle(b.dataset.sw);
+  if(e.target.closest && e.target.closest('[data-spall]') && isManager()) spFileAll().catch(err=>toast('SharePoint: '+err.message)); });
 function renderSettings(){
   const owner = role()==='Owner', ro = owner?'':'disabled';
   $('#setnote').textContent = owner ? 'Changes apply to everyone as soon as you save.' : 'Only the owner can change settings.';
@@ -4665,7 +4696,7 @@ function invListHTML(){
       <td class="r num">${v.status==='Sent'?usd(invBal(v)):usd(v.total)}${v.status==='Sent'&&num(v.paid)>0?`<div class="note" style="margin:0">of ${usd(v.total)}</div>`:''}</td>
       <td style="white-space:nowrap">${canMoney()&&rd!=null?`<button type="button" class="btn small" data-mrem="${esc(v.id)}" data-day="${rd}">Reminder</button> `:''}${canMoney()&&v.status==='Sent'?`<button type="button" class="btn ghost small" data-mpay="${esc(v.id)}">Payment</button>`:''}</td></tr>`; }).join('') || `<tr><td colspan="6" class="empty">No invoices here.</td></tr>`}
     </tbody></table></div>
-    <div class="note">${L.length>300?`Showing 300 of ${L.length}. Search to narrow it down. `:''}${mFilt==='Open'||mFilt==='Overdue'||mFilt==='Reminder due'?`${usd(bal)} on this list. `:''}Click an invoice to open it. Reminders: ${remDays().map(x=>x<0?`${-x} days before`:x===0?'on the due date':`${x} days late`).join(', ')} (Settings → Invoicing).</div>`; }
+    <div class="note">${L.length>300?`Showing 300 of ${L.length}. Search to narrow it down. `:''}${mFilt==='Open'||mFilt==='Overdue'||mFilt==='Reminder due'?`${usd(bal)} on this list. `:''}${mFilt==='Reminder due'&&canMoney()&&L.length?'<button type="button" class="btn ghost small" data-mcatch>Catch up this list…</button> ':''}Click an invoice to open it. Reminders: ${remDays().map(x=>x<0?`${-x} days before`:x===0?'on the due date':`${x} days late`).join(', ')} (Settings → Invoicing).</div>`; }
 function renderMoney(){
   const box=$('#moneyBody'); if(!box) return;
   if(!MOK){ box.innerHTML='<div class="card"><div class="note" style="margin:0">Run database updates 018 and 021 in Supabase to turn this on.</div></div>'; return; }
@@ -4784,6 +4815,7 @@ $('#moneyBody').addEventListener('click', async e=>{ const t=e.target;
   if(t.closest('[data-mclear]')){ mFind=''; $('#mInv').innerHTML=invListHTML(); return; }
   const mc=t.closest('tr[data-mcl]'); if(mc){ mFind=mc.dataset.mcl; mFilt='Open'; $('#mInv').innerHTML=invListHTML(); $('#mInv').scrollIntoView({behavior:'smooth'}); return; }
   const mr=t.closest('tr[data-mrow]'); if(mr && !t.closest('button,input,a,select')){ const v=MINV.find(x=>x.id===mr.dataset.mrow); if(v){ const pays=MPAY.filter(x=>x.invoice_id===v.id); invEdit(moneyPseudo(v), {...v, payments:pays}); } return; }
+  if(t.closest('[data-mcatch]')){ await remCatchUp(); return; }
   const rb=t.closest('[data-mrem]'); if(rb){ const v=MINV.find(x=>x.id===rb.dataset.mrem); if(v) await remindBox(v, Number(rb.dataset.day)); return; }
   const pb=t.closest('[data-mpay]'); if(pb){ const v=MINV.find(x=>x.id===pb.dataset.mpay); if(v && await invPay(v)){ await loadMoney(); loadOpenInvoices(); if(isManager()) loadProposals(); } return; }
   const ob=t.closest('[data-mopen]'); if(ob){ const v=MINV.find(x=>x.id===ob.dataset.mopen); if(!v) return; const pays=MPAY.filter(x=>x.invoice_id===v.id); invEdit(moneyPseudo(v), {...v, payments:pays}); return; }
