@@ -873,7 +873,7 @@ function drawDrawer(){
     : (p.status==='Lead' && !isNew) ? `<div class="reviewbox"><div style="flex:1;min-width:180px"><b>New lead${p.bdRep?' from '+esc(p.bdRep):''}.</b> ${p.sentBy?'Assigned to '+esc(p.sentBy)+'.':'Assign an estimator.'}${p.leadAt?' Logged '+fmtD(p.leadAt)+'.':''}</div>${(isManager()||(role()==='Estimator'&&p.sentBy===me.name))?'<button class="btn small" id="startEst">Start pricing</button>':''}</div>` : '';
   $('#drawer').innerHTML = `
   <div class="dhead"><div class="t">${!isNew && p.hcpJob && outcome(p)==='Won' ? `<div class="jobno">Job #${esc(p.hcpJob)}</div>` : ''}<b id="dTitle" class="num">${isNew?'New proposal':esc(p.num)}</b><div class="sub">${isNew?(newLead?'New lead · the PFBS number is assigned when you save.':'The PFBS number is assigned when you save.'):(outcome(p)==='Won'?'Job for ':'')+esc(p.client||'')+(p.property?' · '+esc(p.property):'')}</div></div>
-    ${!isNew && isManager() ? `<div class="dmore"><button class="btn ghost small" id="dMore" aria-haspopup="true" aria-label="More actions">⋯</button><div class="dmenu" id="dMenu" hidden><button type="button" data-copy="job">Copy to new job</button><button type="button" data-copy="prop">Copy to new proposal</button></div></div>` : ''}
+    ${!isNew && (isManager() || spOn()) ? `<div class="dmore"><button class="btn ghost small" id="dMore" aria-haspopup="true" aria-label="More actions">⋯</button><div class="dmenu" id="dMenu" hidden>${isManager()?'<button type="button" data-copy="job">Copy to new job</button><button type="button" data-copy="prop">Copy to new proposal</button>':''}${spOn()?'<button type="button" id="spSaveD" title="Files the proposal, pricing, sent invoices and sent service reports in the client\'s SharePoint folder (older jobs, or to retry). New files save themselves.">📁 Save all to client folder</button>':''}</div></div>` : ''}
     <button class="btn ghost small" id="closeD">Close</button></div>
   <div class="dbody">
     <div id="emBox" class="fubox" hidden></div>
@@ -982,7 +982,7 @@ function drawDrawer(){
   </div>
   <div class="dfoot"><span class="msg" id="dmsg">${ed?'':'View only'}</span>
     ${isNew?'<button class="btn ghost" id="cancelD">Cancel</button>':''}
-    ${isNew?'':`<button class="btn ghost" id="estPdfD">Pricing PDF</button>${spOn()?'<button class="btn ghost" id="spSaveD" title="Saves the proposal PDF (and the pricing PDF) into the client\'s SharePoint folder. No download.">📁 Save to client folder</button>':''}<button class="btn ghost" id="pdfD">Preview PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
+    ${isNew?'':`<button class="btn ghost" id="estPdfD">Pricing PDF</button><button class="btn ghost" id="pdfD">Preview PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
     <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save now'}</button></div>`;
 }
 const incPct = () => S.priceIncrease ?? 0.05;
@@ -2035,7 +2035,7 @@ $('#drawer').addEventListener('click', e=>{
   if(t.id==='closeD'||t.id==='cancelD') closeDrawer();
   else if(t.id==='saveD') save(null,{stay:true});   // Save changes keeps the proposal open, like HousecallPro
   else if(t.id==='pdfD') makePdf(draft, {preview:true});
-  else if(t.id==='spSaveD') spSaveAll(draft).catch(err=>toast('SharePoint: '+err.message));
+  else if(t.id==='spSaveD'){ $('#dMenu').hidden=true; spSaveAll(draft).catch(err=>toast('SharePoint: '+err.message)); }
   else if(t.id==='estPdfD') makeEstimatePdf(draft, (draft.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]));
   else if(t.dataset.est!=null) openEst(+t.dataset.est);
   else if(t.dataset.add){ draft.items=[...(draft.items||[])]; if(!draft.items.length && t.dataset.add==='Service' && num(draft.amount)!=null) draft.items.push({type:'Service',service:draft.service||'',qty:1,frequency:draft.frequency||'',amount:num(draft.amount),description:draft.service||''}); else draft.items.push({type:t.dataset.add,service:t.dataset.add==='Add-on'?'':(draft.service||''),qty:1,frequency:draft.frequency||'',amount:'',description:'',accepted:false}); rerenderItems(); }

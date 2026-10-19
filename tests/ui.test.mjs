@@ -1094,10 +1094,10 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
     if (/root:\/Folder Test Co\/9 Elm St\/Window Cleaning\?/.test(u)) return j({ id: 'f1', webUrl: 'https://x.sharepoint.com/sites/team/Clients/Folder%20Test%20Co/9%20Elm%20St/Window%20Cleaning' });
     if (/\/shares\//.test(u)) return j({ id: 'f1', parentReference: { driveId: 'd1' } });
     return r.fulfill({ status: 404, body: '{}' }); });
-  await pg.goto(BASE + (BASE.includes('?') ? '&' : '?') + 'sp=1'); await pg.waitForSelector('#spSaveD', T);
+  await pg.goto(BASE + (BASE.includes('?') ? '&' : '?') + 'sp=1'); await pg.waitForSelector('#dMore', T);
   assert.ok(await pg.$eval('#drawer .stages', e => e.hidden), 'status chips hidden on a job');
   await pg.click('[data-stshow]'); assert.ok(!(await pg.$eval('#drawer .stages', e => e.hidden)), 'Change by hand shows them');
-  await pg.click('#spSaveD'); await pg.waitForTimeout(2500);
+  await pg.click('#dMore'); await pg.click('#spSaveD'); await pg.waitForTimeout(2500);
   assert.equal(up.length, 2, 'proposal + pricing PDFs uploaded: ' + JSON.stringify(up));
   assert.ok(up.some(u => /items\/f1:\/WC Proposal \d+-\d+-\d{4} 9 Elm St - PFBS-1070\.pdf/.test(u)) && up.some(u => /WC Pricing \d+-\d+-\d{4} 9 Elm St - PFBS-1070\.pdf/.test(u)), 'both into the found folder: ' + JSON.stringify(up));
   assert.ok(mk.length, 'service folder made if missing');
@@ -1140,13 +1140,13 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const inv = [{ id: 'i71', inv_no: 5001, num: 'PFBS-1071', status: 'Sent', invoice_date: '2026-10-27', terms_days: 30, due_date: '2099-01-01', total: 1200, paid: 0, items: [{ description: 'Exterior windows', amount: 1200 }], bill_to: { name: 'Demo Client', email: 'ap@example.com' } }];
   const sr = [{ id: 'sr71', num: 'PFBS-1071', status: 'approved', approved_at: '2026-10-24T20:00:00Z', doc: { service_dates: '10/24/2026', pdf: { path: 'pdf/sr71/1/x.pdf' }, photos: [] } }];
   await pc.addInitScript(([x, i, r]) => { window.MOCK_EXTRA = [x]; window.MOCK_INV = i; window.MOCK_SR = r; window.__ST = { 'pdf/sr71/1/x.pdf': new Blob(['%PDF-1.4 fake'], { type: 'application/pdf' }) }; sessionStorage.clear(); sessionStorage.setItem('pfbs.open', 'PFBS-1071'); }, [pr, inv, sr]);
-  await pc.goto(BASE + '?sp=1'); await pc.waitForSelector('#spSaveD', T); await pc.waitForTimeout(500);
+  await pc.goto(BASE + '?sp=1'); await pc.waitForSelector('#dMore', T); await pc.waitForTimeout(500);
   await pc.click('[data-jf="contract"]'); await pc.waitForSelector('dialog.ask input[type="file"]', T);
   await pc.setInputFiles('dialog.ask input[type="file"]', { name: 'signed.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 signed') });
   await pc.click('dialog.ask [data-a="ok"]'); await pc.waitForTimeout(1500);
   assert.ok(up2.some(u => /^f1:\/WC Contract \d+-\d+-\d{4} 9 Oak St - PFBS-1071\.pdf$/.test(u)), 'contract filed: ' + JSON.stringify(up2));
   up2.length = 0;
-  await pc.click('#spSaveD'); await pc.waitForTimeout(3000);
+  await pc.click('#dMore'); await pc.click('#spSaveD'); await pc.waitForTimeout(3000);
   assert.ok(up2.some(u => /WC Proposal .* - PFBS-1071\.pdf$/.test(u)), 'proposal: ' + JSON.stringify(up2));
   assert.ok(up2.some(u => /WC Invoice 5001 10-27-2026 9 Oak St - PFBS-1071\.pdf$/.test(u)), 'sent invoice: ' + JSON.stringify(up2));
   assert.ok(up2.some(u => /WC Service Report 10-24-2026 9 Oak St - PFBS-1071\.pdf$/.test(u)), 'sent report: ' + JSON.stringify(up2));
