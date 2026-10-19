@@ -1213,7 +1213,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const pop = ctx.waitForEvent('page'); await pg.click('dialog.ask [data-a="ok"]'); const sh = await pop; await sh.waitForLoadState();
   const txt = await sh.textContent('body');
   assert.match(txt, /Site walk · PFBS-1074[\s\S]*Walk Co[\s\S]*Tower One[\s\S]*5 Main St, Oakland[\s\S]*Pat Site[\s\S]*# of drops/, 'filled in, with the pricing boxes');
-  assert.ok(!/Pressure washing/.test(txt), 'only the services picked'); await sh.close();
+  assert.ok(!/Pressure washing/.test(txt), 'only the services picked'); assert.match(txt, /Estimator\s*Arturo/, "the job's estimator, not who prints it"); await sh.close();
   await pg.click('#dMore'); await pg.click('#swFile'); await pg.waitForSelector('dialog.ask input[type="file"]', T);
   await pg.setInputFiles('dialog.ask input[type="file"]', [{ name: 'a.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') }, { name: 'b.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('y') }]);
   await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(1500);

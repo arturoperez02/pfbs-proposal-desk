@@ -3171,7 +3171,8 @@ async function siteWalkSheet(p){
   const g=p?guessService((p.items||[])[0]?.description||p.service):'', svc=p?(p.service||g):'';
   const on=k=>({wc:/Window/i, pw:/Pressure/i, sp:/Solar/i, gd:/Gates/i}[k].test(svc));
   const r=await formDialog('Site walk sheet', `<div class="note" style="margin:0 0 8px">Prints ${p?'with this job\'s info filled in':'blank'}, with boxes in the same order as the Pricing screen. Which services?</div>
-    ${[['wc','Window cleaning'],['pw','Pressure washing'],['sp','Solar panels'],['gd','Gates & doors']].map(([k,l])=>`<label style="display:block;margin:4px 0"><input type="checkbox" name="${k}" value="1" ${!p||on(k)?'checked':''}> ${l}</label>`).join('')}`, 'Print');
+    ${[['wc','Window cleaning'],['pw','Pressure washing'],['sp','Solar panels'],['gd','Gates & doors']].map(([k,l])=>`<label style="display:block;margin:4px 0"><input type="checkbox" name="${k}" value="1" ${!p||on(k)?'checked':''}> ${l}</label>`).join('')}
+    <label class="f" style="margin-top:8px">Who's doing the walk<select name="est"><option value="">(leave blank, write it in)</option>${[...new Set([...TEAM.filter(t=>t.active&&t.role!=='BD Rep'&&t.role!=='Accountant').map(t=>t.name), p?.sentBy].filter(Boolean))].map(n=>`<option ${n===(p?.sentBy||(role()==='Estimator'?me.name:''))?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`, 'Print');
   if(!r) return; const pick=['wc','pw','sp','gd'].filter(k=>r[k]==='1'); if(!pick.length) return toast('Pick at least one service.');
   const w=window.open('', '_blank'); if(!w) return toast('Allow pop-ups for this site to print the sheet.');
   const e=x=>esc(x||''), box=(l,v='',cls='')=>`<div class="bx ${cls}"><span>${l}</span><b>${e(v)}</b></div>`, lines=n=>'<div class="ln"></div>'.repeat(n);
@@ -3199,7 +3200,7 @@ async function siteWalkSheet(p){
     <div class="noprint"><button onclick="print()">🖨 Print</button></div>
     <div class="top"><img src="${new URL('reports-logo.jpg', location.href).href}" alt=""><h1>Site walk${p?.num?' · '+e(p.num):''}</h1></div>
     <div class="g3">${box('Client',p?.client)}${box('Property',p?.property)}${box('Date walked')}</div>
-    <div class="g3">${box('Site address',String(p?.siteAddress||'').replace(/\n/g,', '),'tall')}${box('Site contact · phone',[p?.contactName,p?.contactPhone].filter(Boolean).join(' · '),'tall')}${box('Estimator',p?.sentBy||me?.name)}</div>
+    <div class="g3">${box('Site address',String(p?.siteAddress||'').replace(/\n/g,', '),'tall')}${box('Site contact · phone',[p?.contactName,p?.contactPhone].filter(Boolean).join(' · '),'tall')}${box('Estimator',r.est)}</div>
     <section><h2>Scope of work</h2>${lines(5)}</section>
     ${pick.map(k=>`<section>${S2[k]}</section>`).join('')}
     <section><h2>Access, hours &amp; safety</h2><div class="g3">${box('Parking / access / keys','','tall')}${box('Work hours allowed','','tall')}${box('Hazards / PPE','','tall')}</div>
