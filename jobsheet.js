@@ -2,7 +2,7 @@
 // PFBS job packet — shared by the CRM (index.html) and the Warehouse (warehouse.html), so it's built in one place.
 // Page 1: job sheet (the job: where, when, who, scope, lift, crew notes, photos, "Back from the job" box filled by pen)
 // Page 2: kit slip (the stuff: the warehouse kit items with Out / Back boxes). Nothing appears on both pages. Never prices.
-// Data in:  JP.open(d, lang, tr)  d = {job, num, client, address, date, endDate, skipWeekends, start, end, techs[], vehicle,
+// Data in:  JP.open(d | [d, d, …], lang, tr)   (a list prints several packets, each starting on a new page)  d = {job, num, client, address, date, endDate, skipWeekends, start, end, techs[], vehicle,
 //           scope[], notes, rentals[{desc,vendor,vendorPhone,reservationNo,deliveryDate,offRentDate}], kit:{items[{name,name_es,qty}]}|null}
 //           tr = Spanish translator for scope lines (defaults to JP.toEs with the built-in terms)
 // =====================================================================
@@ -74,14 +74,14 @@ const JP = (() => {
 .jsback{margin-top:14px;border:2px solid #1F2A5C;border-radius:6px;padding:4px 10px 10px} .jsback h4{border:0;margin-top:6px} .jsrow{display:flex;flex-wrap:wrap;gap:6px 22px;margin:7px 0} .jsbig{height:46px;border:1px solid #999;border-radius:4px} .jsnote{background:#f5f5f5;padding:6px 8px;border-radius:4px} .jslift{border-bottom:1px solid #e3e3e3;padding:4px 0} .jsl2{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;margin-top:2px} .jsp2{break-before:page;page-break-before:always} .jskit td{padding:6px 4px 6px 0} .jsfoot{margin-top:10px;font-size:10px;color:#777;text-align:center}
 @media print{ html:has(body.jsopen), body.jsopen{background:#fff!important} body.jsopen > *:not(#jsWrap){display:none!important} #jsWrap{position:static;background:#fff;overflow:visible;padding:0} #jsWrap .noprint{display:none!important} .jspage{box-shadow:none;margin:0;max-width:none;padding:0} @page{margin:.4in} }
 @media (max-width:700px){ .jspage{padding:16px} .jscols{grid-template-columns:1fr} }
- @media print{ body.jsopen > #jsWrap{display:block!important} body.jsopen > #print-area{display:none!important} } .jsbar .jsbtn{font:inherit;font-weight:700;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid #1F2A5C;background:#fff;color:#1F2A5C;cursor:pointer} .jsbar .jsbtn.on{background:#1F2A5C;color:#fff}`;
+ .jspk+.jspk > .jspage:first-child{break-before:page;page-break-before:always} @media print{ body.jsopen > #jsWrap{display:block!important} body.jsopen > #print-area{display:none!important} } .jsbar .jsbtn{font:inherit;font-weight:700;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid #1F2A5C;background:#fff;color:#1F2A5C;cursor:pointer} .jsbar .jsbtn.on{background:#1F2A5C;color:#fff}`;
   function open(d, lang, tr){
     if(!document.getElementById('jsCss')){ const st=document.createElement('style'); st.id='jsCss'; st.textContent=CSS; document.head.appendChild(st); }
     document.getElementById('jsWrap')?.remove();
     const w=document.createElement('div'); w.id='jsWrap';
     const draw=()=>{ const t=JS_T[lang]; w.innerHTML=`<div class="jsbar noprint"><button type="button" class="jsbtn" data-js="x">${t.close}</button><span style="flex:1"></span>
       <button type="button" class="jsbtn ${lang==='en'?'on':''}" data-js="en">English</button><button type="button" class="jsbtn ${lang==='es'?'on':''}" data-js="es">Español</button>
-      <button type="button" class="jsbtn on" data-js="print">🖨 ${t.print}</button></div>${html(d, lang, tr)}`; };
+      <button type="button" class="jsbtn on" data-js="print">🖨 ${t.print}</button></div>${Array.isArray(d)?d.map(x=>`<div class="jspk">${html(x, lang, tr)}</div>`).join(''):html(d, lang, tr)}`; };
     draw(); document.body.appendChild(w); document.body.classList.add('jsopen');
     w.addEventListener('click', e=>{ const a=e.target.closest('[data-js]')?.dataset.js; if(!a) return;
       if(a==='x'){ w.remove(); document.body.classList.remove('jsopen'); }

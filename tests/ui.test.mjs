@@ -395,6 +395,20 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.equal(await pg.$eval('#co-names', e => e.value), 'Rigo, Israel');
   const km = await pg.evaluate(() => { templates.push({ id: 'tpw', name: 'Pressure Washing', template_items: [{ item_name: 'Surface cleaner', quantity: 1, quantity_mode: 'fixed' }] }); selectedTemplateIds = ['tpw']; calcKit(); selectedTemplateIds = ['tpw']; calcKit(); return { t: templates.length, m: coJobMaterials.length, items: coItems.map(i => i.name + ':' + i.qty) }; });
   assert.equal(km.m, 1, 'the job\'s materials came over from the CRM');
+  const kits = await pg.evaluate(() => { templates.push({ id: 'tw', name: 'Window Cleaning', template_items: [] }, { id: 'tiw', name: 'Interior Window Cleaning', template_items: [] });
+    return [jobKitNames('Exterior window cleaning - all elevations').map(n => findTemplate(n).id), jobKitNames('Interior window cleaning').map(n => findTemplate(n).id), jobKitNames('Interior & exterior window cleaning').map(n => findTemplate(n).id)]; });
+  assert.deepEqual(kits, [['tw'], ['tiw'], ['tw', 'tiw']], 'interior and exterior window jobs get their own kits');
+  const fb = await pg.evaluate(() => { templates.splice(templates.findIndex(t => t.id === 'tiw'), 1); return findTemplate('Interior Window Cleaning').id; });
+  assert.equal(fb, 'tw', 'no interior kit yet: falls back to the window kit');
+  // one click: all of a day's job packets (tomorrow by default), unpacked ones warn first
+  const day = await pg.evaluate(() => scheduledJobsCache[0]?._raw?.visit_date);
+  const dmsg = []; const acc = d => { dmsg.push(d.message()); d.accept(); }; pg.on('dialog', acc);
+  await pg.evaluate(d => printDayPackets('en', d), day); await pg.waitForSelector('#jsWrap .jspk', T); pg.off('dialog', acc);
+  assert.ok(dmsg.some(m => /don't have a packed kit yet/.test(m)), 'warns about jobs without a kit');
+  assert.match(await pg.textContent('#jsWrap'), /Job sheet[\s\S]*10305[\s\S]*Not packed yet/, 'packet for the day');
+  await pg.click('#jsWrap [data-js="x"]');
+  assert.equal(await pg.evaluate(() => { JP.open([{ job: '1', client: 'A' }, { job: '2', client: 'B', kit: { items: [{ name: 'Pole', qty: 1 }] } }], 'en'); return document.querySelectorAll('#jsWrap .jspk').length; }), 2, 'several packets in one print');
+  await pg.click('#jsWrap [data-js="x"]');
   // the warehouse prints the whole job packet: page 1 from the CRM schedule, page 2 its kit
   assert.ok(await pg.evaluate(() => printJobPacket({ visit_id: 'v-wh-1', job_items: [{ item_name: 'Surface cleaner', quantity: 1 }, { item_name: 'Old hose', quantity: 1, is_removed: true }] }, 'en')), 'packet printed');
   const wp = await pg.textContent('#jsWrap');

@@ -516,7 +516,8 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
           <div class="stat-card orange"><div class="stat-v" id="s-keys-out">0</div><div class="stat-l">Keys Out</div></div>
         </div>
         <div class="card" id="scheduled-jobs-card" style="display:none">
-          <div class="card-title">📋 Jobs to pack (CRM schedule, next 7 days)</div>
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>📋 Jobs to pack (CRM schedule, next 7 days)</span>
+            <span style="display:flex;gap:6px"><button class="btn btn-p btn-sm" onclick="printDayPackets('en')">🖨 Tomorrow's packets EN</button><button class="btn btn-p btn-sm" onclick="printDayPackets('es')">🖨 ES</button></span></div>
           <div id="scheduled-jobs-list"></div>
         </div>
         <div class="card">
@@ -7352,6 +7353,25 @@ async function printJobPacket(job, lang) {
     scope: v.scope || [], notes: v.notes, rentals: v.rentals || [], kit: { items } }, lang === 'es' ? 'es' : 'en');
   return true;
 }
+// Every CRM job on a day (tomorrow by default) in one print: job sheet + its kit slip, each packet on new pages
+async function printDayPackets(lang, day) {
+  const d0 = new Date(Date.now() + 864e5), dd = day || `${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,'0')}-${String(d0.getDate()).padStart(2,'0')}`;
+  let list = [];
+  try { const { data, error } = await db.rpc('warehouse_jobs', { p_days: 3 }); if (error) throw error; list = (data || []).filter(v => v.visit_date <= dd && (v.end_date || v.visit_date) >= dd); }
+  catch (e) { alert('Could not load the CRM schedule: ' + e.message); return; }
+  if (!list.length) { alert(lang === 'es' ? 'No hay trabajos para mañana.' : 'No jobs scheduled for tomorrow.'); return; }
+  const kits = (jobs || []).concat(history || []);
+  let unpacked = 0;
+  const packets = list.sort((a, b) => String(a.start_time || '').localeCompare(String(b.start_time || ''))).map(v => {
+    const k = kits.find(j => j.visit_id === v.id) || (v.job_no ? kits.find(j => String(j.hcp_job_number || '').replace(/^#/, '') === String(v.job_no)) : null);
+    if (!k) unpacked++;
+    const items = ((k && k.job_items) || []).filter(i => !i.is_removed && !i.removed).map(i => ({ name: i.item_name || i.name, name_es: i.item_name_es || i.name_es, qty: i.quantity || i.qty || 1 }));
+    return { job: v.job_no || '', num: v.num || '', client: [v.client, v.property].filter(Boolean).join(' · '), address: v.address || '', date: v.visit_date, endDate: v.end_date,
+      skipWeekends: v.skip_weekends, start: v.start_time, end: v.end_time, techs: v.techs || [], vehicle: v.vehicle, scope: v.scope || [], notes: v.notes, rentals: v.rentals || [], kit: k ? { items } : null };
+  });
+  if (unpacked && !confirm((lang === 'es' ? `${unpacked} de ${packets.length} trabajos todavía no tienen kit empacado (saldrán sin la hoja del kit). ¿Imprimir de todos modos?` : `${unpacked} of ${packets.length} jobs don't have a packed kit yet (they print without the kit slip). Print anyway?`))) return;
+  JP.open(packets, lang === 'es' ? 'es' : 'en');
+}
 async function printSlipLastJob(lang) {
   if (!lastJob) return;
   if (lastJob.visit_id && await printJobPacket(lastJob, lang)) return;
@@ -7778,7 +7798,7 @@ const JOB_TYPE_MAP = {
   'swing stage work': 'Bosun Chair',
   'boom lift work': 'Bosun Chair',
   'exterior window cleaning': 'Window Cleaning',
-  'interior window cleaning': 'Window Cleaning',
+  'interior window cleaning': 'Interior Window Cleaning',
   'interior & exterior window cleaning': 'Window Cleaning',
   'monthly window washing': 'Window Cleaning',
   'window cleaning': 'Window Cleaning',
@@ -7786,6 +7806,21 @@ const JOB_TYPE_MAP = {
   'ground pressure washing': 'Pressure Washing',
   'rope access': 'Rope Access',
 };
+// Interior and exterior window jobs get their own kits: an "Interior Window Cleaning" template (if the warehouse made one)
+// for interior lines, "Window Cleaning" for exterior. A job with both gets both kits merged.
+function jobKitNames(type) {
+  const t = (type || '').toLowerCase();
+  if (/window|ventana/.test(t) && /interior/.test(t) && /exterior|& ?ext|and ext/.test(t)) return ['Window Cleaning', 'Interior Window Cleaning'];
+  if (/window|ventana/.test(t) && /interior/.test(t)) return ['Interior Window Cleaning'];
+  const m = mapJobType(type); return m ? [m] : [];
+}
+function findTemplate(name) {
+  const n = name.toLowerCase(), exact = templates.find(t => (t.name || '').toLowerCase().trim() === n);
+  if (exact) return exact;
+  const loose = templates.find(t => { const tn = (t.name || '').toLowerCase(); return tn.includes(n) && (n.includes('interior') || !tn.includes('interior')); });
+  if (loose) return loose;
+  return n.includes('interior') ? findTemplate(name.replace(/interior\s*/i, '')) : null;   // no interior kit yet: the window kit
+}
 function mapJobType(type) {
   const t = (type||'').toLowerCase().trim(); if (JOB_TYPE_MAP[t]) return JOB_TYPE_MAP[t];
   // CRM jobs send the scope of work ("Pressure washing - parking structure"): match by key words
@@ -7908,21 +7943,16 @@ function applyScheduleJob(idx) {
   if (j._src === 'CRM' && notesEl && !notesEl.value.trim()) {
     notesEl.value = [j.scope && j.scope.length ? 'Scope: ' + j.scope.join('; ') : '', j.equipment && j.equipment.length ? 'Equipment: ' + j.equipment.join(', ') : '', j.notes || ''].filter(Boolean).join('\n');
   }
-  // Match template using new multi-template picker (CRM jobs can list several work types: first one that maps wins)
-  const mapped = mapJobType(j.type) || (j.types || []).map(mapJobType).find(Boolean) || '';
-  if (mapped) {
-    const match = templates.find(t => t.name.toLowerCase().includes(mapped.toLowerCase()));
-    if (match) {
-      selectedTemplateIds = [match.id];
-      updateTemplateDisplay();
-      // Check the checkbox in the picker
-      const opts = document.getElementById('co-template-options');
-      if (opts) {
-        const cb = opts.querySelector(`input[value="${match.id}"]`);
-        if (cb) cb.checked = true;
-      }
-      calcKit();
-    }
+  // Match templates: every scope line picks its kit (interior / exterior windows, pressure washing…); several kits merge
+  const names = [...new Set([j.type, ...(j.types || [])].flatMap(jobKitNames))];
+  const tpls = [...new Set(names.map(findTemplate).filter(Boolean))];
+  const mapped = tpls.map(t => t.name).join(' + ');
+  if (tpls.length) {
+    selectedTemplateIds = tpls.map(t => t.id);
+    updateTemplateDisplay();
+    const opts = document.getElementById('co-template-options');
+    if (opts) tpls.forEach(t => { const cb = opts.querySelector(`input[value="${t.id}"]`); if (cb) cb.checked = true; });
+    calcKit();
   }
   const hint = document.getElementById('hcp-hint');
   hint.className = 'info info-t';
@@ -7947,7 +7977,7 @@ async function openCrmImport() {
       return;
     }
     listEl.innerHTML = _schedJobs.map((j, idx) => {
-      const mapped = j.types.map(mapJobType).find(Boolean) || '';
+      const mapped = [...new Set((j.types || []).flatMap(jobKitNames).map(n => (findTemplate(n) || {}).name || n))].join(' + ');
       return `<div class="sched-job-card" data-idx="${idx}">
         <div class="sched-job-icon">📋</div>
         <div class="sched-job-info">
