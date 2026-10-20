@@ -1628,6 +1628,68 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 59. One management company, many buildings: the building's manager is the contact (not the company contact); a building with
+//     no manager falls back to the company contact with a note; a typed address picks its building; client requests print on the packet
+{
+  const c = { id: 'c-sb', name: 'Seabreeze Management', kind: 'Business', aliases: [], active: true, billing_address: '5000 Hopyard Rd 310\nPleasanton, CA 94588' };
+  const K = [{ id: 'k-dil', client_id: 'c-sb', name: 'Dillon Graber', email: 'dillon@sb.example', is_primary: true, active: true }, { id: 'k-man', client_id: 'c-sb', name: 'Mandy Munoz', email: 'mandy@sb.example', active: true }];
+  const PR = [{ id: 'p-ram', client_id: 'c-sb', address: '3578 Rambla Pl\nSanta Clara, CA 95051', contact_id: 'k-man', notes: 'Gate code 4411', active: true },
+              { id: 'p-min', client_id: 'c-sb', name: '701 Minna', address: '701 Minna St\nSan Francisco, CA', active: true }];
+  const prop = { num: 'PFBS-1070', sent_by: 'Arturo', client: 'Seabreeze Management', client_id: 'c-sb', status: 'Estimating', items: [{ type: 'Base', qty: 1, description: 'Window cleaning', amount: 900 }] };
+  const d = new Date(Date.now() + 864e5), tm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const job = { num: 'PFBS-1071', sent_by: 'Arturo', client: 'Seabreeze Management', client_id: 'c-sb', property_id: 'p-ram', property: '3578 Rambla Pl', status: 'Scheduled', hcp_job: '10771', date_resolved: '2026-10-01', items: [{ type: 'Base', qty: 1, description: 'Window cleaning', amount: 900 }],
+    client_requests: [{ id: 'r1', text: 'Suite 3979 first, between 6 and 11 PM', from: 'Chrizelle', at: '2026-10-20' }, { id: 'r2', text: 'Old done one', at: '2026-10-01', doneAt: '2026-10-02' }] };
+  const vis = { id: 'v-1071', num: 'PFBS-1071', kind: 'job', status: 'Scheduled', visit_date: tm, job_no: '10771', techs: ['Rigo'], work: [], equipment: [] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('buildings: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr/, r => r.abort());
+  await pg.addInitScript(([c, K, PR, x, y, v]) => { window.MOCK_CLIENTS = [c]; window.MOCK_CONTACTS = K; window.MOCK_PROPS = PR; window.MOCK_EXTRA = [x, y]; window.MOCK_VIS = [v];
+    try { if (window.name !== 't59') { sessionStorage.clear(); window.name = 't59'; } } catch (_) {} }, [c, K, PR, prop, job, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-1070"]'); await pg.waitForSelector('#f-propPick', T);
+  assert.equal(await pg.$eval('#f-contactName', e => e.value), '', 'no company contact before the building is known');
+  await pg.selectOption('#f-propPick', 'p-ram'); await pg.waitForTimeout(150);
+  assert.equal(await pg.$eval('#f-contactName', e => e.value), 'Mandy Munoz', 'the building manager');
+  assert.equal(await pg.textContent('#contactNote'), '', 'no note when the building has a manager');
+  await pg.selectOption('#f-propPick', 'p-min'); await pg.waitForTimeout(150);
+  assert.equal(await pg.$eval('#f-contactName', e => e.value), 'Dillon Graber', 'no manager: the company contact');
+  assert.match(await pg.textContent('#contactNote'), /No manager on file for 701 Minna/);
+  // typed address → its building
+  await pg.selectOption('#f-propPick', 'new'); await pg.fill('#f-siteAddress', '3578 Rambla Pl\nSanta Clara'); await pg.dispatchEvent('#f-siteAddress', 'change'); await pg.waitForTimeout(150);
+  assert.equal(await pg.$eval('#f-contactName', e => e.value), 'Mandy Munoz', 'typed address picked the building and its manager');
+  // client requests: add one on the proposal; it saves with the job
+  await pg.fill('#rqText', 'Call Mandy 30 min before arriving'); await pg.fill('#rqFrom', 'Mandy Munoz'); await pg.click('#rqAdd');
+  await pg.waitForTimeout(2600);
+  assert.deepEqual(await pg.evaluate(() => (DBX.proposals.find(x => x.num === 'PFBS-1070').client_requests || []).map(r => r.text + ' | ' + r.from)), ['Call Mandy 30 min before arriving | Mandy Munoz'], 'saved');
+  await pg.click('#closeD'); await pg.waitForTimeout(300);
+  // the job's packet: open requests in the red box, done ones not, building notes too
+  await pg.click('tr[data-id="PFBS-1071"]'); await pg.waitForSelector('#jfSheet', T); await pg.click('#jfSheet'); await pg.waitForSelector('#jsWrap .jsreq', { state: 'attached', timeout: 8000 });
+  const pk = await pg.textContent('#jsWrap .jsreq');
+  assert.ok(/Suite 3979 first, between 6 and 11 PM[\s\S]*Chrizelle/.test(pk) && !/Old done one/.test(pk) && /Gate code 4411/.test(pk), 'requests + building notes on the packet: ' + pk);
+  await pg.close();
+}
+
+// 60. Client page: a building's Contact → "+ New contact…" saves the manager once, sets the building, updates its open proposals; contacts show what they manage
+{
+  const c = { id: 'c-nb', name: 'Bay Mgmt', kind: 'Business', aliases: [], active: true };
+  const K = [{ id: 'k-co', client_id: 'c-nb', name: 'Dana Regional', email: 'dana@bay.example', is_primary: true, active: true }];
+  const PR = [{ id: 'p-t2', client_id: 'c-nb', name: 'Tower II', address: '1 Tower Way\nSan Jose, CA', active: true }];
+  const prop = { num: 'PFBS-1080', sent_by: 'Arturo', client: 'Bay Mgmt', client_id: 'c-nb', property_id: 'p-t2', status: 'Sent', contact_name: 'Dana Regional', contact_email: 'dana@bay.example', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: 500 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('new building contact: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr/, r => r.abort());
+  await pg.addInitScript(([c, K, PR, x]) => { window.MOCK_CLIENTS = [c]; window.MOCK_CONTACTS = K; window.MOCK_PROPS = PR; window.MOCK_EXTRA = [x]; try { sessionStorage.clear(); } catch (_) {} }, [c, K, PR, prop]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="clients"]'); await pg.click('tr[data-cl="c-nb"]'); await pg.waitForSelector('#clP select[data-pf="contact_id"]', T);
+  assert.match(await pg.textContent('#clientsBody'), /Company contact[\s\S]*Dana Regional/, 'company contact label');
+  await pg.selectOption('#clP select[data-pf="contact_id"]', '__new'); await pg.waitForSelector('dialog.ask [name="name"]', T);
+  await pg.fill('dialog.ask [name="name"]', 'Chrizelle Anselmo'); await pg.fill('dialog.ask [name="email"]', 'chrizelle@bay.example'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
+  const r = await pg.evaluate(() => { const k = DBX.client_contacts.find(x => x.name === 'Chrizelle Anselmo'); return [!!k, DBX.properties.find(x => x.id === 'p-t2').contact_id === (k && k.id), DBX.proposals.find(x => x.num === 'PFBS-1080').contact_email, document.querySelector('#clP select[data-pf="contact_id"]').selectedOptions[0].textContent]; });
+  assert.deepEqual(r, [true, true, 'chrizelle@bay.example', 'Chrizelle Anselmo'], 'saved once, building set, open proposal now goes to the building manager');
+  await pg.click('#clSave'); await pg.waitForTimeout(500);
+  assert.deepEqual(await pg.$$eval('#clK tr', T => T.map(t => t.querySelector('[data-cf="name"]').value + ':' + t.children[4].textContent.trim())), ['Dana Regional:', 'Chrizelle Anselmo:Tower II'], 'contacts show the buildings they manage');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

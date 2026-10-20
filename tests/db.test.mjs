@@ -418,3 +418,20 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: warehouse rentals view & materials used passed');
 }
+
+// 038: client requests on the job reach the Warehouse's packet (open ones only), with the building's notes
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role; select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false);
+    insert into clients(id, name) values ('00000000-0000-0000-0000-0000000c0038', 'Req Co') on conflict do nothing;
+    insert into properties(id, client_id, address, notes) values ('00000000-0000-0000-0000-0000000f0038', '00000000-0000-0000-0000-0000000c0038', '1 Req St', 'Gate code 4411') on conflict do nothing;
+    insert into proposals(num, client, status, date_sent, sent_by, property_id, client_requests) values ('PFBS-7801', 'Req Co', 'Scheduled', '2026-10-01', 'Arturo', '00000000-0000-0000-0000-0000000f0038',
+      '[{"id":"a","text":"Suite 3979 first","from":"Chrizelle"},{"id":"b","text":"done already","doneAt":"2026-10-02"}]');
+    insert into visits(num, visit_date, job_no, status, kind) values ('PFBS-7801', current_date + 1, '10801', 'Scheduled', 'job');
+    select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  const j = (await q1(`select warehouse_jobs(7) j`)).j.find(x => x.num === 'PFBS-7801');
+  assert.deepEqual(j.requests, [{ text: 'Suite 3979 first', from: 'Chrizelle' }], 'open requests only');
+  assert.equal(j.site_notes, 'Gate code 4411');
+  await db.exec('reset role');
+  console.log('db: client requests passed');
+}

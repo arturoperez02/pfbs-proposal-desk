@@ -156,7 +156,7 @@ legend{font-family:var(--display);font-size:17px;color:var(--ink);margin-bottom:
 .crewcard{grid-column:1/-1} .crewtbl tr[hidden]{display:none!important} .capdd{position:relative} .capdd summary{cursor:pointer;list-style:none;border:1px solid var(--line);border-radius:var(--radius);padding:7px 28px 7px 10px;background:var(--surface);min-width:170px;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;position:relative} .capdd summary::-webkit-details-marker{display:none} .capdd summary::after{content:'▾';position:absolute;right:10px;top:7px;color:var(--muted)} .capmenu{position:absolute;z-index:20;top:calc(100% + 4px);left:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px 10px;display:grid;gap:6px;min-width:240px;max-height:300px;overflow:auto} .capmenu label{display:flex;gap:6px;align-items:center;font-size:14px;white-space:nowrap}
 @media (max-width:700px){ header.bar{position:static} .crewtbl thead{display:none} .crewtbl,.crewtbl tbody,.crewtbl tr,.crewtbl td{display:block;width:100%} .crewtbl tr{border-bottom:2px solid var(--line);padding:8px 0;position:relative} .crewtbl td{border:0;padding:3px 8px} .crewtbl td:nth-child(6){text-align:left!important} .crewtbl td:nth-child(6)::before{content:'Active ';font-size:13px;color:var(--muted)} .crewtbl td:nth-child(5)::before{content:'Other names';display:block;font-size:12px;color:var(--muted)} .crewtbl td:last-child{position:absolute;top:8px;right:0;width:auto} .crewtbl td:first-child input{width:calc(100% - 48px)} .crewtbl input:not([type=checkbox]),.crewtbl select{width:100%} .capchecks{min-width:0} } .crewtbl td{vertical-align:top} .crewtbl input:not([type=checkbox]),.crewtbl select{min-width:120px} .capchecks{display:flex;flex-wrap:wrap;gap:4px 12px;min-width:260px} .capchecks label{font-size:13px;white-space:nowrap;display:flex;gap:4px;align-items:center}
 .pdfprev{width:min(1000px,96vw);max-width:none;height:92vh;display:flex;flex-direction:column} .pdfprev[open]{display:flex} .pdfprev iframe{flex:1;width:100%;border:1px solid var(--line);border-radius:6px;background:#fff}
-.clift{font-size:9px;font-weight:700;padding:0 3px;border-radius:3px;background:#dfe6f7;color:#1F2A5C} .clift.todo{background:#f0a020;color:#fff} .vscope.rentwarn{border-left:3px solid #f0a020} .vscope.rentbad{border-left:3px solid var(--bad)}
+.clift{font-size:9px;font-weight:700;padding:0 3px;border-radius:3px;background:#dfe6f7;color:#1F2A5C} .clift.todo{background:#f0a020;color:#fff} .vscope.rentwarn{border-left:3px solid #f0a020} .rqlist{margin:0;padding-left:18px} .rqlist li{margin:4px 0} .rqlist li button{margin-top:2px} .vscope.rentbad{border-left:3px solid var(--bad)}
 main table thead th:not(:empty){cursor:pointer;user-select:none} main table thead th:not(:empty):hover{color:var(--ink)} th.sorted{color:var(--ink)!important} th.sorted::after{content:' ' attr(data-dir);font-size:9px}
 thead th{cursor:pointer;user-select:none} thead th:hover{color:var(--ink)} .sarrow{font-size:9px;color:var(--navy,#1F2A5C)}
 .snap{margin:0 0 14px} .snapgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px} .snap1{border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px} .snap1 .l{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)} .snap1 .v{font-size:22px;font-weight:700;font-family:var(--display)} .snap .up{color:var(--good);font-size:12px} .snap .down{color:var(--bad);font-size:12px}
@@ -432,14 +432,14 @@ td input,td select{padding:5px 8px}
 <div class="estwrap" id="pho" hidden role="dialog" aria-modal="true" aria-label="Photo"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="jobsheet.js?v=20261020b"></script>
+<script src="jobsheet.js?v=20261020d"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-<script src="config.js?v=20261020b"></script>
-<script src="sp.js?v=20261020b"></script>
-<script src="cards.js?v=20261020b"></script>
-<script src="mfa.js?v=20261020b"></script>
+<script src="config.js?v=20261020d"></script>
+<script src="sp.js?v=20261020d"></script>
+<script src="cards.js?v=20261020d"></script>
+<script src="mfa.js?v=20261020d"></script>
 <script>
 // Your Supabase keys live in config.js (next to this file), so updating this file never touches them.
 const SUPABASE_URL = window.PFBS_CONFIG?.SUPABASE_URL || '';
@@ -468,11 +468,11 @@ const DEFAULTS = {
   ack: "By accepting the associated proposal or authorizing commencement of work, Client acknowledges having read, understood, and agreed to all terms and conditions set forth in this document."
 };
 // DB column  <->  app field
-const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt',budget_year:'budgetYear',budget_check:'budgetCheck',lost_to:'lostTo',lost_price:'lostPrice',billing_email:'billingEmail',po_number:'poNumber',po_required:'poRequired',client_id:'clientId',property_id:'propertyId',on_hold_since:'onHoldSince',on_hold_reason:'onHoldReason',contract_on:'contractOn',contract_note:'contractNote'};
+const MAP = {num:'num',date_sent:'dateSent',sent_by:'sentBy',client:'client',property:'property',service:'service',frequency:'frequency',amount:'amount',gp:'gp',pass_through:'passThrough',status:'status',date_resolved:'dateResolved',hcp_job:'hcpJob',client_type:'clientType',lead_source:'leadSource',bd_rep:'bdRep',lost_reason:'lostReason',date_paid:'datePaid',comm_paid_on:'commPaidOn',est_comm_paid_on:'estCommPaidOn',actuals:'actuals',renewal_date:'renewalDate',renewal_of:'renewalOf',rev:'rev',revisions:'revisions',change_orders:'changeOrders',bid_link:'bidLink',folder_link:'folderLink',notes:'notes',items:'items',pricing_option:'pricingOption',contact_name:'contactName',bill_address:'billAddress',contact_email:'contactEmail',contact_phone:'contactPhone',site_address:'siteAddress',clarifications:'clarifications',lead_info:'leadInfo',actuals_summary:'actualsSummary',photos:'photos',parts:'parts',buyer:'buyer',term_months:'termMonths',year_value:'yearValue',cancelled_on:'cancelledOn',cancel_reason:'cancelReason',est_comm_paid_amt:'estCommPaidAmt',comm_paid_amt:'commPaidAmt',budget_year:'budgetYear',budget_check:'budgetCheck',lost_to:'lostTo',lost_price:'lostPrice',billing_email:'billingEmail',po_number:'poNumber',po_required:'poRequired',client_id:'clientId',property_id:'propertyId',on_hold_since:'onHoldSince',on_hold_reason:'onHoldReason',contract_on:'contractOn',contract_note:'contractNote',client_requests:'clientRequests'};
 const READONLY = {lead_at:'leadAt',quoted_at:'quotedAt',created_at:'createdAt',reviewed_by:'reviewedBy',reviewed_at:'reviewedAt',updated_by:'updatedBy',updated_at:'updatedAt',created_by:'createdBy',last_follow_up:'lastFollowUp',report_sent_on:'reportSentOn',report_url:'reportUrl',est_comm_rate:'estCommRate',bd_comm_rate:'bdCommRate'};
 const fromRow = r => { const o={}; for(const [c,f] of Object.entries({...MAP,...READONLY})) o[f]=r[c]; return o; };
 let COLS=null; // columns the database has (lets the app run before an update is applied)
-const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(c==='po_required'){ o[c]=(v===true||v==='true'); continue; } if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt','budget_year','lost_price'].includes(c)) v=num(v); o[c]=v; } return o; };
+const toRow = p => { const o={}; for(const [c,f] of Object.entries(MAP)){ if(COLS && !COLS.has(c)) continue; let v=p[f]; if(c==='po_required'){ o[c]=(v===true||v==='true'); continue; } if(v==='') v=null; if(c==='lead_info'){ o[c]=(v&&typeof v==='object')?v:{}; continue; } if(c==='actuals_summary'){ o[c]=(v&&typeof v==='object')?v:null; continue; } if(c==='items'||c==='actuals'||c==='revisions'||c==='change_orders'||c==='photos'||c==='parts'||c==='client_requests'){ o[c]=Array.isArray(v)?v:[]; continue; } if(['amount','gp','pass_through','term_months','year_value','est_comm_paid_amt','comm_paid_amt','budget_year','lost_price'].includes(c)) v=num(v); o[c]=v; } return o; };
 
 let sb=null, me=null, S=structuredClone(DEFAULTS), P=[], TEAM=[];
 let filter='Open', query='', highlight=null;
@@ -977,6 +977,7 @@ function drawDrawer(){
     </div>
     </fieldset>
     <fieldset><legend>Bill to &amp; job site</legend><div class="grid2">
+      <div class="full" id="contactNote">${contactNoteHTML(p)}</div>
       ${field('Contact name','contactName')}
       ${field('Contact phone','contactPhone','tel')}
       ${field('Contact email','contactEmail','email','full')}
@@ -1007,8 +1008,10 @@ function drawDrawer(){
     ${spOn()?`<div class="gpline" id="spLine" style="margin:0 0 6px">${spLine(p)}</div><div class="toolbar" style="margin:0 0 6px"><button type="button" class="btn ghost small" id="spPick">${/sharepoint\.com/.test(p.folderLink||'')?'Change SharePoint folder':'Choose SharePoint folder'}</button></div><div id="spBox" class="fubox" hidden></div>`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap">${/^https:\/\//.test(p.bidLink||'')?`<a class="btn ghost small" href="${esc(p.bidLink)}" target="_blank" rel="noopener">Open bid sheet</a>`:''}${/^https:\/\//.test(p.folderLink||'')?`<a class="btn ghost small" href="${esc(p.folderLink)}" target="_blank" rel="noopener">Open folder</a>`:''}</div>
     </fieldset>
+    ${!won && !isNew ? `<fieldset><legend>Client requests</legend><div id="rqBox">${reqHTML(p, ed)}</div></fieldset>` : ''}
     </div>
     <div class="dpane" data-pane="job" ${tab==='job'?'':'hidden'}>
+    ${won && !isNew ? `<fieldset><legend>Client requests</legend><div id="rqBox">${reqHTML(p, ed)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' && !isNew ? `<fieldset><legend>Invoices</legend>
       <div class="grid2" style="margin-bottom:8px">${field('PO # / client reference'+(p.poRequired===true||p.poRequired==='true'?' (required)':''),'poNumber')}</div>
       <div id="invBox">${invoicesHTML(p)}</div></fieldset>` : ''}
@@ -1247,6 +1250,7 @@ function drawLeadForm(){
       ${field('Property name','property','text','full','list="propList" autocomplete="off" placeholder="e.g. Metro Center Senior"')}
       <datalist id="clientList">${clientNames().map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
       <datalist id="propList">${propsFor(p.client).map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+      <div class="full" id="contactNote">${contactNoteHTML(p)}</div>
       ${field('Contact name','contactName')}
       ${field('Contact phone','contactPhone','tel')}
       ${field('Contact email','contactEmail','email','full')}
@@ -2112,7 +2116,7 @@ $('#drawer').addEventListener('change', e=>{ const o=e.target.dataset.opt; if(o=
   const groups=groupsOf(draft); let ch=chosenOptions(draft).filter(g=>g!==o); if(e.target.checked) ch.push(o); ch=groups.filter(g=>ch.includes(g));
   if(!ch.length){ e.target.checked=true; toast('At least one option has to count.'); return; }
   draft.pricingOption=ch.join('||'); rerenderItems(); }, true);
-$('#drawer').addEventListener('change', e=>{ if(!draft || e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property'){ autofill(k); checkDup(); } if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
+$('#drawer').addEventListener('change', e=>{ if(!draft || e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property'){ autofill(k); checkDup(); } if(k==='siteAddress') matchTypedSite(); if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='dMore'){ const m=$('#dMenu'); if(m) m.hidden=!m.hidden; return; }
@@ -2225,6 +2229,24 @@ $('#drawer').addEventListener('click', async e=>{
     if(!v) return; const f=(num(v.pct)||0)/100; if(!f) return; draft.items=raiseItems(draft.items, f); draft.notes=((draft.notes||'')+`\nPrices raised ${v.pct}% on ${fmtD(iso(today()))}.`).trim(); rerenderItems(); $('#dmsg').textContent=`Prices raised ${v.pct}%. Save to keep it.`; }
 });
 
+// ---------- client requests (Arturo 10/20): "do floor 3979 first, between 6 and 11 PM" ----------
+// Typed once on the job; every open request prints in a box on page 1 of the job packet (CRM and Warehouse), shows in the
+// visit editor, and stays until someone marks it done. The building's notes (Addresses → Notes) print with them.
+const openReqs = p => (p?.clientRequests||[]).filter(r=>!r.doneAt);
+function reqHTML(p, ed){ const R=p.clientRequests||[], open=R.filter(r=>!r.doneAt), done=R.filter(r=>r.doneAt), dis=ed?'':'disabled';
+  const c=CL.find(x=>x.id===p.clientId), who=[...new Set([p.contactName, ...(c?contactsOf(c.id).map(k=>k.name):[])].filter(Boolean))];
+  return `${open.length?`<ul class="rqlist">${open.map(r=>`<li><b>${esc(r.text)}</b><div class="note" style="margin:0">${r.from?'from '+esc(r.from)+' · ':''}${fmtD(r.at)}${r.by?' · noted by '+esc(r.by):''}</div>${ed?`<button type="button" class="btn ghost small" data-rqdone="${esc(r.id)}">✓ Done</button>`:''}</li>`).join('')}</ul>`:'<div class="note" style="margin:0 0 6px">None. Anything the client asks for before the job (a floor first, hours, access, a contact on site) goes here and prints on the crew\'s job packet.</div>'}
+    ${ed?`<div class="grid2" style="margin-top:6px"><label class="f full">New request<textarea id="rqText" rows="2" placeholder="e.g. Tower II, suite 3979 first. Their alarm is set 11:55 PM to 6 AM: do it between 6 and 11 PM." ${dis}></textarea></label>
+      <label class="f">Asked by<input id="rqFrom" list="rqWho" placeholder="Who asked" ${dis}></label><datalist id="rqWho">${who.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+      <div class="f" style="align-self:end"><button type="button" class="btn small" id="rqAdd" ${dis}>+ Add request</button></div></div>`:''}
+    ${done.length?`<details style="margin-top:6px"><summary class="note" style="margin:0">Done (${done.length})</summary><ul class="rqlist done">${done.map(r=>`<li><s>${esc(r.text)}</s><div class="note" style="margin:0">done ${fmtD(r.doneAt)}${r.doneBy?' · '+esc(r.doneBy):''}</div>${ed?`<button type="button" class="btn ghost small" data-rqundo="${esc(r.id)}">Undo</button>`:''}</li>`).join('')}</ul></details>`:''}`; }
+function reqBox(p){ const L=openReqs(p); if(!L.length) return ''; return `<div class="vscope rentwarn"><b>Client requests</b> <span class="note" style="margin:0">print on the job packet</span><ul>${L.map(r=>`<li>${esc(r.text)}${r.from?` <span class="note" style="margin:0">(${esc(r.from)})</span>`:''}</li>`).join('')}</ul></div>`; }
+$('#drawer').addEventListener('click', e=>{ if(!draft) return; const t=e.target;
+  const redraw=()=>{ const b=$('#rqBox'); if(b) b.innerHTML=reqHTML(draft, canEditDraft()); };
+  if(t.id==='rqAdd'){ const tx=($('#rqText')?.value||'').trim(); if(!tx){ $('#rqText')?.focus(); return; }
+    draft.clientRequests=[...(draft.clientRequests||[]), {id:Math.random().toString(36).slice(2,10), text:tx, from:($('#rqFrom')?.value||'').trim()||null, at:iso(today()), by:me?.name||null}]; redraw(); toast('Request added: it prints on the job packet'); }
+  if(t.dataset.rqdone){ const r=(draft.clientRequests||[]).find(x=>x.id===t.dataset.rqdone); if(r){ r.doneAt=iso(today()); r.doneBy=me?.name||null; draft.clientRequests=[...draft.clientRequests]; redraw(); } }
+  if(t.dataset.rqundo){ const r=(draft.clientRequests||[]).find(x=>x.id===t.dataset.rqundo); if(r){ delete r.doneAt; delete r.doneBy; draft.clientRequests=[...draft.clientRequests]; redraw(); } } });
 // ---------- job actuals (estimated vs actual) ----------
 function estPerVisit(p){
   const L=countedItems(p).filter(i=>i.estimate);
@@ -2994,7 +3016,9 @@ async function ensureClient(d){
 }
 // opening a proposal: anything left blank that the client record knows (billing address, AP email, PO#, contact) fills in. Typed values are never overwritten.
 function fillClientBlanks(){ if(!draft || !CLOK || !CL.length || isLocked?.()) return 0; const c=(draft.clientId && CL.find(x=>x.id===draft.clientId)) || clientOf(draft.client); if(!c) return 0;
-  if(!draft.clientId) draft.clientId=c.id; const pr=draft.propertyId && PROPS.find(x=>x.id===draft.propertyId), pk=pr&&pr.contact_id&&CC.find(x=>x.id===pr.contact_id), k=pk||contactsOf(c.id)[0]||{};
+  if(!draft.clientId) draft.clientId=c.id;
+  if(!draft.propertyId && draft.siteAddress){ const kk=akey(String(draft.siteAddress).split('\n')[0]), hit=kk && propsOf(c.id).find(x=>x.addr_key===kk || akey(String(x.address||'').split('\n')[0])===kk); if(hit) draft.propertyId=hit.id; }
+  const pr=draft.propertyId && PROPS.find(x=>x.id===draft.propertyId), k=pr ? siteContact(pr) : (propsOf(c.id).some(x=>x.contact_id) ? {} : (contactsOf(c.id)[0]||{}));
   const src={billAddress:c.billing_address, billingEmail:c.billing_email, poRequired:c.po_required?'true':'', contactName:k.name, contactEmail:k.email, contactPhone:k.phone, siteAddress:pr&&pr.address, property:pr&&propLabel(pr)};
   let n=0; for(const [f,v] of Object.entries(src)) if(v && !String(draft[f]??'').trim()){ draft[f]=v; n++; } return n; }
 // proposal drawer: a drop-down of the client's addresses (picks property, site address and the property's contact in one go)
@@ -3006,14 +3030,26 @@ function pickProperty(id){ if(!draft) return;
   if(id==='new'){ draft.propertyId=null; for(const k of ['property','siteAddress']){ draft[k]=''; const el=document.getElementById('f-'+k); if(el) el.value=''; } document.getElementById('f-siteAddress')?.focus(); return; }
   const x=PROPS.find(y=>y.id===id); if(!x) return; const set=(k,v)=>{ draft[k]=v; const el=document.getElementById('f-'+k); if(el) el.value=v; };
   draft.propertyId=x.id; draft.clientId=x.client_id||draft.clientId; set('property', propLabel(x)); set('siteAddress', x.address||'');
-  const k=x.contact_id && CC.find(y=>y.id===x.contact_id); if(k) for(const [f,v] of [['contactName',k.name],['contactEmail',k.email],['contactPhone',k.phone]]) if(v) set(f,v);
-  if(typeof checkDup==='function') checkDup(); toast('Address, property and site contact filled in'); }
+  const k=siteContact(x); for(const [f,v] of [['contactName',k.name],['contactEmail',k.email],['contactPhone',k.phone]]) set(f,v||'');
+  showContactNote(); if(typeof checkDup==='function') checkDup(); toast(k.fallback?`No manager for this building: using ${k.name||'the company contact'}`:'Address, property and site contact filled in'); }
+// who to talk to about a building: its own manager; if it has none, the company's main contact (flagged so the office can add one)
+function siteContact(pr){ const k=pr && pr.contact_id && CC.find(y=>y.id===pr.contact_id && y.active!==false); if(k) return k;
+  const m=pr && contactsOf(pr.client_id)[0]; return m ? {...m, fallback:true} : {fallback:true}; }
+function contactNoteHTML(p){ const pr=p && p.propertyId && PROPS.find(x=>x.id===p.propertyId); if(!pr) return '';
+  const k=siteContact(pr), c=CL.find(x=>x.id===pr.client_id); if(!k.fallback || !c) return '';
+  return `<div class="note" style="margin:0;color:var(--warn)">No manager on file for ${esc(propLabel(pr))}: using ${esc(c.name)}'s company contact${k.name?' ('+esc(k.name)+')':''}. Add the building's manager on the client page (Addresses → Contact → + New contact).</div>`; }
+function showContactNote(){ const b=document.getElementById('contactNote'); if(b) b.innerHTML=contactNoteHTML(draft); }
+// a typed site address that matches one of the client's buildings picks that building (and its manager)
+function matchTypedSite(){ if(!draft || draft.propertyId) return; const c=draft.clientId && CL.find(x=>x.id===draft.clientId); if(!c) return;
+  const kk=akey(String(draft.siteAddress||'').split('\n')[0]); if(!kk) return; const hit=propsOf(c.id).find(x=>x.addr_key===kk || akey(String(x.address||'').split('\n')[0])===kk);
+  if(hit){ pickProperty(hit.id); refreshPropPick(); } }
 document.addEventListener('change', e=>{ if(e.target.id==='f-propPick') pickProperty(e.target.value); });
 // proposal drawer: picking a client / property fills what the client record already knows
 function clientFill(k){
   if(!CLOK || !draft) return 0;
   if(k==='client'){ const c=clientOf(draft.client); draft.clientId=c?c.id:null; draft.propertyId=null; if(!c){ refreshPropPick(); return 0; }
-    const pc=contactsOf(c.id)[0]||{};
+    // a management company whose buildings each have their own manager: the contact waits for the building (Arturo 10/20)
+    const pc=propsOf(c.id).some(x=>x.contact_id) ? {} : (contactsOf(c.id)[0]||{});
     const src={contactName:pc.name, contactEmail:pc.email, contactPhone:pc.phone, billAddress:c.billing_address, billingEmail:c.billing_email, poRequired:c.po_required?'true':''};
     const n=fillEmpty(src, ['contactName','contactEmail','contactPhone','billAddress','billingEmail','poRequired']);
     const dl=$('#propList'); if(dl){ const opts=[...new Set([...propsOf(c.id).map(propLabel), ...propsFor(draft.client)])]; dl.innerHTML=opts.map(v=>`<option value="${esc(v)}">`).join(''); }
@@ -3022,9 +3058,9 @@ function clientFill(k){
   if(k==='property'){ const c=draft.clientId && CL.find(x=>x.id===draft.clientId); if(!c) return 0; const pr=norm(draft.property), kk=akey(draft.property);
     const hit=propsOf(c.id).find(x=>norm(propLabel(x))===pr || norm(x.name)===pr || (kk && x.addr_key===kk)); draft.propertyId=hit?hit.id:null; const ps=document.getElementById('f-propPick'); if(ps) ps.value=hit?hit.id:''; if(!hit) return 0;
     let n=fillEmpty({siteAddress:hit.address}, ['siteAddress']);
-    const k=hit.contact_id && CC.find(x=>x.id===hit.contact_id);   // the property's own manager wins over the client's main contact
-    if(k){ for(const [f,val] of [['contactName',k.name],['contactEmail',k.email],['contactPhone',k.phone]]) if(val && draft[f]!==val){ draft[f]=val; const el=document.getElementById('f-'+f); if(el) el.value=val; n++; } }
-    return n; }
+    const k=siteContact(hit);   // the property's own manager wins over the client's main contact (company contact only if it has none)
+    for(const [f,val] of [['contactName',k.name],['contactEmail',k.email],['contactPhone',k.phone]]) if(val && draft[f]!==val){ draft[f]=val; const el=document.getElementById('f-'+f); if(el) el.value=val; n++; }
+    showContactNote(); return n; }
   return 0;
 }
 // ---------- HousecallPro customer export → clients (grouped by company; homeowners stay people) ----------
@@ -3128,8 +3164,9 @@ function renderClient(c){
   const main=contactsOf(c.id)[0]||{}, PR=propsOf(c.id);
   const kRow=k=>`<tr data-ck="${esc(k.id||'')}"><td><input data-cf="name" value="${esc(k.name||'')}" placeholder="Name" aria-label="Name"></td><td><input data-cf="role" value="${esc(k.role||'')}" placeholder="Role" aria-label="Role"></td>
       <td><input data-cf="email" type="email" value="${esc(k.email||'')}" placeholder="Email" aria-label="Email"></td><td><input data-cf="phone" value="${esc(k.phone||'')}" placeholder="Phone" aria-label="Phone"></td>
-      <td style="white-space:nowrap"><label class="note" style="margin:0"><input type="radio" name="ckPrimary" data-cf="is_primary" ${k.is_primary?'checked':''}> main</label> <button type="button" class="btn ghost small" data-ckdel aria-label="Remove contact">✕</button></td></tr>`;
-  const kOpts=sel=>`<option value="">—</option>${contactsOf(c.id).map(k=>`<option value="${esc(k.id)}" ${k.id===sel?'selected':''}>${esc(k.name||k.email||'')}</option>`).join('')}`;
+      <td class="wrap note" style="margin:0">${(()=>{ const B=PR.filter(x=>x.contact_id && x.contact_id===k.id).map(propLabel); return B.length?esc(B.join(', ')):''; })()}</td>
+      <td style="white-space:nowrap"><label class="note" style="margin:0" title="The company contact: billing questions and buildings with no manager of their own"><input type="radio" name="ckPrimary" data-cf="is_primary" ${k.is_primary?'checked':''}> company</label> <button type="button" class="btn ghost small" data-ckdel aria-label="Remove contact">✕</button></td></tr>`;
+  const kOpts=sel=>`<option value="">—</option>${contactsOf(c.id).map(k=>`<option value="${esc(k.id)}" ${k.id===sel?'selected':''}>${esc(k.name||k.email||'')}</option>`).join('')}<option value="__new">+ New contact…</option>`;
   const pRow=p=>`<tr data-cp="${esc(p.id||'')}"><td><input data-pf="name" value="${esc(p.name||'')}" placeholder="Building / property name" aria-label="Property name"></td><td><textarea data-pf="address" rows="2" placeholder="Street\nCity, State Zip" aria-label="Address">${esc(p.address||'')}</textarea></td>
       <td><select data-pf="contact_id" aria-label="Property contact">${kOpts(p.contact_id)}</select></td>
       <td><input data-pf="notes" value="${esc(p.notes||'')}" placeholder="Notes (access, lift, keys…)" aria-label="Property notes"></td><td class="r num">${pp.filter(x=>x.propertyId===p.id||(!x.propertyId && p.addr_key && (akey(x.siteAddress)===p.addr_key||akey(x.property)===p.addr_key))).length||''}</td><td><button type="button" class="btn ghost small" data-cpdel aria-label="Remove property">✕</button></td></tr>`;
@@ -3145,7 +3182,7 @@ function renderClient(c){
         <div class="card"><h3>Job notes</h3>${pp.filter(p=>String(p.notes||'').trim()).map(p=>`<div style="padding:6px 0;border-bottom:1px solid var(--line)"><a href="#" data-open="${esc(p.num)}">${jobNoOf(p)?'Job #'+esc(jobNoOf(p)):esc(p.num)} · ${esc(p.property||'')}</a><div style="white-space:pre-wrap;font-size:13px">${esc(p.notes)}</div></div>`).join('')||'<div class="note" style="margin:0">No notes on its proposals or jobs.</div>'}</div>`
     : `<div class="clgrid"><div>
         <div class="card"><h3>Summary</h3><div class="clsum"><div><span>Created</span><b>${fmtD(c.created_at)}</b></div>${canM?`<div><span>Lifetime value</span><b>${usd(life)}</b></div><div><span>Outstanding balance</span><b class="${owed>0.004?'down':''}">${usd(owed)}</b></div>`:''}<div><span>Jobs</span><b>${jobs.length}</b></div><div><span>Open proposals</span><b>${props.filter(p=>outcome(p)==='Open').length}</b></div></div></div>
-        <div class="card"><h3>Contact info</h3><div class="clsum"><div><span>Main contact</span><b>${esc(main.name||'—')}</b></div><div><span>Email</span><b>${main.email?`<a href="mailto:${esc(main.email)}">${esc(main.email)}</a>`:'—'}</b></div><div><span>Phone</span><b>${main.phone?`<a href="tel:${esc(main.phone)}">${esc(main.phone)}</a>`:'—'}</b></div></div></div>
+        <div class="card"><h3>Contact info</h3><div class="clsum"><div><span>Company contact</span><b>${esc(main.name||'—')}</b></div><div><span>Email</span><b>${main.email?`<a href="mailto:${esc(main.email)}">${esc(main.email)}</a>`:'—'}</b></div><div><span>Phone</span><b>${main.phone?`<a href="tel:${esc(main.phone)}">${esc(main.phone)}</a>`:'—'}</b></div></div></div>
         <div class="card listedit"><h3>Billing</h3>
           <label class="f">Client name<input id="cl-name" value="${esc(c.name)}"></label>
           <label class="f">Type<select id="cl-kind"><option ${c.kind!=='Homeowner'?'selected':''}>Business</option><option ${c.kind==='Homeowner'?'selected':''}>Homeowner</option></select></label>
@@ -3161,7 +3198,7 @@ function renderClient(c){
           ${c.billing_address?`<div class="claddr"><div><b>${esc(String(c.billing_address).split('\n')[0])}</b> <span class="flag ok">Billing</span><div class="note" style="margin:0">${esc(String(c.billing_address).split('\n').slice(1).join(', '))}</div></div></div>`:''}
           <div class="tablewrap"><table class="qatable"><thead><tr><th>Name</th><th>Address</th><th>Contact</th><th>Notes</th><th class="r">Jobs</th><th></th></tr></thead><tbody id="clP">${PR.map(pRow).join('')}</tbody></table></div>
           <button type="button" class="btn ghost small" id="clPAdd">+ Address</button></div>
-        <div class="card"><h3>Contacts</h3><div class="tablewrap"><table class="qatable"><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th></th></tr></thead><tbody id="clK">${contactsOf(c.id).map(kRow).join('')}</tbody></table></div>
+        <div class="card"><h3>Contacts</h3><div class="note" style="margin:0 0 6px">Each building's manager is picked under Addresses → Contact. The <b>company</b> contact gets everything for buildings with no manager.</div><div class="tablewrap"><table class="qatable"><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th>Manages</th><th></th></tr></thead><tbody id="clK">${contactsOf(c.id).map(kRow).join('')}</tbody></table></div>
           <button type="button" class="btn ghost small" id="clKAdd">+ Contact</button></div>
       </div></div>`;
   box.innerHTML=`<div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><button class="btn ghost" id="clBack">‹ Clients</button></div>
@@ -3172,6 +3209,28 @@ function renderClient(c){
     <div style="margin-top:12px">${body}</div>`;
   box._kRow=kRow; box._pRow=pRow;
 }
+// a building's Contact drop-down → "+ New contact…": saved to the company once, set as that building's manager, and put on
+// the building's open proposals / jobs that still show the company contact or no one (Arturo 10/20)
+async function newBuildingContact(sel){
+  const tr=sel.closest('tr'), c=CL.find(x=>x.id===CLSEL); if(!c){ sel.value=''; return; }
+  const v=await formDialog('New contact for this building', `<div class="grid2"><label class="f">Name<input name="name" required></label><label class="f">Role<input name="role" placeholder="Property manager"></label>
+    <label class="f">Email<input name="email" type="email"></label><label class="f">Phone<input name="phone" type="tel"></label></div>`, 'Add contact');
+  if(!v || !(v.name||v.email)){ sel.value=''; return; }
+  const ins=await sb.from('client_contacts').insert({client_id:c.id, name:v.name||null, role:v.role||'Property manager', email:v.email||null, phone:v.phone||null, is_primary:false}).select().single();
+  if(ins.error){ toast(ins.error.message); sel.value=''; return; }
+  CC.push(ins.data);
+  for(const o of document.querySelectorAll('#clP select[data-pf="contact_id"]')){ const keep=o.value; o.insertAdjacentHTML('beforeend',''); const opt=document.createElement('option'); opt.value=ins.data.id; opt.textContent=ins.data.name||ins.data.email; o.insertBefore(opt, o.querySelector('option[value="__new"]')); o.value=keep==='__new'?'':keep; }
+  sel.value=ins.data.id;
+  const pid=tr && tr.dataset.cp; let n=0;
+  if(pid){ const r=await sb.from('properties').update({contact_id:ins.data.id}).eq('id',pid); if(r.error){ toast(r.error.message); return; }
+    const pr=PROPS.find(x=>x.id===pid); if(pr) pr.contact_id=ins.data.id;
+    const main=contactsOf(c.id).find(k=>k.id!==ins.data.id)||{};
+    for(const p of P.filter(x=>x.propertyId===pid && !['Declined','Expired','Withdrawn','Paid'].includes(x.status) && (!x.contactEmail || (main.email && x.contactEmail===main.email)))){
+      const row={contact_name:ins.data.name, contact_email:ins.data.email, contact_phone:ins.data.phone}; const u=await sb.from('proposals').update(row).eq('num',p.num);
+      if(!u.error){ Object.assign(p,{contactName:row.contact_name, contactEmail:row.contact_email, contactPhone:row.contact_phone}); n++; await addActivity(p.num,'note',`Site contact set to ${ins.data.name||ins.data.email} (the building's manager)`); } } }
+  toast(`${ins.data.name||ins.data.email} added${pid?' as this building\'s manager':''}${n?` · ${n} open proposal${n>1?'s':''} / job${n>1?'s':''} updated`:''}`);
+}
+document.addEventListener('change', e=>{ const s=e.target; if(s.matches && s.matches('#clP select[data-pf="contact_id"]') && s.value==='__new') newBuildingContact(s); });
 async function saveClient(c){
   const box=$('#clientsBody'), has=id=>!!document.getElementById(id), v=id=>document.getElementById(id).value.trim();   // only the fields on the open tab change
   const row={name:has('cl-name')?v('cl-name'):c.name, kind:has('cl-kind')?v('cl-kind'):c.kind, billing_email:has('cl-bemail')?(v('cl-bemail')||null):c.billing_email, po_required:has('cl-po')?v('cl-po')==='true':!!c.po_required,
@@ -3183,7 +3242,7 @@ async function saveClient(c){
     if(tr.dataset.gone){ if(tr.dataset.ck) await sb.from('client_contacts').update({active:false}).eq('id',tr.dataset.ck); continue; }
     if(!k.name && !k.email) continue;
     if(tr.dataset.ck) await sb.from('client_contacts').update(k).eq('id',tr.dataset.ck); else await sb.from('client_contacts').insert({...k, client_id:c.id}); }
-  for(const tr of box.querySelectorAll('#clP tr')){ const g=f=>tr.querySelector(`[data-pf="${f}"]`); const p={name:g('name').value.trim()||null, address:g('address').value.trim()||null, notes:g('notes').value.trim()||null, contact_id:g('contact_id').value||null};
+  for(const tr of box.querySelectorAll('#clP tr')){ const g=f=>tr.querySelector(`[data-pf="${f}"]`); const p={name:g('name').value.trim()||null, address:g('address').value.trim()||null, notes:g('notes').value.trim()||null, contact_id:(g('contact_id').value!=='__new'&&g('contact_id').value)||null};
     if(tr.dataset.gone){ if(tr.dataset.cp) await sb.from('properties').update({active:false}).eq('id',tr.dataset.cp); continue; }
     if(!p.name && !p.address) continue;
     if(tr.dataset.cp) await sb.from('properties').update(p).eq('id',tr.dataset.cp); else await sb.from('properties').insert({...p, client_id:c.id}); }
@@ -4562,7 +4621,7 @@ function visEdit(v, opts={}){
   const r0=rep || ruleFromJob(p||{items:[]}, v.visit_date), e0=(rep&&rep.ends)||{type:'never'}, pre0=rep?presetOf(rep):opts.suggestRepeat?'custom':'';
   const wd0=workdaysBetween(v.visit_date, v.end_date, v.skip_weekends);
   const scopeBox=pp=>{ const L=scopeLines(pp), jn=String(pp?.notes||'').trim(); return (L.length?`<div class="vscope"><b>Scope of work</b> <span class="note" style="margin:0">from the proposal; goes in the crew email</span><ul>${L.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:'')
-    +rentBox(pp)+(jn?`<div class="vscope"><b>Job notes</b> <span class="note" style="margin:0">from the proposal; office only</span>${mgr?' <button type="button" class="btn ghost small" data-a="usenotes">Add to crew notes</button>':''}<div style="white-space:pre-wrap;margin-top:4px">${esc(jn)}</div></div>`:''); };
+    +reqBox(pp)+rentBox(pp)+(jn?`<div class="vscope"><b>Job notes</b> <span class="note" style="margin:0">from the proposal; office only</span>${mgr?' <button type="button" class="btn ghost small" data-a="usenotes">Add to crew notes</button>':''}<div style="white-space:pre-wrap;margin-top:4px">${esc(jn)}</div></div>`:''); };
   const d=document.createElement('dialog'); d.className='ask inved schedpop';
   const checks=(name, list, sel)=>`<div class="vchecks">${list.map(x=>`<label><input type="checkbox" name="${name}" value="${esc(x)}" ${sel.includes(x)?'checked':''} ${dis}> ${esc(x)}</label>`).join('')}</div>`;
   const jn0=v.job_no||p?.hcpJob||'';
@@ -4693,7 +4752,8 @@ function jobMaterials(p){ const out=new Map(); if(!p) return [];
 function packetData(v, kit){ const p=visJob(v)||{};
   return { job:v.job_no||p.hcpJob||'', num:p.num||'', client:[p.client||v.client, p.property||v.title].filter(Boolean).join(' · '), address:v.address||p.siteAddress||'',
     date:v.visit_date, endDate:v.end_date, skipWeekends:v.skip_weekends, start:v.start_time, end:v.end_time, techs:v.techs||[], vehicle:v.vehicle,
-    scope:scopeLines(p), notes:v.notes, rentals:jobRentals(p), kit }; }
+    scope:scopeLines(p), notes:v.notes, rentals:jobRentals(p), kit,
+    requests:openReqs(p).map(r=>({text:r.text, from:r.from})), siteNotes:(p.propertyId && (PROPS.find(x=>x.id===p.propertyId)||{}).notes) || '' }; }
 // the warehouse kit packed for this visit (by visit, else by job #), with its items: page 2 of the packet
 async function kitFor(v){ const k=KITS.find(x=>x.visit_id===v.id) || (v.job_no ? KITS.find(x=>String(x.hcp_job_number||'')===String(v.job_no)) : null); if(!k) return null;
   const {data,error}=await sb.from('wh_job_items').select('item_name,item_name_es,quantity,is_removed').eq('job_id',k.id); if(error) return null;

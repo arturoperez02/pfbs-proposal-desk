@@ -10,9 +10,9 @@
 <title>Warehouse — PF Building Services</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=20261020b"></script>
-<script src="mfa.js?v=20261020b"></script>
-<script src="jobsheet.js?v=20261020b"></script>
+<script src="config.js?v=20261020d"></script>
+<script src="mfa.js?v=20261020d"></script>
+<script src="jobsheet.js?v=20261020d"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
@@ -7701,7 +7701,7 @@ async function printJobPacket(job, lang) {
   const items = kitItemsOf(job);
   JP.open({ job: v.job_no || job.hcp_job_number || '', num: v.num || '', client: [v.client, v.property].filter(Boolean).join(' · '), address: v.address || job.site_address || '',
     date: v.visit_date, endDate: v.end_date, skipWeekends: v.skip_weekends, start: v.start_time, end: v.end_time, techs: v.techs || [], vehicle: v.vehicle || job.vehicle,
-    scope: v.scope || [], notes: v.notes, rentals: v.rentals || [], kit: { id: job.id, items, ...kitSlipExtras(job, items, lang) } }, lang === 'es' ? 'es' : 'en');
+    scope: v.scope || [], notes: v.notes, rentals: v.rentals || [], requests: v.requests || [], siteNotes: v.site_notes || '', kit: { id: job.id, items, ...kitSlipExtras(job, items, lang) } }, lang === 'es' ? 'es' : 'en');
   return true;
 }
 // Every CRM job on a day (tomorrow by default) in one print: job sheet + its kit slip, each packet on new pages
@@ -7718,7 +7718,7 @@ async function printDayPackets(lang, day) {
     if (!k) unpacked++;
     const items = ((k && k.job_items) || []).filter(i => !i.is_removed && !i.removed).map(i => ({ name: i.item_name || i.name, name_es: i.item_name_es || i.name_es, qty: i.quantity || i.qty || 1 }));
     return { job: v.job_no || '', num: v.num || '', client: [v.client, v.property].filter(Boolean).join(' · '), address: v.address || '', date: v.visit_date, endDate: v.end_date,
-      skipWeekends: v.skip_weekends, start: v.start_time, end: v.end_time, techs: v.techs || [], vehicle: v.vehicle, scope: v.scope || [], notes: v.notes, rentals: v.rentals || [], kit: k ? { id: k.id, items } : null };
+      skipWeekends: v.skip_weekends, start: v.start_time, end: v.end_time, techs: v.techs || [], vehicle: v.vehicle, scope: v.scope || [], notes: v.notes, rentals: v.rentals || [], requests: v.requests || [], siteNotes: v.site_notes || '', kit: k ? { id: k.id, items } : null };
   });
   if (unpacked && !confirm((lang === 'es' ? `${unpacked} de ${packets.length} trabajos todavía no tienen kit empacado (saldrán sin la hoja del kit). ¿Imprimir de todos modos?` : `${unpacked} of ${packets.length} jobs don't have a packed kit yet (they print without the kit slip). Print anyway?`))) return;
   JP.open(packets, lang === 'es' ? 'es' : 'en');
