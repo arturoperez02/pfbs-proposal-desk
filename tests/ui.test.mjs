@@ -1367,6 +1367,20 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 49. Warehouse template editor: picking the inventory item fills the item name (typed once)
+{
+  const pg = await b.newPage({ viewport: { width: 1100, height: 900 } }); pg.on('pageerror', e => errs.push('tpl name: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(() => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [], error: null }) }; });
+  await pg.goto(BASE + 'warehouse.html'); await pg.waitForTimeout(900);
+  await pg.evaluate(async () => { DBX.wh_inventory_items = [{ id: 'iv13', name: 'Rope Roller', part_number: 'HRS-013' }]; await loadAll(); openTpl(); addKitRow('', 1, 'per_tech', '', null); });
+  const row = pg.locator('#kit-editor .kit-row').last();
+  await row.locator('.inv-search-input').fill('Rolle'); await pg.waitForSelector('[data-inv-id="iv13"]', T);
+  await pg.dispatchEvent('[data-inv-id="iv13"]', 'mousedown');
+  assert.equal(await row.locator('input').first().inputValue(), 'Rope Roller', 'item name filled from the inventory pick');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

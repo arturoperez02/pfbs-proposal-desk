@@ -4174,7 +4174,7 @@ function addKitRow(name, q, mode, nameEs, inventoryItemId) {
   d.id = rowId;
   d.style.cssText = 'gap:6px;align-items:start;margin-bottom:7px;display:grid;grid-template-columns:1fr 60px 100px 1fr auto';
   d.innerHTML = `
-    <input type="text" placeholder="Item name" value="${esc(name)}">
+    <input type="text" placeholder="Item name (fills in when you pick from inventory)" value="${esc(name)}" oninput="this.dataset.auto=''">
     <input type="number" min="1" value="${q}" style="text-align:center">
     <select><option value="per_tech"${mode==='per_tech'?' selected':''}>per tech</option><option value="fixed"${mode==='fixed'?' selected':''}>fixed</option></select>
     <div style="position:relative">
@@ -4250,8 +4250,14 @@ function selectInvItemDirect(id, name, partNum) {
   if (!inp) return;
   inp.value = name + (partNum ? ' (' + partNum + ')' : '');
   inp.dataset.invId = id;
+  fillKitName(inp, name);
 }
 
+// picking the inventory item fills the row's item name (if it's empty or still the last picked name), so it's typed once
+function fillKitName(inp, name) {
+  const nm = inp.closest('.kit-row')?.querySelector('input');
+  if (nm && nm !== inp && (!nm.value.trim() || nm.dataset.auto === '1')) { nm.value = name; nm.dataset.auto = '1'; }
+}
 // Reads from data attributes — avoids apostrophe/quote issues in inline JS
 function selectInvItemFromEl(el) {
   const id = el.dataset.invId;
@@ -4262,6 +4268,7 @@ function selectInvItemFromEl(el) {
   if (!inp) return;
   inp.value = name + (partNum ? ' (' + partNum + ')' : '');
   inp.dataset.invId = id;
+  fillKitName(inp, name);
 }
 
 // Close float dropdown on outside click or escape
@@ -4346,8 +4353,9 @@ async function saveTpl() {
     const q = parseInt(r.querySelectorAll('input')[1].value) || 1;
     const mode = r.querySelectorAll('select')[0].value;
     const invId = r.querySelector('.inv-search-input')?.dataset?.invId || null;
-    if (nm) items.push({
-      item_name: nm,
+    const nm2 = nm || (invId ? (inventoryItems.find(x => String(x.id) === String(invId))?.name || '') : '');
+    if (nm2) items.push({
+      item_name: nm2,
       quantity: q,
       quantity_mode: mode,
       inventory_item_id: invId || null,
