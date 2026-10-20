@@ -511,7 +511,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
           <button class="btn btn-p btn-sm" onclick="nav('checkout')">+ New Job</button>
         </div>
         <div class="stats-grid">
-          <div class="stat-card orange"><div class="stat-v" id="s-out">0</div><div class="stat-l">Kits Out</div></div>
+          <div class="stat-card orange" style="cursor:pointer" onclick="nav('onsite')" title="See every kit out and what's in it"><div class="stat-v" id="s-out">0</div><div class="stat-l">Kits Out ›</div></div>
           <div class="stat-card green"><div class="stat-v green" id="s-done">0</div><div class="stat-l">Completed</div></div>
           <div class="stat-card red"><div class="stat-v red" id="s-rep">0</div><div class="stat-l">In Repair</div></div>
           <div class="stat-card blue"><div class="stat-v blue" id="s-inv">0</div><div class="stat-l">Inventory Items</div></div>
@@ -523,7 +523,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
           <div id="scheduled-jobs-list"></div>
         </div>
         <div class="card">
-          <div class="card-title">Today's Active Jobs</div>
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center"><span>Kits packed &amp; out</span><button class="btn btn-xs btn-s" onclick="nav('onsite')">See everything out ›</button></div>
           <div id="active-jobs-list"><div class="empty"><div class="ei">📋</div><p>No active jobs</p></div></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -709,6 +709,20 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
       </div>
 
       <!-- RETURNS -->
+      <!-- OUT ON SITE (Arturo 10/19): every kit packed or out, and what's in it -->
+      <div class="panel" id="panel-onsite">
+        <div class="sec-hdr"><div><div class="sec-title">Out on Site</div><div class="sec-sub">Every kit packed or out, and what's in it / Todo lo que está fuera</div></div>
+          <button class="btn btn-s btn-sm" onclick="printOnSite()">🖨 Print</button></div>
+        <div class="stats-grid" id="os-stats"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+          <input type="search" id="os-search" placeholder="🔍 Job #, client, item or tech…" oninput="renderOnSite()" style="flex:1;min-width:200px;margin:0">
+          <span style="display:inline-flex;border:1px solid var(--bdr);border-radius:9px;overflow:hidden">
+            <button type="button" class="btn btn-sm" id="os-v-job" onclick="osView='job';renderOnSite()">By job</button>
+            <button type="button" class="btn btn-sm" id="os-v-item" onclick="osView='item';renderOnSite()">By item</button></span>
+        </div>
+        <div id="os-list"></div>
+      </div>
+
       <div class="panel" id="panel-returns">
         <div class="sec-hdr"><div><div class="sec-title">Process Return</div><div class="sec-sub">Warehouse attendant only / Solo encargado de bodega</div></div></div>
         <div class="card">
@@ -1005,6 +1019,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
   <nav class="bnav" id="warehouse-nav" style="display:none">
     <button class="bn active" onclick="nav('dashboard')"><span class="bi">🏠</span><span class="bn-label" data-en="Home" data-es="Inicio">Home</span></button>
     <button class="bn" onclick="nav('checkout')"><span class="bi">📤</span><span class="bn-label" data-en="New Job" data-es="Trabajo">New Job</span></button>
+    <button class="bn" onclick="nav('onsite')"><span class="bi">🚚</span><span class="bn-label" data-en="On Site" data-es="En sitio">On Site</span></button>
     <button class="bn" onclick="nav('returns')"><span class="bi">📥</span><span class="bn-label" data-en="Returns" data-es="Devoluciones">Returns</span></button>
     <button class="bn" onclick="nav('rentals')"><span class="bi">🏗</span><span class="bn-label" data-en="Rentals" data-es="Rentas">Rentals</span></button>
     <button class="bn" onclick="nav('inventory')"><span class="bi">📦</span><span class="bn-label" data-en="Inventory" data-es="Inventario">Inventory</span></button>
@@ -2069,6 +2084,7 @@ function refresh() {
     const keysEl = document.getElementById('s-keys-out');
     if (keysEl) keysEl.textContent = keysOut;
     renderActiveJobs();
+    try { if (document.getElementById('panel-onsite')?.classList.contains('active')) renderOnSite(); } catch(e) { console.warn('renderOnSite:', e); }
     try { renderScheduledJobsPanel(); } catch(e) { console.warn('renderScheduledJobsPanel:', e); }
     renderDashRepairs();
     renderDashReorder();
@@ -2491,8 +2507,7 @@ function nav(id) {
   document.querySelectorAll('.bn').forEach(b=>b.classList.remove('active'));
   document.getElementById('panel-'+id).classList.add('active');
   const ids=['dashboard','checkout','returns','rentals','inventory','repairs','inspections','templates','keys','history','ditanks','locations','materials'];
-  const idx=ids.indexOf(id);
-  if (idx>=0) document.querySelectorAll('.bn')[idx]?.classList.add('active');
+  document.querySelector(`.bn[onclick="nav('${id}')"]`)?.classList.add('active');
   document.querySelector('.scroll').scrollTop=0;
   // Clear search fields on every nav tap so list refreshes clean
   const searches = {
@@ -2518,6 +2533,7 @@ function nav(id) {
     window._skipPick = false;
   }
   if (id==='returns') fillReturnSelect();
+  if (id==='onsite') renderOnSite();
   if (id==='templates') renderTplGrid();
   if (id==='inventory') renderInventory();
   if (id==='repairs') renderRepairs();
@@ -3211,6 +3227,62 @@ async function sendUsedToCrm(job, rows) {
     return { name: r.name, out: Number(r.out) || 0, back: Number(r.back) || 0, unit_cost: inv && Number(inv.unit_cost) ? Number(inv.unit_cost) : null }; }).filter(r => r.name && r.out > 0);
   try { const { error } = await db.rpc('warehouse_record_used', { p_kit: job.id, p_visit: job.visit_id || null, p_job_no: job.hcp_job_number || null, p_items: items }); if (error) throw error; }
   catch (e) { console.warn('materials used not sent to the CRM:', e.message || e); }
+}
+// ─── OUT ON SITE ────────────────────────────────────────────
+let osView = 'job';
+function osKits() { return (jobs || []).filter(j => ['packed', 'picked_up'].includes(j.status)); }
+const osItems = k => (k.job_items || []).filter(i => !i.is_removed && !i.removed && (Number(i.quantity) || 0) > 0);
+function osDays(k) { const d = k.picked_up_at || k.packed_at || k.created_at; return d ? Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 864e5)) : null; }
+function osLifts(k) { const n = String(k.hcp_job_number || '').replace(/^#/, ''); if (!n || !crmLifts) return [];
+  return crmLifts.filter(j => String(j.job_no || '') === n).flatMap(j => j.rentals || []).filter(r => r.status !== 'Picked up'); }
+function renderOnSite() {
+  const el = document.getElementById('os-list'); if (!el) return;
+  if (crmLifts == null) loadCrmLifts().then(() => crmLifts && renderOnSite());
+  const q = (document.getElementById('os-search')?.value || '').toLowerCase().trim();
+  const late = new Set(((() => { try { return lateKits(); } catch (e) { return []; } })()).map(k => k.id));
+  const all = osKits().sort((a, b) => (late.has(b.id) - late.has(a.id)) || String(a.scheduled_date || '').localeCompare(String(b.scheduled_date || '')));
+  const hit = k => !q || `${k.hcp_job_number} ${k.building_client} ${k.site_address} ${k.tech_names} ${k.vehicle} ${osItems(k).map(i => i.item_name).join(' ')}`.toLowerCase().includes(q);
+  const kits = all.filter(hit), out = all.filter(k => k.status === 'picked_up'), totalItems = all.reduce((s, k) => s + osItems(k).reduce((a, i) => a + (Number(i.quantity) || 0), 0), 0);
+  document.getElementById('os-stats').innerHTML = `
+    <div class="stat-card blue"><div class="stat-v blue">${out.length}</div><div class="stat-l">Out on site</div></div>
+    <div class="stat-card orange"><div class="stat-v">${all.length - out.length}</div><div class="stat-l">Packed, not picked up</div></div>
+    <div class="stat-card green"><div class="stat-v green">${totalItems}</div><div class="stat-l">Items out</div></div>
+    <div class="stat-card red"><div class="stat-v red">${late.size}</div><div class="stat-l">Late coming back</div></div>`;
+  ['job', 'item'].forEach(v => { const b = document.getElementById('os-v-' + v); if (b) b.className = 'btn btn-sm ' + (osView === v ? 'btn-p' : 'btn-s'); });
+  if (!kits.length) { el.innerHTML = `<div class="empty"><div class="ei">🚚</div><p>${all.length ? 'Nothing matches the search' : 'Nothing is out right now'}</p></div>`; return; }
+  if (osView === 'item') {
+    const by = new Map();
+    for (const k of kits) for (const i of osItems(k)) { const key = String(i.item_name || '').trim().toLowerCase(); if (q && !key.includes(q) && !hit(k)) continue;
+      const g = by.get(key) || { name: i.item_name, qty: 0, jobs: [] }; g.qty += Number(i.quantity) || 0; g.jobs.push({ k, qty: Number(i.quantity) || 0 }); by.set(key, g); }
+    const rows = [...by.values()].sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name));
+    el.innerHTML = `<div class="card"><table class="os-items" style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="text-align:left;padding:6px">Item</th><th style="text-align:right;padding:6px">Out</th><th style="text-align:left;padding:6px">Where</th></tr></thead><tbody>
+      ${rows.map(g => `<tr style="border-top:1px solid var(--bdr)"><td style="padding:7px 6px;font-weight:600">${esc(g.name)}</td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);color:var(--acc);font-weight:700">${g.qty}</td>
+        <td style="padding:7px 6px;font-size:12px;color:var(--txt2)">${g.jobs.map(x => `${x.k.hcp_job_number ? '#' + esc(String(x.k.hcp_job_number).replace(/^#/, '')) : esc(x.k.building_client || 'no #')} (${x.qty})`).join(' · ')}</td></tr>`).join('')}</tbody></table></div>`;
+    return;
+  }
+  el.innerHTML = kits.map(k => { const items = osItems(k), lifts = osLifts(k), d = osDays(k), isLate = late.has(k.id);
+    const badge = isLate ? '<span class="badge bg-r">Late</span>' : k.status === 'picked_up' ? '<span class="badge bg-b">Out on site</span>' : '<span class="badge bg-p">Packed</span>';
+    return `<div class="card os-kit" style="${isLate ? 'border:2px solid var(--amb)' : ''}">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-weight:700;font-size:15px">${k.hcp_job_number ? '#' + esc(String(k.hcp_job_number).replace(/^#/, '')) + ' — ' : ''}${esc(k.building_client || k.site_address || 'No site')} ${badge}</div>
+          <div style="font-size:12px;color:var(--txt2);margin-top:2px">${esc(k.site_address || '')}</div>
+          <div style="font-size:12px;color:var(--txt2);font-family:var(--mono);margin-top:2px">👷 ${esc(k.tech_names || '--')}${k.vehicle ? ' · 🚗 ' + esc(k.vehicle) : ''} · for ${fd(k.scheduled_date)}${d != null ? ` · ${k.status === 'picked_up' ? 'out' : 'packed'} ${d === 0 ? 'today' : d + ' day' + (d > 1 ? 's' : '')}` : ''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-xs btn-s" onclick="printActiveJobSlip('${k.id}')">🖨 Packet</button>
+          <button class="btn btn-xs btn-p" onclick="osReturn('${k.id}')">📥 Return</button></div>
+      </div>
+      ${lifts.length ? `<div style="margin-top:8px;font-size:12px">${lifts.map(r => `🏗 <b>${esc(r.desc || 'Lift rental')}</b> ${liftSteps(r.status)}`).join('<br>')}</div>` : ''}
+      <div style="margin-top:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:3px 14px;font-size:13px">
+        ${items.map(i => `<div style="display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--bdr);padding:3px 0"><span>${esc(i.item_name)}</span><b style="font-family:var(--mono);color:var(--acc)">${Number(i.quantity) || 0}</b></div>`).join('') || '<div style="color:var(--txt3)">No items on this kit</div>'}
+      </div></div>`; }).join('');
+}
+function osReturn(id) { nav('returns'); setTimeout(() => { const s = document.getElementById('ret-sel'); if (s && [...s.options].some(o => o.value === String(id))) { s.value = String(id); loadReturn(); } }, 60); }
+function printOnSite() {
+  const kits = osKits(), rows = kits.map(k => `<h3 style="margin:14px 0 4px;font-size:15px">${k.hcp_job_number ? '#' + esc(String(k.hcp_job_number).replace(/^#/, '')) + ' — ' : ''}${esc(k.building_client || k.site_address || '')} <span style="font-weight:400;font-size:12px">(${k.status === 'picked_up' ? 'out' : 'packed'} · ${esc(k.tech_names || '')} · for ${fd(k.scheduled_date)})</span></h3>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">${osItems(k).map(i => `<tr><td style="border:1px solid #999;padding:3px 6px">${esc(i.item_name)}</td><td style="border:1px solid #999;padding:3px 6px;width:50px;text-align:center">${Number(i.quantity) || 0}</td><td style="border:1px solid #999;width:60px"></td></tr>`).join('')}</table>`).join('');
+  showPrint(`<div style="font-family:Arial,sans-serif;color:#000"><h2 style="margin:0">Out on site — ${new Date().toLocaleDateString()}</h2><div style="font-size:12px">${kits.length} kits · last column: check when back</div>${rows || '<p>Nothing out.</p>'}</div>`);
 }
 async function completeReturn(jobId) {
   const job=jobs.find(j=>j.id===jobId);
@@ -4182,6 +4254,7 @@ function renderTplGrid() {
       }).join('<br>')}${(t.template_items||[]).length>6?'<br><em>+'+(t.template_items.length-6)+' more</em>':''}</div>
       <div class="tacts">
         <button class="btn btn-s btn-xs" onclick="editTpl('${t.id}')">Edit</button>
+        <button class="btn btn-s btn-xs" onclick="dupTpl('${t.id}')" title="Make a new template starting from this one">⧉ Duplicate</button>
         <button class="btn btn-r btn-xs" onclick="delTpl('${t.id}')">Delete</button>
       </div>
     </div>
@@ -4210,6 +4283,19 @@ function editTpl(id) {
   document.getElementById('tpl-modal').classList.add('open');
 }
 
+// Duplicate (Arturo 10/19): opens the editor as a NEW template with every item copied and the name "… (copy)";
+// nothing is saved until Save, so rename it and change what's different (e.g. Single Cable → Double Cable)
+function dupTpl(id) {
+  const t = templates.find(x => String(x.id) === String(id)); if (!t) return;
+  editTpl(t.id);
+  editTplIdx = null;
+  const taken = new Set(templates.map(x => (x.name || '').toLowerCase()));
+  let nm = t.name + ' (copy)', k = 2; while (taken.has(nm.toLowerCase())) nm = `${t.name} (copy ${k++})`;
+  document.getElementById('tpl-modal-t').textContent = 'New template (copy of ' + t.name + ')';
+  document.getElementById('tpl-name').value = nm;
+  document.getElementById('tpl-name-es').value = t.name_es ? t.name_es + ' (copia)' : '';
+  setTimeout(() => { const n = document.getElementById('tpl-name'); n.focus(); n.select(); }, 50);
+}
 async function delTpl(id) {
   if (!confirm('Delete this template?')) return;
   await db.from('wh_templates').delete().eq('id',id);

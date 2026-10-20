@@ -1477,6 +1477,35 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 54. Warehouse: duplicate a template (opens as a new one, nothing saved until Save); Out on Site shows every kit out and what's in it
+{
+  const pg = await b.newPage({ viewport: { width: 1100, height: 900 } }); pg.on('pageerror', e => errs.push('dup/onsite: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(() => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [], error: null }), warehouse_rentals: () => ({ data: [{ job_no: '10701', rentals: [{ desc: 'Scissor lift', status: 'Delivered' }] }], error: null }) };
+    window.MOCK_KITS = [{ id: 'kA', status: 'picked_up', hcp_job_number: '10701', building_client: 'Plaza Co', site_address: '1 Plaza', tech_names: 'Rigo, Israel', scheduled_date: '2026-10-19', picked_up_at: new Date().toISOString() },
+                        { id: 'kB', status: 'packed', hcp_job_number: '10702', building_client: 'Tower Co', tech_names: 'Rolando', scheduled_date: '2099-01-01' },
+                        { id: 'kC', status: 'completed', hcp_job_number: '10600', building_client: 'Done Co' }];
+    window.MOCK_KIT_ITEMS = [{ id: 'i1', job_id: 'kA', item_name: 'Harness', quantity: 2 }, { id: 'i2', job_id: 'kA', item_name: 'Degreaser 5 gal', quantity: 1 }, { id: 'i3', job_id: 'kB', item_name: 'Harness', quantity: 3 }, { id: 'i4', job_id: 'kB', item_name: 'Old rope', quantity: 1, is_removed: true }]; });
+  await pg.goto(BASE + 'warehouse.html'); await pg.waitForTimeout(1200);
+  // duplicate
+  await pg.evaluate(() => { templates.push({ id: 't9', name: 'Permanent Platform (Single Cable)', template_items: [{ item_name: 'Motor cable', quantity: 1, quantity_mode: 'fixed' }, { item_name: 'Harness', quantity: 1, quantity_mode: 'per_tech' }] }); renderTplGrid(); dupTpl('t9'); });
+  assert.equal(await pg.$eval('#tpl-name', e => e.value), 'Permanent Platform (Single Cable) (copy)');
+  assert.equal(await pg.$$eval('#kit-editor .kit-row', r => r.length), 2, 'every item copied');
+  assert.equal(await pg.evaluate(() => editTplIdx), null, 'saves as a new template, the original is untouched');
+  await pg.fill('#tpl-name', 'Permanent Platform (Double Cable)'); await pg.evaluate(() => saveTpl()); await pg.waitForTimeout(600);
+  assert.deepEqual(await pg.evaluate(() => [DBX.wh_templates.map(t => t.name), DBX.wh_template_items.map(i => i.item_name).sort()]), [['Permanent Platform (Double Cable)'], ['Harness', 'Motor cable']]);
+  // out on site
+  await pg.evaluate(() => nav('onsite')); await pg.waitForSelector('#os-list .os-kit', { state: 'attached', timeout: 8000 }); await pg.waitForTimeout(300);
+  const t = await pg.textContent('#panel-onsite');
+  assert.match(t, /1\s*Out on site[\s\S]*1\s*Packed, not picked up[\s\S]*6\s*Items out/, 'counts: ' + t.slice(0, 200));
+  assert.ok(/#10701 — Plaza Co[\s\S]*Out on site[\s\S]*Scissor lift[\s\S]*Harness[\s\S]*Degreaser 5 gal/.test(t) && /#10702 — Tower Co/.test(t) && !/Done Co/.test(t) && !/Old rope/.test(t), 'by job, with the CRM lift');
+  await pg.evaluate(() => { osView = 'item'; renderOnSite(); });
+  assert.match(await pg.textContent('#os-list'), /Harness\s*5\s*#10701 \(2\) · #10702 \(3\)/, 'by item: total and where');
+  await pg.evaluate(() => { document.getElementById('os-search').value = 'tower'; osView = 'job'; renderOnSite(); });
+  assert.equal(await pg.$$eval('#os-list .os-kit', e => e.length), 1, 'search');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
