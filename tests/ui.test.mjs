@@ -1427,6 +1427,56 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 52. Warehouse: lifts from the CRM (view only), kits late coming back, overdue inspections when packing, materials used sent to the CRM
+{
+  const pg = await b.newPage({ viewport: { width: 1100, height: 900 } }); pg.on('pageerror', e => errs.push('wh lifts: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(() => { const d = new Date(Date.now() + 864e5), tm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const lift = { desc: '60 ft boom', status: 'Delivered', vendor: 'Sunbelt', reservationNo: 'R1', deliveryDate: tm };
+    window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }),
+      warehouse_jobs: () => ({ data: [{ id: 'v601', job_no: '10601', num: 'PFBS-0601', visit_date: tm, client: 'Lift Co', address: '6 Lift St', techs: [], work: [], equipment: [], scope: ['Windows'], rentals: [lift] }], error: null }),
+      warehouse_rentals: () => ({ data: [{ num: 'PFBS-0601', job_no: '10601', client: 'Lift Co', property: '6 Lift St', next_visit: tm, rentals: [lift] }], error: null }),
+      warehouse_record_used: a => { window.__used = a; return { data: 'PFBS-0601', error: null }; } }; });
+  await pg.goto(BASE + 'warehouse.html'); await pg.waitForSelector('#dash-rentals .lift-card', { state: 'attached', timeout: 8000 });
+  assert.match(await pg.textContent('#dash-rentals'), /60 ft boom[\s\S]*#10601[\s\S]*Delivered[\s\S]*Sunbelt #R1/, 'lift on the dashboard, from the CRM');
+  await pg.evaluate(() => nav('rentals')); await pg.waitForSelector('#rentals-active-list .lift-card', { state: 'attached', timeout: 8000 });
+  assert.match(await pg.textContent('#panel-rentals'), /view only[\s\S]*60 ft boom/i);
+  assert.equal(await pg.$$eval('#panel-rentals button, #panel-rentals select, #panel-rentals input', e => e.length), 0, 'nothing to change here: the CRM runs the lifts');
+  // late kit: packed for a CRM visit that's no longer on the schedule
+  await pg.evaluate(() => { jobs.push({ id: 'k1', status: 'picked_up', visit_id: 'v-old', scheduled_date: '2026-01-05', hcp_job_number: '10500', building_client: 'Old Co', job_items: [] }); renderPackAlert(); });
+  assert.match(await pg.textContent('#late-kits-box'), /1 kit still out[\s\S]*#10500 · Old Co[\s\S]*job over/, 'late kit flagged');
+  // overdue inspection on a kit item
+  const w = await pg.evaluate(() => { localStorage.setItem('kt_insp', JSON.stringify([{ id: 'i1', name: 'Harness #3', lastDate: '2020-01-01', interval: '180' }, { id: 'i2', name: 'Harness #4', lastDate: today(), interval: '180' }]));
+    coItems = [{ id: 'x', name: 'Harness', qty: 2 }, { id: 'y', name: 'Squeegee', qty: 2 }]; renderKitPreview();
+    return [document.querySelector('#kit-preview').textContent, getSlipWarnings([{ name: 'Harness' }], null, false).join(' | ')]; });
+  assert.match(w[0], /Inspection overdue: Harness #3 — 1 of 2 passed/, 'flagged on the kit'); assert.ok(!/Squeegee: Inspection/.test(w[0]));
+  assert.match(w[1], /Harness: Inspection overdue/, 'and on the slip');
+  // the job's lifts show when packing it
+  await pg.evaluate(() => { _schedJobs = [scheduledJobsCache[0]]; applyScheduleJob(0); });
+  assert.match(await pg.textContent('#co-crm-lifts-list'), /60 ft boom[\s\S]*view only/);
+  // materials used go to the CRM job
+  await pg.evaluate(() => sendUsedToCrm({ id: 'k9', visit_id: 'v601', hcp_job_number: '10601' }, [{ name: 'Degreaser', out: 2, back: 1 }, { name: 'Nothing out', out: 0, back: 0 }]));
+  assert.deepEqual(await pg.evaluate(() => window.__used), { p_kit: 'k9', p_visit: 'v601', p_job_no: '10601', p_items: [{ name: 'Degreaser', out: 2, back: 1, unit_cost: null }] });
+  await pg.close();
+}
+// 53. CRM job: materials the warehouse saw used become the actual materials cost (pricing cost + tax)
+{
+  const est = { sheet: 'PW', labor: [{ role: 'Expert', hours: 8, rate: 75 }], materials: [{ desc: 'Degreaser', unit: 40, qty: 2, markup: 0.3 }], taxRate: 0.1, rentals: [], equipment: [], misc: [] };
+  const pr = { num: 'PFBS-1062', sent_by: 'Arturo', client: 'Mat Co', property: '1 Mat St', status: 'Scheduled', hcp_job: '10662', date_resolved: '2026-10-01', items: [{ type: 'Base', qty: 1, description: 'Wash plaza', amount: 1500, estimate: est }], amount: 1500, actuals: [{ date: '2026-10-10', hrs: '8' }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('mat used: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; window.MOCK_MATU = [{ kit_id: 'k1', num: 'PFBS-1062', items: [{ name: 'Degreaser', out: 2, back: 1 }, { name: 'Squeegee', out: 2, back: 1 }] }];
+    if (!sessionStorage.getItem('t53')) { sessionStorage.clear(); sessionStorage.setItem('t53', '1'); sessionStorage.setItem('pfbs.open', 'PFBS-1062'); } }, pr);
+  await pg.goto(BASE); await pg.waitForSelector('#whoName', { state: 'visible', ...T });
+  await pg.waitForSelector('#drawer:not([hidden])', T);
+  await pg.evaluate(() => { const b = [...document.querySelectorAll('#drawer button, #drawer [role=tab]')].find(x => /^Proposal$|^Details$/.test(x.textContent.trim())); b?.click(); });
+  await pg.waitForSelector('#matUsedBox', { state: 'attached', timeout: 8000 }); await pg.waitForTimeout(400);
+  const t = await pg.textContent('#actBox');
+  assert.match(t, /Materials used, from the warehouse \(1 kit back\): Degreaser 1 of 2 = \$44(\.00)? at cost/, 'priced from the pricing: 1 × $40 + 10% tax; tools left out: ' + t.slice(0, 300));
+  assert.ok(!/Squeegee/.test(t));
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

@@ -390,3 +390,31 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: code reset & feedback passed');
 }
+
+// 037: the warehouse sees the CRM's lifts (view only, no costs) and records the materials used when a kit comes back
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  const as = async e => { await db.exec(`reset role; select set_config('request.jwt.claims','${JSON.stringify({ sub: '00000000-0000-0000-0000-0000000000ac', email: e })}',false); set role authenticated;`); };
+  await db.exec(`reset role; insert into warehouse_logins(email) values ('warehouse@example.com') on conflict do nothing;
+    insert into proposals(num, client, status, date_sent, sent_by, hcp_job, parts) values
+      ('PFBS-7701','Lift Co','Scheduled','2026-10-01','Arturo','10777','[{"kind":"rental","desc":"60 ft boom","status":"Delivered","cost":900,"vendor":"Sunbelt","reservationNo":"R55"}]'),
+      ('PFBS-7702','Old Lift Co','Paid','2026-01-01','Arturo','10001','[{"kind":"rental","desc":"Scissor","status":"Picked up","pickedUpOn":"2026-01-05","cost":300}]');
+    insert into visits(num, visit_date, job_no, status) values ('PFBS-7701', current_date + 1, '10777', 'Scheduled')`);
+  await as('warehouse@example.com');
+  const r = (await q1(`select warehouse_rentals() j`)).j;
+  assert.deepEqual(r.map(x => x.num), ['PFBS-7701'], 'open job with a lift; long-picked-up ones left out');
+  assert.equal(r[0].rentals[0].status, 'Delivered'); assert.equal(r[0].rentals[0].vendor, 'Sunbelt');
+  assert.ok(!JSON.stringify(r).includes('900'), 'never costs');
+  await db.exec('reset role'); const vid2 = (await db.query(`select id from visits where num = 'PFBS-7701'`)).rows[0].id; await as('warehouse@example.com');
+  const kit = '00000000-0000-0000-0000-00000000c001';
+  assert.equal((await q1(`select warehouse_record_used('${kit}', '${vid2}', null, '[{"name":"Degreaser","out":2,"back":1}]') n`)).n, 'PFBS-7701', 'found the job by its visit');
+  assert.equal((await q1(`select warehouse_record_used('${kit}', null, '#10777', '[{"name":"Degreaser","out":2,"back":0}]') n`)).n, 'PFBS-7701', 'or by job #; redoing the return updates it');
+  await db.exec('reset role');
+  assert.equal((await q1(`select count(*)::int c, max(items->0->>'back') b from job_materials_used`)).c, 1);
+  assert.equal((await q1(`select items->0->>'back' b from job_materials_used`)).b, '0');
+  await as('nobody@example.com');
+  await assert.rejects(db.query(`select warehouse_rentals()`), /not set up for the warehouse/);
+  await assert.rejects(db.query(`select warehouse_record_used('${kit}', null, '1', '[]')`), /not set up for the warehouse/);
+  await db.exec('reset role');
+  console.log('db: warehouse rentals view & materials used passed');
+}

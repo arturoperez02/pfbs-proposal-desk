@@ -39,4 +39,5 @@
 
 | 035_two_step_signin.sql | Run once: password + 6-digit code. Anyone who turned on the code must use it, and the roles ticked in Settings → Team must too; without the code the database treats them as signed out. Changes nothing until someone turns it on. Locked out? Run `update public.settings set data = data - 'mfaRoles' where id = 1;` here. Needs 034. |
 | 036_code_reset_feedback.sql | Run once: Settings → Team → **Reset 6-digit code** for someone who lost or changed phones (owner only, logged), and the **Feedback** button: anyone sends a note from the page they're on; the Owner and Admin read it (Feedback inbox, Home → My to-do) and mark it done. Needs 035. |
+| 037_warehouse_rentals_materials.sql | Run once: the Warehouse sees the lifts on open CRM jobs (view only, never costs: the CRM job is where a lift is booked and moved along), and a returned kit sends what was used back to the CRM job, which counts the pricing's materials as the actual materials cost. Needs 036. |
 Client data is never stored in this repository.

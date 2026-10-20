@@ -530,7 +530,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
           <div class="card"><div class="card-title">Repair Queue</div><div id="dash-repairs"><div class="empty" style="padding:20px 8px"><div class="ei" style="font-size:24px">🔧</div><p style="font-size:11px">All clear</p></div></div></div>
           <div class="card"><div class="card-title">Reorder Needed</div><div id="dash-reorder"><div class="empty" style="padding:20px 8px"><div class="ei" style="font-size:24px">📦</div><p style="font-size:11px">Stock OK</p></div></div></div>
         </div>
-        <div class="card"><div class="card-title">🏗 Active Rentals / Rentas Activas</div><div id="dash-rentals"><div class="empty" style="padding:16px 0"><div class="ei" style="font-size:24px">🏗</div><p style="font-size:12px">No active rentals</p></div></div></div>
+        <div class="card"><div class="card-title">🏗 Lifts on site / coming (from the CRM)</div><div id="dash-rentals"><div class="empty" style="padding:16px 0"><div class="ei" style="font-size:24px">🏗</div><p style="font-size:12px">No active rentals</p></div></div></div>
       </div>
 
       <!-- CHECKOUT / NEW JOB -->
@@ -611,8 +611,12 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
                 <button class="btn btn-s btn-sm" style="flex:1" onclick="addOneOff()">+ Add to Kit</button>
               </div>
             </div>
-            <!-- RENTAL LIFT SECTION -->
-            <div style="background:var(--sur2);border:2px solid var(--teal,#14b8a6);border-radius:var(--r);padding:13px;margin-bottom:10px">
+            <!-- RENTAL LIFT SECTION: lifts are booked in the CRM now (Arturo 10/19); the old toggle stays hidden so nothing breaks -->
+            <div id="co-crm-lifts" style="background:var(--sur2);border:2px solid var(--teal,#14b8a6);border-radius:var(--r);padding:13px;margin-bottom:10px">
+              <div class="card-title" style="margin-bottom:4px">🏗 Lift / rental / Elevador rentado</div>
+              <div id="co-crm-lifts-list" style="font-size:12px;color:var(--txt2)">None on this job. Lifts are booked in the CRM (job → Parts &amp; rentals).</div>
+            </div>
+            <div id="co-rental-box" style="display:none;background:var(--sur2);border:2px solid var(--teal,#14b8a6);border-radius:var(--r);padding:13px;margin-bottom:10px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
                 <div class="card-title" style="margin-bottom:0">🏗 Equipment Rental / Equipo Rentado</div>
                 <label style="position:relative;width:44px;height:24px;flex-shrink:0;display:inline-block">
@@ -809,23 +813,24 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
 
       <!-- RENTALS -->
       <div class="panel" id="panel-rentals">
-        <div class="sec-hdr"><div><div class="sec-title">Equipment Rentals</div><div class="sec-sub">Lift rentals per job / Elevadores rentados por trabajo</div></div></div>
+        <div class="sec-hdr"><div><div class="sec-title">Lifts &amp; Rentals</div><div class="sec-sub">From the CRM, view only / Del CRM, solo para ver</div></div></div>
+        <div class="info info-t" style="margin-bottom:12px">Lifts are booked and updated in the CRM (job → Parts &amp; rentals). Here you can see where each one is: 📅 reserved · 🚚 delivered · 📞 off-rent called · ✓ picked up.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
           <div style="background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:13px">
             <div style="font-size:24px;font-weight:700;font-family:var(--mono);color:#14b8a6" id="r-stat-active">0</div>
-            <div style="font-size:10px;color:var(--txt2);margin-top:3px">Active rentals</div>
+            <div style="font-size:10px;color:var(--txt2);margin-top:3px">On site now</div>
           </div>
           <div style="background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:13px">
             <div style="font-size:24px;font-weight:700;font-family:var(--mono);color:var(--acc)" id="r-stat-month">0</div>
-            <div style="font-size:10px;color:var(--txt2);margin-top:3px">This month</div>
+            <div style="font-size:10px;color:var(--txt2);margin-top:3px">Coming (reserved / to reserve)</div>
           </div>
         </div>
         <div class="card">
-          <div class="card-title">Active Rentals / Rentas Activas</div>
+          <div class="card-title">Open lifts / Elevadores activos</div>
           <div id="rentals-active-list"><div class="empty"><div class="ei">🏗</div><p>No active rentals</p></div></div>
         </div>
         <div class="card">
-          <div class="card-title">Rental History / Historial de Rentas</div>
+          <div class="card-title">Picked up, last 2 weeks / Recogidos</div>
           <div id="rentals-history-list"><div class="empty"><div class="ei">📋</div><p>No rental history yet</p></div></div>
         </div>
       </div>
@@ -2165,13 +2170,25 @@ async function fetchScheduledJobs() {
 
 function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 // Red warning on the dashboard (Arturo 10/19): jobs today / tomorrow with no kit packed yet, so it's caught in the afternoon, not at closing
+// Kits still out after their job is over (Arturo 10/19): a CRM kit whose visit is no longer on the schedule (finished,
+// or ended before yesterday) and was packed for an earlier day; a kit typed by hand after 3 days
+function lateKits() {
+  const live = new Set(scheduledJobsCache.map(sj => sj.visit_id)), t = today(), d3 = ymd(new Date(Date.now() - 3 * 864e5));
+  return (jobs || []).filter(k => ['packed', 'picked_up'].includes(k.status) && k.scheduled_date).filter(k => {
+    if (k.visit_id) { if (live.has(k.visit_id) || k.scheduled_date >= t) return false; k._why = 'job over, packed for ' + fd(k.scheduled_date); return true; }
+    if (k.scheduled_date > d3) return false; k._why = 'out since ' + fd(k.scheduled_date); return true; });
+}
 function renderPackAlert() {
   const el = document.getElementById('pack-alert'); if (!el) return;
   const day = off => ymd(new Date(Date.now() + off * 864e5)), on = d => scheduledJobsCache.filter(sj => sj.date <= d && (sj.endDate || sj.date) >= d);
   const parts = [[0, 'Today'], [1, 'Tomorrow']].map(([off, lbl]) => { const L = on(day(off)), n = L.filter(sj => !kitPacked(sj)).length; return { lbl, all: L.length, n }; });
-  const bad = parts.filter(x => x.n);
-  if (!bad.length) { el.innerHTML = parts[1].all ? `<div class="info info-t" style="margin-bottom:12px">✅ Tomorrow: ${parts[1].all} job${parts[1].all > 1 ? 's' : ''} · all packed</div>` : ''; return; }
-  el.innerHTML = `<div role="alert" id="pack-alert-box" onclick="document.getElementById('scheduled-jobs-card').scrollIntoView({behavior:'smooth'})" style="cursor:pointer;margin-bottom:12px;padding:12px 14px;border-radius:var(--r);border:2px solid var(--red);background:var(--red-dim,rgba(239,68,68,.12));color:var(--red);font-weight:700;font-size:14px">
+  const bad = parts.filter(x => x.n), late = lateKits();
+  const lateHTML = late.length ? `<div role="alert" id="late-kits-box" style="margin-bottom:12px;padding:12px 14px;border-radius:var(--r);border:2px solid var(--amb);background:var(--amb-dim);color:var(--amb);font-weight:700;font-size:14px">
+    🕒 ${late.length} kit${late.length > 1 ? 's' : ''} still out after the job / kits sin regresar:
+    <div style="font-weight:400;font-size:12px;margin-top:4px;color:var(--txt)">${late.map(k => `${k.hcp_job_number ? '#' + esc(String(k.hcp_job_number).replace(/^#/, '')) + ' · ' : ''}${esc(k.building_client || k.site_address || '--')} <span style="color:var(--txt2)">(${k._why})</span>`).join('<br>')}</div>
+    <button class="btn btn-xs btn-s" style="margin-top:6px" onclick="nav('returns')">Go to Returns</button></div>` : '';
+  if (!bad.length) { el.innerHTML = lateHTML + (parts[1].all ? `<div class="info info-t" style="margin-bottom:12px">✅ Tomorrow: ${parts[1].all} job${parts[1].all > 1 ? 's' : ''} · all packed</div>` : ''); return; }
+  el.innerHTML = lateHTML + `<div role="alert" id="pack-alert-box" onclick="document.getElementById('scheduled-jobs-card').scrollIntoView({behavior:'smooth'})" style="cursor:pointer;margin-bottom:12px;padding:12px 14px;border-radius:var(--r);border:2px solid var(--red);background:var(--red-dim,rgba(239,68,68,.12));color:var(--red);font-weight:700;font-size:14px">
     ⚠ ${bad.map(x => `${x.lbl}: ${x.all} job${x.all > 1 ? 's' : ''} · <span style="font-size:17px">${x.n} not packed</span>`).join(' &nbsp;|&nbsp; ')} <span style="font-weight:400;font-size:11px">· tap to see them / sin empacar</span></div>`;
 }
 async function renderScheduledJobsPanel() {
@@ -2184,6 +2201,7 @@ async function renderScheduledJobsPanel() {
   if (error) { if (show) el.innerHTML = `<div class="info-a" style="font-size:11px">Could not load the CRM schedule: ${esc(error.message)}</div>`; return; }
   scheduledJobsCache = (data || []).map(crmJob);
   renderPackAlert();
+  loadCrmLifts().then(renderDashLifts);
   if (!show) return;
   const remaining = scheduledJobsCache.filter(sj => !kitPacked(sj));
   if (!remaining.length) {
@@ -2642,10 +2660,11 @@ function calcKit() {
 }
 
 function renderKitPreview() {
+  try { loadInspItems(); } catch (e) {}
   document.getElementById('kit-preview').innerHTML = coItems.map((item,i)=>`
     <div class="kit-item-row ${item.removed?'removed':''}" id="ki-${i}">
       <input type="checkbox" ${item.removed?'':'checked'} onchange="toggleKitItem(${i})">
-      <span class="kit-item-label">${esc(item.name)}${item.oneoff?'<span style="font-size:9px;color:var(--acc);margin-left:6px">+ADDED</span>':''}</span>
+      <span class="kit-item-label">${esc(item.name)}${item.oneoff?'<span style="font-size:9px;color:var(--acc);margin-left:6px">+ADDED</span>':''}${!item.removed && inspWarnText(item.name) ? `<span class="insp-kit-warn" style="display:block;font-size:11px;font-weight:700;color:var(--red)">⚠ ${esc(inspWarnText(item.name))}</span>` : ''}</span>
       <input type="number" min="1" value="${item.qty}" ${item.removed?'disabled':''} 
         style="width:54px;text-align:center;padding:4px 6px;font-size:13px;font-family:var(--mono);color:var(--acc);background:var(--acc-dim);border:1px solid rgba(245,166,35,.3);border-radius:6px;margin:0"
         onchange="updateItemQty(${i},this.value)" onclick="this.select()">
@@ -2718,7 +2737,7 @@ const STEP_LABELS = ['Job Details','Review Kit','Confirm & Sign Out','Print Labe
 // so finishing a job and starting the next one left old data and the
 // wizard stuck on Step 4.
 function startAnotherJob() {
-  coItems = []; coJobMaterials = [];
+  coItems = []; coJobMaterials = []; try { showCoLifts([]); } catch (e) {}
   coKeys = [];
   selectedTemplateIds = [];
   lastJob = null;
@@ -2863,7 +2882,7 @@ async function completeCheckout() {
     document.getElementById('co-numtechs').value='1';
     document.getElementById('co-date').value=today();
     document.getElementById('hcp-hint').style.display='none';
-    coItems=[]; coKeys=[]; coJobMaterials=[];
+    coItems=[]; coKeys=[]; coJobMaterials=[]; try { showCoLifts([]); } catch (e) {}
     goStep(4);
     setSyncStatus('ok');
     await loadAll();
@@ -3184,6 +3203,15 @@ function isSafetyItem(name) {
   return n.includes('harness') || n.includes('rope') || n.includes('carabiner') || n.includes('lanyard') || n.includes('helmet') || n.includes('descent') || n.includes('bosun') || n.includes('anchor');
 }
 
+// What a kit used (Arturo 10/19): out vs back for every item goes to the CRM job, which prices the pricing's materials
+// to show the real materials cost. Never blocks the return; if it can't be sent, the return still saves.
+async function sendUsedToCrm(job, rows) {
+  if (!job || !job.id || !(job.visit_id || job.hcp_job_number)) return;
+  const items = rows.map(r => { const inv = r.inventory_item_id && inventoryItems.find(i => i.id === r.inventory_item_id);
+    return { name: r.name, out: Number(r.out) || 0, back: Number(r.back) || 0, unit_cost: inv && Number(inv.unit_cost) ? Number(inv.unit_cost) : null }; }).filter(r => r.name && r.out > 0);
+  try { const { error } = await db.rpc('warehouse_record_used', { p_kit: job.id, p_visit: job.visit_id || null, p_job_no: job.hcp_job_number || null, p_items: items }); if (error) throw error; }
+  catch (e) { console.warn('materials used not sent to the CRM:', e.message || e); }
+}
 async function completeReturn(jobId) {
   const job=jobs.find(j=>j.id===jobId);
   if (!job) return;
@@ -3246,6 +3274,7 @@ async function completeReturn(jobId) {
       }
     }
 
+    await sendUsedToCrm(job, items.map(i => ({ name: i.item_name, out: i.quantity, back: i.returned_quantity, inventory_item_id: i.inventory_item_id })));
     lastReturnData={job,items,retBy,att};
     const flagged=items.filter(i=>i.return_condition!=='good');
     document.getElementById('ret-done-summary').innerHTML=`
@@ -6361,6 +6390,20 @@ function saveInspItems() {
   inspItems.forEach(item => saveInspectionToSupabase(item));
 }
 
+// Safety gear due for inspection (Arturo 10/19): a kit item is matched by name to the Inspect list ("Harness" ↔ "Harness #3");
+// overdue or never-inspected ones are flagged on the kit, on the slip, and asked about before the kit is saved
+const inspBase = s => String(s || '').toLowerCase().replace(/\(.*?\)|#\s*\S+|\b(s\/?n|serial)\b.*$|\d+/g, ' ').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+function inspFor(name) {
+  const n = inspBase(name); if (n.length < 4) return { all: [], bad: [] };
+  const all = (inspItems || []).filter(i => { const b = inspBase(i.name); return b.length >= 4 && (b.includes(n) || n.includes(b)); });
+  return { all, bad: all.filter(i => !i.lastDate || inspStatus(i).status === 'overdue') };
+}
+function inspWarnText(name, es) {
+  const { all, bad } = inspFor(name); if (!bad.length) return '';
+  const who = bad.map(i => i.name + (i.serial ? ' (' + i.serial + ')' : '')).join(', ');
+  return es ? `Inspección vencida: ${who}${all.length > bad.length ? ' — empaque uno que pasó la inspección' : ''}`
+            : `Inspection overdue: ${who}${all.length > bad.length ? ` — ${all.length - bad.length} of ${all.length} passed, pack one of those` : ' — inspect before it goes out'}`;
+}
 function inspStatus(item) {
   const last = new Date(item.lastDate);
   const due = new Date(last);
@@ -7276,6 +7319,7 @@ async function completeScanReturn() {
       }
     }
 
+    await sendUsedToCrm(scanJob, scanItems.map(s => ({ name: s.item.item_name, out: s.item.quantity, back: s.returnedQty, inventory_item_id: s.item.inventory_item_id })));
     // Check for safety items — inspection prompt
     const safetyReturned = scanItems.filter(s => isSafetyItem(s.item.item_name));
     if (safetyReturned.length) {
@@ -7345,6 +7389,8 @@ function getSlipWarnings(items, templateId, es) {
         : `${item.name||item.item_name}: ${tickets.length} unit(s) currently out for repair — confirm availability`);
     }
   });
+  try { loadInspItems(); } catch (e) {}
+  items.forEach(item => { const w = inspWarnText(item.name || item.item_name, es); if (w) warnings.push(`${item.name || item.item_name}: ${w}`); });
   const recurring = getRecurringShortages(templateId);
   recurring.forEach(name => {
     warnings.push(es
@@ -7992,6 +8038,7 @@ function applyScheduleJob(idx) {
   if (j.jobNum) document.getElementById('co-jobnum').value = j.jobNum;
   if (j.visit_id) document.getElementById('co-jobnum').dataset.visit = j.visit_id; else delete document.getElementById('co-jobnum').dataset.visit;
   coJobMaterials = j._src === 'CRM' ? (j.materials || []) : [];
+  showCoLifts(j._src === 'CRM' ? ((j._raw || {}).rentals || []) : []);
   if (j.date) document.getElementById('co-date').value = j.date;
   document.getElementById('co-addr').value = j.address || '';
   document.getElementById('co-bldg').value = j.client || '';
@@ -8279,50 +8326,59 @@ function resetRentalUI() {
   coRental = null;
 }
 
-function renderRentals() {
-  // Active rentals — jobs with has_rental=true and status packed/picked_up
-  const active = (jobs || []).filter(j => j.has_rental && ['packed','picked_up'].includes(j.status));
-  const hist = (history || []).filter(j => j.has_rental);
-
-  const rsa = document.getElementById('r-stat-active');
-  const rsm = document.getElementById('r-stat-month');
-  if (rsa) rsa.textContent = active.length;
-  if (rsm) {
-    const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
-    const monthCount = [...active, ...hist].filter(j => new Date(j.created_at || j.packed_at || 0) >= startOfMonth).length;
-    rsm.textContent = monthCount;
-  }
-
-  const al = document.getElementById('rentals-active-list');
-  if (al) {
-    al.innerHTML = active.length ? active.map(j => `
-      <div style="background:var(--sur2);border:1px solid #14b8a6;border-left:3px solid #14b8a6;border-radius:var(--r);padding:13px;margin-bottom:8px">
-        <div style="font-weight:700;font-size:14px">🏗 ${esc(j.rental_type || j.has_rental)}</div>
-        <div style="font-size:12px;color:var(--txt2);margin-top:4px">WO: ${esc(j.hcp_job_number || '--')} · ${esc(j.building_client || j.site_address || '--')}</div>
-        <div style="font-size:11px;color:var(--txt2);font-family:var(--mono)">${esc(j.tech_names || '--')} · ${fd(j.scheduled_date)}</div>
-        ${j.rental_notes ? `<div style="font-size:11px;color:var(--txt3);margin-top:3px">${esc(j.rental_notes)}</div>` : ''}
-        <span style="display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:600;font-family:var(--mono);background:rgba(20,184,166,.12);color:#14b8a6;border:1px solid rgba(20,184,166,.25);margin-top:8px">Active</span>
-      </div>`).join('') : '<div class="empty"><div class="ei">🏗</div><p>No active rentals</p></div>';
-  }
-
-  const hl = document.getElementById('rentals-history-list');
-  if (hl) {
-    hl.innerHTML = hist.length ? hist.slice(0, 15).map(j => `
-      <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px solid rgba(38,48,82,.5)">
-        <div style="width:34px;height:34px;border-radius:8px;background:rgba(20,184,166,.12);display:grid;place-items:center;flex-shrink:0;font-size:15px">🏗</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:13px">${esc(j.rental_type || 'Rental')} — ${esc(j.building_client || j.site_address || '--')}</div>
-          <div style="font-size:11px;color:var(--txt2);margin-top:2px;font-family:var(--mono)">WO: ${esc(j.hcp_job_number || '--')} · ${fd(j.scheduled_date)}</div>
-          <div style="font-size:11px;color:var(--txt2);font-family:var(--mono)">${esc(j.tech_names || '--')}</div>
-        </div>
-        <span style="display:inline-flex;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:600;background:var(--grn-dim);color:var(--grn);border:1px solid rgba(16,185,129,.25)">Done</span>
-      </div>`).join('') : '<div class="empty"><div class="ei">📋</div><p>No rental history yet</p></div>';
-  }
+// ─── LIFTS FROM THE CRM (view only) ─────────────────────────
+// The CRM runs every lift: the estimator / office books it and moves its steps (Reserved → Delivered → Off-rent → Picked up)
+// on the job. The warehouse sees where each one is, so the crew knows what's on site; nothing to type here.
+const LIFT_STEPS = [['Reserved', '📅'], ['Delivered', '🚚'], ['Off-rent called', '📞'], ['Picked up', '✓']];
+const LIFT_ORDER = ['To reserve', 'Reserved', 'Delivered', 'Off-rent called', 'Picked up'];
+function liftSteps(st) { const cur = LIFT_ORDER.indexOf(st || 'To reserve') - 1;
+  return `<span class="lift-steps" title="${esc(st || 'To reserve')}" style="display:inline-flex;gap:3px;vertical-align:middle">${LIFT_STEPS.map(([k, ic], i) => `<span title="${esc(k)}" style="display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:12px;border:2px solid ${i <= cur ? 'var(--grn)' : i === cur + 1 ? 'var(--acc)' : 'var(--bdr2,#253554)'};background:${i <= cur ? 'var(--grn-dim)' : 'transparent'};opacity:${i <= cur + 1 ? 1 : .45}">${ic}</span>`).join('')}</span> <b style="font-size:11px">${esc(st || 'To reserve')}</b>`; }
+function liftLine(r) { return [r.deliveryDate ? '🚚 ' + fd(r.deliveryDate) : '', r.offRentDate ? 'off-rent ' + fd(r.offRentDate) : '', r.vendor ? esc(r.vendor) + (r.reservationNo ? ' #' + esc(r.reservationNo) : '') : ''].filter(Boolean).join(' · '); }
+function showCoLifts(R) {
+  const el = document.getElementById('co-crm-lifts-list'); if (!el) return;
+  el.innerHTML = R && R.length ? R.map(r => `<div style="margin:4px 0"><b style="color:var(--txt)">${esc(r.desc || 'Lift rental')}</b> ${liftSteps(r.status)}<div style="font-size:11px">${liftLine(r)}</div></div>`).join('') + '<div style="font-size:10px;color:var(--txt3);margin-top:4px">From the CRM, view only. / Del CRM, solo para ver.</div>'
+    : 'None on this job. Lifts are booked in the CRM (job → Parts &amp; rentals).';
 }
-
+let crmLifts = null;
+async function loadCrmLifts() {
+  try { const { data, error } = await db.rpc('warehouse_rentals'); if (error) throw error; crmLifts = data || []; }
+  catch (e) { crmLifts = null; console.warn('warehouse_rentals:', e.message || e); }
+  return crmLifts;
+}
+function liftRows() { return (crmLifts || []).flatMap(j => (j.rentals || []).map(r => ({ ...r, job: j }))); }
+function liftCard(r) { const j = r.job;
+  return `<div class="lift-card" style="background:var(--sur2);border:1px solid var(--bdr);border-left:3px solid #14b8a6;border-radius:var(--r);padding:11px 13px;margin-bottom:8px">
+    <div style="font-weight:700;font-size:14px">🏗 ${esc(r.desc || 'Lift rental')}${Number(r.qty) > 1 ? ' ×' + Number(r.qty) : ''}</div>
+    <div style="font-size:12px;color:var(--txt2);margin-top:2px">${j.job_no ? '#' + esc(j.job_no) + ' · ' : ''}${esc([j.client, j.property].filter(Boolean).join(' · ') || j.address || '--')}${j.next_visit ? ' · job ' + fd(j.next_visit) : ''}</div>
+    <div style="margin-top:6px">${liftSteps(r.status)}</div>
+    ${liftLine(r) ? `<div style="font-size:11px;color:var(--txt2);margin-top:4px">${liftLine(r)}</div>` : ''}</div>`; }
+function renderDashLifts() {
+  const el = document.getElementById('dash-rentals'); if (!el || crmLifts == null) return;
+  const soon = ymd(new Date(Date.now() + 3 * 864e5));
+  const L = liftRows().filter(r => ['Delivered', 'Off-rent called'].includes(r.status) || (r.status !== 'Picked up' && r.job.next_visit && r.job.next_visit <= soon));
+  el.innerHTML = L.length ? L.map(liftCard).join('') + '<div style="font-size:10px;color:var(--txt3)">From the CRM, view only. On site now, or coming in the next 3 days.</div>'
+    : '<div class="empty" style="padding:16px 0"><div class="ei" style="font-size:24px">🏗</div><p style="font-size:12px">No lifts on site or coming this week</p></div>';
+}
+async function renderRentals() {
+  const al = document.getElementById('rentals-active-list');
+  if (al && crmLifts == null) al.innerHTML = '<div style="font-size:11px;color:var(--txt2)">Loading lifts from the CRM…</div>';
+  await loadCrmLifts();
+  const L = liftRows().filter(r => r.status !== 'Picked up'), done = liftRows().filter(r => r.status === 'Picked up');
+  const rsa = document.getElementById('r-stat-active'), rsm = document.getElementById('r-stat-month');
+  if (rsa) rsa.textContent = L.filter(r => ['Delivered', 'Off-rent called'].includes(r.status)).length;
+  if (rsm) rsm.textContent = L.filter(r => !['Delivered', 'Off-rent called'].includes(r.status)).length;
+  if (al) al.innerHTML = crmLifts == null ? '<div class="info-a" style="font-size:12px">Could not load the lifts from the CRM (update 037 may not be run yet).</div>'
+    : L.length ? L.map(liftCard).join('') : '<div class="empty"><div class="ei">🏗</div><p>No open lifts on CRM jobs</p></div>';
+  const hl = document.getElementById('rentals-history-list');
+  if (hl) hl.innerHTML = done.length ? done.map(liftCard).join('') : '<div class="empty"><div class="ei">📋</div><p>None picked up in the last 2 weeks</p></div>';
+  renderDashLifts();
+}
 // Patch completeCheckout to save rental data
 const _origComplete = completeCheckout;
 completeCheckout = async function() {
+  try { loadInspItems(); } catch (e) {}
+  const due = (coItems || []).filter(i => !i.removed).map(i => inspWarnText(i.name) ? `• ${i.name}: ${inspWarnText(i.name)}` : '').filter(Boolean);
+  if (due.length && !confirm(`Safety gear overdue for inspection / Equipo con inspección vencida:\n\n${due.join('\n')}\n\nOnly gear that passed inspection goes out. Save the kit anyway?`)) return;
   // Inject rental fields into jobData before saving
   window._pendingRental = {
     has_rental: document.getElementById('has-rental').checked && !!coRental,

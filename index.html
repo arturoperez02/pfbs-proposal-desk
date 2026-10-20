@@ -734,8 +734,30 @@ async function openDrawer(id, opts={}){
   $('#scrim').hidden=false; $('#drawer').hidden=false; $('#closeD')?.focus();
   if(id && outcome(draft)==='Won' && isManager()) loadInvoices(id);
   if(id && isManager()) await syncPricingRentals(id);
+  if(id && WON.includes(draft?.status)) loadMatUsed(id);
   if(id) await loadActivity(id);
 }
+// ---------- materials the warehouse saw used (update 037) ----------
+// When a kit comes back, the warehouse records out vs back for every item (job_materials_used, one row per kit). Items that
+// match the pricing's materials by name are priced at the pricing's cost + tax; that becomes the job's actual materials cost
+// unless someone typed Materials $ on the actuals. Tools and gear (not materials in the pricing) are left out.
+let MATU={};
+async function loadMatUsed(num){ if(!num) return;
+  const r=await sb.from('job_materials_used').select('*').eq('num',num); if(r.error) return; MATU[num]=r.data||[];
+  if(draft && draft.num===num){ const b=$('#matUsedBox'); if(b) b.innerHTML=matUsedHTML(draft); const c=$('#cmpBox'); if(c) c.innerHTML=compareHTML(draft); } }
+function matUsed(p){ const K=MATU[p?.num]; if(!K||!K.length) return null;
+  const price=new Map();
+  for(const it of countedItems(p)){ const e=it.estimate; if(!e) continue; for(const m of (e.materials||[])){ const k=String(m.desc||'').trim().toLowerCase(); if(k && !price.has(k)) price.set(k,{unit:num(m.unit)||0, tax:num(e.taxRate)||0}); } }
+  const by=new Map(); let cost=0;
+  for(const k of K) for(const r of (k.items||[])){ const key=String(r.name||'').trim().toLowerCase(), pr=price.get(key); if(!pr) continue;
+    const out=num(r.out)||0, used=Math.max(0, out-(num(r.back)||0)), c=used*pr.unit*(1+pr.tax); cost+=c;
+    const g=by.get(key)||{name:r.name, out:0, used:0, cost:0}; g.out+=out; g.used+=used; g.cost+=c; by.set(key,g); }
+  if(!by.size) return null;
+  return {kits:K.length, lines:[...by.values()], cost}; }
+// per actuals entry: recurring = average per kit (one kit per visit); one-time job = the whole job's materials over its entries
+const matUsedPer = (p, n) => { const m=matUsed(p); if(!m) return null; return isRecurring(p) ? m.cost/m.kits : m.cost/Math.max(1,n); };
+function matUsedHTML(p){ const m=matUsed(p); if(!m) return '';
+  return `<div class="note" style="margin:8px 0 0"><b>Materials used, from the warehouse</b> (${m.kits} kit${m.kits>1?'s':''} back): ${m.lines.map(l=>`${esc(l.name)} ${fmtH(l.used)} of ${fmtH(l.out)}`).join(' · ')} = <b>${money(m.cost)}</b> at cost${isRecurring(p)&&m.kits>1?` (${money(m.cost/m.kits)} a visit)`:''}. Leave Materials $ blank to use it.</div>`; }
 // opening a won job whose pricing has a lift that isn't on the job yet puts it there as "To reserve" (saved, logged)
 async function syncPricingRentals(id){
   if(!draft || draft.num!==id || !WON.includes(draft.status) || (draft.parts||[]).some(isRent) || (COLS && !COLS.has('parts'))) return;
@@ -2216,7 +2238,7 @@ function jobCompare(p){
   const estCostPV = est ? est.cost : (num(p.gp)!=null ? price-num(p.gp) : null);
   let actHrs=0, actCost=0;
   for(const v of V){ const h=visitHrs(v); actHrs+=h;
-    const pick=(k,e)=> (v[k]===''||v[k]==null) ? (est?est[e]:0) : (num(v[k])||0);
+    const mu=matUsedPer(p, V.length), pick=(k,e)=> (v[k]===''||v[k]==null) ? (k==='mat' && mu!=null ? mu : est?est[e]:0) : (num(v[k])||0);
     actCost += h*wage + pick('mat','mat') + pick('rent','rent') + (est?est.eq:0) + pick('misc','misc'); }
   const coR=coRevenue(p), coC=approvedCOs(p).reduce((s,c)=>s+(num(c.cost)||0),0);
   const estHrs = est ? est.hrs*n : null, estCost = estCostPV!=null ? estCostPV*n + coC : null, rev=price*n + coR; actCost += coC;
@@ -2244,10 +2266,11 @@ function actualsHTML(p, ed){
   const cards=V.map((v,i)=>`<div class="item visit"><div class="itop"><span class="ibadge">${V.length>1?(rec?'Visit ':'Part ')+(i+1):rec?'Typical visit':'Whole job'}</span><span style="flex:1"></span>${ed&&V.length>1?`<button type="button" class="btn ghost small" data-avdel="${i}">Remove</button>`:''}</div>
     <div class="vgrid">${inp(i,v,'techs','Techs',`placeholder="${est&&est.techs?est.techs+' est.':''}"`)}${inp(i,v,'hpt','Hours each',`placeholder="${est&&est.hpt?fmtH(est.hpt)+' est.':'all days'}"`)}${inp(i,v,'hrs','Total tech hours',`placeholder="${est&&est.hrs?fmtH(est.hrs)+' est.':'techs × hours'}"`)}
       ${inp(i,v,'start','Start date')}${inp(i,v,'date',rec?'Finish date':'Finish date')}
-      ${inp(i,v,'rent','Lift / sub $',`placeholder="${est?Math.round(est.rent)+' est.':'0'}"`)}${inp(i,v,'mat','Materials $',`placeholder="${est?Math.round(est.mat)+' est.':'0'}"`)}${inp(i,v,'misc','Other $',`placeholder="${est?Math.round(est.misc)+' est.':'0'}"`)}
+      ${inp(i,v,'rent','Lift / sub $',`placeholder="${est?Math.round(est.rent)+' est.':'0'}"`)}${inp(i,v,'mat','Materials $',`placeholder="${matUsedPer(p,V.length)!=null?Math.round(matUsedPer(p,V.length))+' warehouse':est?Math.round(est.mat)+' est.':'0'}"`)}${inp(i,v,'misc','Other $',`placeholder="${est?Math.round(est.misc)+' est.':'0'}"`)}
       <div class="full">${inp(i,v,'notes','Notes','placeholder="e.g. finished a day early, no screens on east side"')}</div></div></div>`).join('');
   return `<div class="note" style="margin:0 0 8px">${rec?`${esc(p.frequency)} contract: log one typical visit. `:''}Techs × hours each${rec?'':' for the whole job (3 days × 8 hrs = 24 each)'}. The total fills in; type over it if the crew worked different hours.${est&&est.hrs?` Estimated: <b>${fmtH(est.hrs)} tech hours</b> (${est.techs} tech${est.techs===1?'':'s'}).`:''} Leave a cost blank if it matched the estimate.</div>
     <div class="items">${cards}</div>
+    <div id="matUsedBox">${matUsedHTML(p)}</div>
     <div id="cmpBox">${compareHTML(p)}</div>`;
 }
 function compareHTML(p){
