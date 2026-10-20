@@ -500,6 +500,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
             <button class="xbtn" onclick="this.closest('[id=pwa-install-banner]').style.display='none'">✕</button>
           </div>
         </div>
+        <div id="pack-alert"></div>
         <div id="repair-alerts"></div>
         <div id="tpl-change-requests-banner"></div>
         <div class="sec-hdr">
@@ -1184,6 +1185,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
     <div class="modal-handle"></div>
     <div class="modal-t"><span id="import-title">📅 Import from TechSched</span><button class="xbtn" onclick="closeModal('import-modal')">✕</button></div>
     <div class="info-t" style="margin-bottom:14px">Tap a job to auto-fill the form — job #, site, techs, date, vehicle, and template. / Toca un trabajo para pre-llenar el formulario.</div>
+    <button type="button" id="import-hand" class="btn btn-s btn-full" style="display:none;margin-bottom:10px" onclick="closeModal('import-modal');document.getElementById('co-jobnum').focus()">✍️ Job not in the CRM? Type it by hand / Escribir a mano</button>
     <div id="import-job-list"><div class="sched-loading"><div class="spinner"></div>Loading jobs from TechSched…</div></div>
     <button class="btn btn-s btn-full" style="margin-top:12px" onclick="closeModal('import-modal')">Cancel</button>
   </div>
@@ -1963,7 +1965,7 @@ let invFilter = 'all';
 // ─── HELPERS ────────────────────────────────────────────────
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
 const fd = d => d ? new Date(d).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '--';
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => ymd(new Date());   // local date (toISOString gave tomorrow's date after 5 pm in California)
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const getPin = () => localStorage.getItem('kt_pin') || '0525';
 const getAutoLock = () => parseInt(localStorage.getItem('kt_autolock') || '28800000');
@@ -2161,24 +2163,34 @@ async function fetchScheduledJobs() {
   }
 }
 
+function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+// Red warning on the dashboard (Arturo 10/19): jobs today / tomorrow with no kit packed yet, so it's caught in the afternoon, not at closing
+function renderPackAlert() {
+  const el = document.getElementById('pack-alert'); if (!el) return;
+  const day = off => ymd(new Date(Date.now() + off * 864e5)), on = d => scheduledJobsCache.filter(sj => sj.date <= d && (sj.endDate || sj.date) >= d);
+  const parts = [[0, 'Today'], [1, 'Tomorrow']].map(([off, lbl]) => { const L = on(day(off)), n = L.filter(sj => !kitPacked(sj)).length; return { lbl, all: L.length, n }; });
+  const bad = parts.filter(x => x.n);
+  if (!bad.length) { el.innerHTML = parts[1].all ? `<div class="info info-t" style="margin-bottom:12px">✅ Tomorrow: ${parts[1].all} job${parts[1].all > 1 ? 's' : ''} · all packed</div>` : ''; return; }
+  el.innerHTML = `<div role="alert" id="pack-alert-box" onclick="document.getElementById('scheduled-jobs-card').scrollIntoView({behavior:'smooth'})" style="cursor:pointer;margin-bottom:12px;padding:12px 14px;border-radius:var(--r);border:2px solid var(--red);background:var(--red-dim,rgba(239,68,68,.12));color:var(--red);font-weight:700;font-size:14px">
+    ⚠ ${bad.map(x => `${x.lbl}: ${x.all} job${x.all > 1 ? 's' : ''} · <span style="font-size:17px">${x.n} not packed</span>`).join(' &nbsp;|&nbsp; ')} <span style="font-weight:400;font-size:11px">· tap to see them / sin empacar</span></div>`;
+}
 async function renderScheduledJobsPanel() {
   const card = document.getElementById('scheduled-jobs-card');
   const el = document.getElementById('scheduled-jobs-list');
-  if (localStorage.getItem('kt_crm_topack') === '0') { card.style.display = 'none'; return; }
-  card.style.display = '';
-  if (!el.innerHTML) el.innerHTML = '<div style="font-size:11px;color:var(--txt2);padding:6px 0">Loading...</div>';
+  const show = localStorage.getItem('kt_crm_topack') !== '0';
+  card.style.display = show ? '' : 'none';
+  if (show && !el.innerHTML) el.innerHTML = '<div style="font-size:11px;color:var(--txt2);padding:6px 0">Loading...</div>';
   const { data, error } = await db.rpc('warehouse_jobs', { p_days: 7 });
-  if (error) { el.innerHTML = `<div class="info-a" style="font-size:11px">Could not load the CRM schedule: ${esc(error.message)}</div>`; return; }
+  if (error) { if (show) el.innerHTML = `<div class="info-a" style="font-size:11px">Could not load the CRM schedule: ${esc(error.message)}</div>`; return; }
   scheduledJobsCache = (data || []).map(crmJob);
-  // a job already has a kit when one was packed for that visit, or for that job #
-  const vids = new Set(jobs.concat(history || []).map(j => j.visit_id).filter(Boolean));
-  const nums = new Set(jobs.map(j => String(j.hcp_job_number || '').replace(/^#/, '').toLowerCase()).filter(Boolean));
-  const remaining = scheduledJobsCache.filter(sj => !vids.has(sj.visit_id) && !(sj.jobNum && nums.has(String(sj.jobNum).toLowerCase())));
+  renderPackAlert();
+  if (!show) return;
+  const remaining = scheduledJobsCache.filter(sj => !kitPacked(sj));
   if (!remaining.length) {
     el.innerHTML = '<div class="empty" style="padding:16px 8px"><div class="ei" style="font-size:22px">📋</div><p style="font-size:11px">Every job in the next 7 days has its kit</p></div>';
     return;
   }
-  const t = today(), tm = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  const t = today(), tm = ymd(new Date(Date.now() + 864e5));
   el.innerHTML = remaining.map((sj, idx) => {
     const soon = sj.date <= tm;
     return `<div class="job-card" style="${soon ? 'border-left:3px solid var(--red)' : ''}">
@@ -2193,6 +2205,12 @@ async function renderScheduledJobsPanel() {
     </div>`; }).join('');
   window._toPack = remaining;
 }
+// a CRM visit already has a kit when one was packed for that visit, or (still out) for that job #
+function kitPacked(sj) {
+  if (sj.visit_id && jobs.concat(history || []).some(k => k.visit_id === sj.visit_id)) return true;
+  const n = String(sj.jobNum || '').replace(/^#/, '').toLowerCase();
+  return !!n && jobs.some(k => String(k.hcp_job_number || '').replace(/^#/, '').toLowerCase() === n);
+}
 function crmJob(v) {
   return { _src: 'CRM', id: v.id, visit_id: v.id,
     jobNum: v.job_no || '', date: v.visit_date || '', endDate: v.end_date || '', start: v.start_time || '',
@@ -2202,7 +2220,7 @@ function crmJob(v) {
 }
 function startChecklistFromCrm(idx) {
   const sj = (window._toPack || [])[idx]; if (!sj) return;
-  nav('checkout');
+  window._skipPick = true; nav('checkout');
   setTimeout(() => { _schedJobs = [sj]; applyScheduleJob(0); }, 50);
 }
 
@@ -2210,7 +2228,7 @@ function startChecklistFromCrm(idx) {
 // still confirms/selects the equipment template themselves — this only
 // saves re-typing the job number, site, techs, date, and vehicle.
 function startChecklistFromTechSched(sj) {
-  nav('checkout');
+  window._skipPick = true; nav('checkout');
   setTimeout(() => {
     const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v || ''; };
     set('co-jobnum', sj.jobNum);
@@ -2475,6 +2493,11 @@ function nav(id) {
     // so a tech doesn't lose a kit they're mid-way through building.
     const s4 = document.getElementById('s4');
     if (s4 && s4.classList.contains('active')) startAnotherJob();
+    // New Job starts from the CRM schedule (Arturo 10/19): a blank form opens the list of upcoming CRM jobs;
+    // "Type it by hand" is for the rare job that isn't in the CRM
+    const blank = !['co-jobnum', 'co-addr', 'co-bldg'].some(k => (document.getElementById(k)?.value || '').trim()) && !selectedTemplateIds.length;
+    if (!window._skipPick && blank && document.getElementById('s1')?.classList.contains('active')) openCrmImport({ start: true });
+    window._skipPick = false;
   }
   if (id==='returns') fillReturnSelect();
   if (id==='templates') renderTplGrid();
@@ -7811,8 +7834,8 @@ const FB_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/data
 
 const JOB_TYPE_MAP = {
   'bosun chair': 'Bosun Chair',
-  'swing stage work': 'Bosun Chair',
-  'boom lift work': 'Bosun Chair',
+  'swing stage work': 'Permanent Platform ?',
+  'boom lift work': 'Boom Lift',
   'exterior window cleaning': 'Window Cleaning',
   'interior window cleaning': 'Interior Window Cleaning',
   'interior & exterior window cleaning': 'Window Cleaning',
@@ -7840,11 +7863,41 @@ function findTemplate(name) {
 function mapJobType(type) {
   const t = (type||'').toLowerCase().trim(); if (JOB_TYPE_MAP[t]) return JOB_TYPE_MAP[t];
   // CRM jobs send the scope of work ("Pressure washing - parking structure"): match by key words
-  if (/bosun|swing stage|boom lift/.test(t)) return 'Bosun Chair';
+  // the service kit first ("Swing stage window cleaning" still needs the window kit); equipment kits come from equipKitNames
   if (/rope access/.test(t)) return 'Rope Access';
   if (/window/.test(t)) return 'Window Cleaning';
   if (/pressure|power wash/.test(t)) return 'Pressure Washing';
+  if (/bosun/.test(t)) return 'Bosun Chair';
+  if (/boom lift/.test(t)) return 'Boom Lift';
+  if (/swing ?stage/.test(t)) return platformKit(t);
   return '';
+}
+
+// Equipment kits (Arturo 10/19): the warehouse templates are named after the equipment (Bosun Chair, Boom Lift,
+// Permanent Platform single / double cable), so the kit also comes from the pricing's equipment lines and the job's lifts.
+// Swing stage: "1-wire" / "2-wire" picked in the Pricing picks the platform; when nobody picked, the packer is asked.
+function platformKit(t) { return /2[- ]?wire|double/.test(t) ? 'Permanent Platform (Double Cable)' : /1[- ]?wire|single/.test(t) ? 'Permanent Platform (Single Cable)' : 'Permanent Platform ?'; }
+function equipKitNames(j) {
+  const eq = [...(j.equipment || []), ...(((j._raw || {}).rentals) || []).map(r => r.desc || 'Lift rental')].join(' | ').toLowerCase();
+  const all = [eq, j.type || '', ...(j.types || []), ...(j.scope || [])].join(' | ').toLowerCase(), out = [];
+  if (/bosun|\brds\b/.test(all)) out.push('Bosun Chair');
+  if (/scissor/.test(eq)) out.push('Scissor Lift|Boom Lift');
+  else if (/boom|man ?lift|articulat|telescop|\blift\b/.test(eq) || /boom lift/.test(all)) out.push('Boom Lift');
+  if (/swing ?stage|permanent platform/.test(all)) out.push(platformKit(all));
+  return out;
+}
+// every kit a job needs (service kits + equipment kits) → the templates the warehouse has; ask = platform cable still to pick
+function kitTemplatesFor(j) {
+  const names = [...new Set([j.type, ...(j.types || [])].flatMap(jobKitNames).concat(j._src === 'CRM' ? equipKitNames(j) : []))], tpls = [];
+  for (const n of names) { if (n === 'Permanent Platform ?') continue; const t = n.split('|').map(findTemplate).find(Boolean); if (t && !tpls.includes(t)) tpls.push(t); }
+  const ask = names.includes('Permanent Platform ?') && !tpls.some(t => /platform/i.test(t.name)) ? templates.filter(t => /platform|swing/i.test(t.name || '')) : [];
+  return { tpls, ask };
+}
+function addKitTemplate(id) {
+  const opts = document.getElementById('co-template-options'), cb = opts && opts.querySelector(`input[value="${id}"]`);
+  if (cb) { cb.checked = true; updateTemplateDisplay(); } else if (!selectedTemplateIds.includes(id)) selectedTemplateIds.push(id);
+  if (!cb) { const t = templates.find(x => String(x.id) === String(id)); const d = document.getElementById('co-template-display'); if (t && d) d.textContent = selectedTemplateIds.map(i => (templates.find(x => String(x.id) === String(i)) || {}).name).filter(Boolean).join(' + '); }
+  document.getElementById('kit-ask')?.remove(); calcKit();
 }
 
 function parseFirestoreDoc(doc) {
@@ -7959,9 +8012,9 @@ function applyScheduleJob(idx) {
   if (j._src === 'CRM' && notesEl && !notesEl.value.trim()) {
     notesEl.value = [j.scope && j.scope.length ? 'Scope: ' + j.scope.join('; ') : '', j.equipment && j.equipment.length ? 'Equipment: ' + j.equipment.join(', ') : '', j.notes || ''].filter(Boolean).join('\n');
   }
-  // Match templates: every scope line picks its kit (interior / exterior windows, pressure washing…); several kits merge
-  const names = [...new Set([j.type, ...(j.types || [])].flatMap(jobKitNames))];
-  const tpls = [...new Set(names.map(findTemplate).filter(Boolean))];
+  // Match templates: every scope line picks its kit (interior / exterior windows, pressure washing…), the pricing's
+  // equipment and lifts pick theirs (bosun chair, boom lift, platform); several kits merge
+  const { tpls, ask } = kitTemplatesFor(j);
   const mapped = tpls.map(t => t.name).join(' + ');
   if (tpls.length) {
     selectedTemplateIds = tpls.map(t => t.id);
@@ -7972,32 +8025,35 @@ function applyScheduleJob(idx) {
   }
   const hint = document.getElementById('hcp-hint');
   hint.className = 'info info-t';
-  hint.innerHTML = `${j._src === 'CRM' ? '📋' : '📅'} <strong>Imported from ${j._src || 'TechSched'}</strong> — ${esc(j.client || j.address.split(',')[0])} · ${fmtSchedDate(j.date)}${mapped ? ' · Template: ' + esc(mapped) : ''}`;
+  hint.innerHTML = `${j._src === 'CRM' ? '📋' : '📅'} <strong>Imported from ${j._src || 'TechSched'}</strong> — ${esc(j.client || j.address.split(',')[0])} · ${fmtSchedDate(j.date)}${mapped ? ' · Template: ' + esc(mapped) : ''}`
+    + (ask.length ? `<div id="kit-ask" style="margin-top:8px;padding:8px;border:2px solid var(--acc);border-radius:8px"><strong>Swing stage on this job: which platform? / ¿Qué plataforma?</strong><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${ask.map(t => `<button type="button" class="btn btn-p btn-sm" data-kitask="${esc(String(t.id))}" onclick="addKitTemplate(this.dataset.kitask)">${esc(t.name)}</button>`).join('')}<button type="button" class="btn btn-s btn-sm" onclick="this.closest('#kit-ask').remove()">None</button></div><div style="font-size:11px;color:var(--txt2);margin-top:4px">Tip: pick 1-wire / 2-wire on the swing stage in the CRM Pricing and this is chosen for you.</div></div>` : '');
   hint.style.display = '';
   closeModal('import-modal');
 }
 
 // ─── CRM SCHEDULE IMPORT (the job schedule; replaces the TechSched import once Oscar schedules in the CRM) ─────
-async function openCrmImport() {
+async function openCrmImport(o = {}) {
   document.getElementById('import-modal').classList.add('open');
-  document.getElementById('import-title').textContent = '📋 Import from CRM Schedule';
+  document.getElementById('import-title').textContent = o.start ? '📋 Which job are you packing?' : '📋 Import from CRM Schedule';
+  const hand = document.getElementById('import-hand'); if (hand) hand.style.display = o.start ? '' : 'none';
   if (!_techRoster.length) loadTechRoster();
   const listEl = document.getElementById('import-job-list');
   listEl.innerHTML = '<div class="sched-loading"><div class="spinner"></div>Loading jobs from the CRM…</div>';
   try {
     const { data, error } = await db.rpc('warehouse_jobs', { p_days: 14 });
     if (error) throw error;
-    _schedJobs = (data || []).map(crmJob);
+    // not packed yet first (soonest first), packed ones after, marked
+    _schedJobs = (data || []).map(crmJob).map(j => (j._packed = kitPacked(j), j)).sort((a, b) => (a._packed - b._packed) || String(a.date).localeCompare(String(b.date)));
     if (!_schedJobs.length) {
       listEl.innerHTML = '<div class="empty"><div class="ei">📋</div><p>No jobs scheduled in the CRM for the next 2 weeks</p></div>';
       return;
     }
     listEl.innerHTML = _schedJobs.map((j, idx) => {
-      const mapped = [...new Set((j.types || []).flatMap(jobKitNames).map(n => (findTemplate(n) || {}).name || n))].join(' + ');
-      return `<div class="sched-job-card" data-idx="${idx}">
-        <div class="sched-job-icon">📋</div>
+      const kt = kitTemplatesFor(j), mapped = kt.tpls.map(t => t.name).concat(kt.ask.length ? ['platform: pick when packing'] : []).join(' + ');
+      return `<div class="sched-job-card" data-idx="${idx}" style="${j._packed ? 'opacity:.55' : ''}">
+        <div class="sched-job-icon">${j._packed ? '✅' : '📋'}</div>
         <div class="sched-job-info">
-          <div class="sched-job-title">${j.jobNum ? '#' + esc(j.jobNum) + ' · ' : ''}${esc(j.client || j.address.split(',')[0] || '--')}</div>
+          <div class="sched-job-title">${j.jobNum ? '#' + esc(j.jobNum) + ' · ' : ''}${esc(j.client || j.address.split(',')[0] || '--')}${j._packed ? ' <span style="font-size:10px;color:var(--green)">KIT PACKED</span>' : ''}</div>
           <div class="sched-job-sub">
             ${fmtSchedDate(j.date)}${j.endDate && j.endDate !== j.date ? ' – ' + fmtSchedDate(j.endDate) : ''}<br>
             ${esc(j.address)}<br>

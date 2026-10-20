@@ -382,7 +382,8 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const vis = { id: 'v-wh-1', job_no: '10305', num: 'PFBS-0998', visit_date: today, client: 'Kit Co', property: '3 Kit Ave', address: '3 Kit Ave, Fremont', techs: ['Rigo', 'Israel'], work: ['Pressure Washing'], equipment: ['Boom Lift'], materials: [{ desc: 'Degreaser 5 gal', qty: 2 }], vehicle: 'Truck 2', notes: '', scope: ['Wash plaza'] };
   const pg = await b.newPage({ viewport: { width: 1100, height: 900 } }); pg.on('pageerror', e => errs.push('warehouse page: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
-  await pg.addInitScript(v => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [v], error: null }) }; }, vis);
+  await pg.addInitScript(v => { const d = new Date(); v.visit_date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;   // the browser's own today
+    window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [v], error: null }) }; }, vis);
   await pg.goto(BASE + 'warehouse.html'); await pg.waitForTimeout(900);
   assert.equal(await pg.$eval('#device-auth-screen', e => e.style.display), 'none', 'signed-in CRM user goes straight in');
   await pg.waitForSelector('#scheduled-jobs-list .job-card', { state: 'attached', timeout: 8000 });
@@ -1378,6 +1379,51 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await row.locator('.inv-search-input').fill('Rolle'); await pg.waitForSelector('[data-inv-id="iv13"]', T);
   await pg.dispatchEvent('[data-inv-id="iv13"]', 'mousedown');
   assert.equal(await row.locator('input').first().inputValue(), 'Rope Roller', 'item name filled from the inventory pick');
+  await pg.close();
+}
+
+// 50. Warehouse: kits from the job's equipment (bosun chair / lift / platform 1- or 2-wire), New Job starts from the CRM list, not-packed warning
+{
+  const pg = await b.newPage({ viewport: { width: 1100, height: 900 } }); pg.on('pageerror', e => errs.push('wh kits: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(() => { const d = new Date(Date.now() + 864e5), tm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const v = (id, o) => ({ id, job_no: id.slice(1), num: 'PFBS-09' + id.slice(-2), visit_date: tm, client: 'Co ' + id, address: id + ' Main St', techs: ['Rigo'], work: [], equipment: [], scope: [], rentals: [], ...o });
+    window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [
+      v('v501', { scope: ['Exterior window cleaning'], equipment: ['Bosun chair rigging'], rentals: [{ desc: 'Boom lift 60 ft' }] }),
+      v('v502', { scope: ['Swing stage window cleaning'] }),
+      v('v503', { scope: ['Window cleaning'], equipment: ['Swing stage: 2-wire motor (double cable)'] })], error: null }) }; });
+  await pg.goto(BASE + 'warehouse.html'); await pg.waitForSelector('#pack-alert-box', { state: 'attached', timeout: 8000 });
+  assert.match(await pg.textContent('#pack-alert'), /Tomorrow: 3 jobs · 3 not packed/, 'red warning on the dashboard');
+  const r = await pg.evaluate(() => { templates.push(...['Window Cleaning', 'Bosun Chair', 'Boom Lift', 'Permanent Platform (Single Cable)', 'Permanent Platform (Double Cable)'].map((n, i) => ({ id: 'k' + i, name: n, template_items: [] })));
+    fillTemplateSelect(); const k = id => kitTemplatesFor(scheduledJobsCache.find(j => j.visit_id === id));
+    return [k('v501').tpls.map(t => t.name), k('v502').tpls.map(t => t.name), k('v502').ask.map(t => t.name), k('v503').tpls.map(t => t.name), mapJobType('boom lift work')]; });
+  assert.deepEqual(r, [['Window Cleaning', 'Bosun Chair', 'Boom Lift'], ['Window Cleaning'], ['Permanent Platform (Single Cable)', 'Permanent Platform (Double Cable)'], ['Window Cleaning', 'Permanent Platform (Double Cable)'], 'Boom Lift'], 'kits from equipment');
+  await pg.evaluate(() => { jobs.push({ id: 'kx', visit_id: 'v501', job_items: [] }); renderPackAlert(); });
+  assert.match(await pg.textContent('#pack-alert'), /3 jobs · 2 not packed/);
+  await pg.evaluate(() => nav('checkout')); await pg.waitForSelector('#import-modal.open .sched-job-card', { state: 'attached', timeout: 8000 });
+  assert.match(await pg.textContent('#import-title'), /Which job are you packing/); assert.equal(await pg.$eval('#import-hand', e => e.style.display), '', 'type-by-hand option');
+  const cards = await pg.$$eval('.sched-job-card', e => e.map(x => x.textContent.replace(/\s+/g, ' ')));
+  assert.ok(/KIT PACKED/.test(cards[2]) && /501/.test(cards[2]), 'packed job last, marked');
+  await pg.dispatchEvent('.sched-job-card:has-text("502")', 'click'); await pg.waitForSelector('#kit-ask', { state: 'attached', timeout: 8000 });
+  await pg.dispatchEvent('#kit-ask [data-kitask="k4"]', 'click');
+  assert.deepEqual(await pg.evaluate(() => [selectedTemplateIds.map(String), !!document.getElementById('kit-ask')]), [['k0', 'k4'], false], 'platform picked by the packer');
+  await pg.close();
+}
+// 51. Pricing: the swing stage motor (1- / 2-wire) is saved on the pricing (the visit's equipment then tells the warehouse)
+{
+  const est = { sheet: 'WC', stageWire: '2', labor: [{ role: 'Expert', hours: 10, rate: 75 }], materials: [], taxRate: 0, rentals: [], equipment: [], misc: [] };
+  const pr = { num: 'PFBS-1061', sent_by: 'Arturo', client: 'Stage Co', property: '1 Stage St', status: 'Estimating', items: [{ type: 'Base', qty: 1, description: 'Swing stage windows', amount: 2000, estimate: est }], amount: 2000 };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('stage wire: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, pr);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-1061"]'); await pg.waitForSelector('[data-est="0"]', T);
+  await pg.click('[data-est="0"]'); await pg.waitForSelector('#estTot', T);
+  await pg.evaluate(() => { const d = document.querySelector('#est details.calcbox'); if (d) d.open = true; });
+  assert.equal(await pg.$eval('[data-ew]', e => e.value), '2', 'motor shows 2-wire');
+  await pg.selectOption('[data-ew]', '1'); await pg.click('#estSave'); await pg.waitForTimeout(2600);
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1061').items[0].estimate.stageWire), '1', '1-wire saved on the pricing');
   await pg.close();
 }
 
