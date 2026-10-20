@@ -1506,6 +1506,42 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 55. Warehouse: 4 buttons + ☰ More; Home kit board (To pack → Packed → Out → Back) with one-tap Picked up; scanning a kit's barcode opens it; packet barcode
+{
+  const pg = await b.newPage({ viewport: { width: 1200, height: 900 } }); pg.on('pageerror', e => errs.push('kit board: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(() => { const d = new Date(Date.now() + 864e5), tm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [{ id: 'v801', job_no: '10801', visit_date: tm, client: 'Pack Me Co', techs: ['Rigo'], work: [], equipment: [], scope: [], rentals: [] }, { id: 'v802', job_no: '10802', visit_date: tm, client: 'Packed Co', techs: [], work: [], equipment: [], scope: [], rentals: [] }], error: null }) };
+    window.MOCK_KITS = [{ id: 'kP', status: 'packed', visit_id: 'v802', hcp_job_number: '10802', building_client: 'Packed Co', tech_names: 'Israel', scheduled_date: tm, packed_at: new Date().toISOString() },
+      { id: 'kO', status: 'picked_up', hcp_job_number: '10803', building_client: 'Out Co', tech_names: 'Rolando', scheduled_date: tm, picked_up_at: new Date().toISOString() },
+      { id: 'kB', status: 'completed', hcp_job_number: '10700', building_client: 'Back Co', returned_at: new Date().toISOString() }];
+    window.MOCK_KIT_ITEMS = [{ id: 'b1', job_id: 'kB', item_name: 'Harness', quantity: 1, return_condition: 'repair' }]; });
+  await pg.goto(BASE + 'warehouse.html'); await pg.waitForSelector('#kit-board .kb-card', { state: 'attached', timeout: 8000 }); await pg.waitForTimeout(500);
+  const cols = await pg.$$eval('#kit-board .kb-col', c => c.map(x => x.textContent.replace(/\s+/g, ' ')));
+  assert.ok(/To pack 1\s*1 due by tomorrow.*#10801 · Pack Me Co.*TOMORROW/.test(cols[0]) && !/Packed Co/.test(cols[0]), 'to pack: ' + cols[0]);
+  assert.ok(/Packed 1.*#10802 · Packed Co.*Picked up/.test(cols[1]), 'packed: ' + cols[1]);
+  assert.ok(/Out on site 1.*#10803 · Out Co.*Return/.test(cols[2]), 'out: ' + cols[2]);
+  assert.ok(/Back 1.*#10700 · Back Co.*1 item flagged/.test(cols[3]), 'back: ' + cols[3]);
+  // one tap: picked up
+  await pg.evaluate(() => kitPickedUp('kP')); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.wh_jobs.find(k => k.id === 'kP').status), 'picked_up');
+  // scan the barcode (job #) → the kit opens
+  await pg.evaluate(() => { const i = document.getElementById('kb-scan'); i.value = '10803'; scanKitBox(i); });
+  assert.match(await pg.textContent('#kit-scan'), /#10803 · Out Co[\s\S]*Out on site[\s\S]*It's back/, 'scan opens the kit');
+  await pg.evaluate(() => document.getElementById('kit-scan').remove());
+  // menu: 4 + More
+  const vis = await pg.$$eval('#warehouse-nav .bn', b => b.filter(x => getComputedStyle(x).display !== 'none').map(x => x.textContent.trim()));
+  assert.deepEqual(vis, ['🏠Home', '📤New Job', '🚚On Site', '📥Returns', '☰More']);
+  await pg.evaluate(() => openMoreMenu());
+  assert.match(await pg.textContent('#more-sheet'), /Rentals[\s\S]*Inventory[\s\S]*Templates[\s\S]*Material Req/);
+  await pg.evaluate(() => document.querySelector('#more-sheet button[onclick="nav(\'templates\')"]').click());
+  assert.ok(await pg.evaluate(() => document.getElementById('panel-templates').classList.contains('active') && document.getElementById('bn-more').classList.contains('active') && !document.getElementById('more-sheet')), 'opens the screen, More lit');
+  // the packet's kit slip carries the job # barcode
+  await pg.evaluate(() => JP.open({ job: '10803', client: 'Out Co', kit: { id: 'kO', items: [{ name: 'Pole', qty: 1 }] } }, 'en'));
+  assert.equal(await pg.$eval('#jsWrap svg[data-bc]', e => e.dataset.bc), '10803');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

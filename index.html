@@ -433,6 +433,7 @@ td input,td select{padding:5px 8px}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="jobsheet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="config.js"></script>
@@ -1453,12 +1454,16 @@ async function loadKits(){ if(!['Owner','Admin','Senior Estimator','Estimator'].
 // one vehicle list: the warehouse's Vehicles (if any) plus Settings → Vehicles
 let WH_VEH=[]; const vehList = () => [...new Set([...WH_VEH, ...(S.vehicles||[])])];
 const KIT_LABEL={pending:'Kit not packed',packed:'Kit packed',picked_up:'Kit picked up',returned:'Kit returned',completed:'Kit returned'};
+// the kit's steps, same icons as the Warehouse: 📦 packed → 🚚 out → 📥 back (dates on hover)
+const KIT_STEPS=[['📦','Packed','packed_at'],['🚚','Out','picked_up_at'],['📥','Back','returned_at']];
+function kitMini(k){ const c=['returned','completed'].includes(k.status)?2:k.status==='picked_up'?1:k.status==='packed'?0:-1;
+  return `<span class="rmini">${KIT_STEPS.map(([ic,l,f],i)=>`<span class="${i<=c?'ok':i===c+1?'now':''}" title="${l}${k[f]?' '+fmtD(k[f]):''}">${ic}</span>`).join('')}</span>`; }
 function kitLine(p){
   const vids=new Set(VIS.filter(v=>v.num===p.num).map(v=>v.id)), nos=new Set([p.hcpJob, ...VIS.filter(v=>v.num===p.num).map(v=>v.job_no)].filter(Boolean).map(String));
   const L=KITS.filter(k=>(k.visit_id && vids.has(k.visit_id)) || (k.hcp_job_number && nos.has(String(k.hcp_job_number).replace(/^#/,''))));
   if(!L.length) return '';
   const k=L[0], when=k.returned_at||k.picked_up_at||k.packed_at;
-  return `<div class="gpline" style="margin:-4px 0 10px">🧰 <b>${esc(KIT_LABEL[k.status]||k.status)}</b>${when?' '+fmtD(when):''}${k.tech_names?' · '+esc(k.tech_names):''}${L.length>1?` · ${L.length} kits`:''} · <a href="warehouse.html" target="_blank" rel="noopener">Warehouse</a></div>`;
+  return `<div class="gpline" style="margin:-4px 0 10px">🧰 ${kitMini(k)} <b>${esc(KIT_LABEL[k.status]||k.status)}</b>${when?' '+fmtD(when):''}${k.tech_names?' · '+esc(k.tech_names):''}${L.length>1?` · ${L.length} kits`:''} · <a href="warehouse.html" target="_blank" rel="noopener">Warehouse</a></div>`;
 }
 // one-time copy: old KitTracker project → the CRM's wh_ tables (rows keep their ids, so running it twice is safe)
 const OLD_KT={url:'https://eyiuyqrjoamhvpzqggqs.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aXV5cXJqb2FtaHZwenFnZ3FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODgyMzMsImV4cCI6MjA5NTA2NDIzM30.712zY8myAmb9BFGgGsvXBtPFMTx0mEy88xCGKTau9jI'};
