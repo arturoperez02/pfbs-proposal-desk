@@ -1341,6 +1341,20 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 47. Templates edited in the old KitTracker: "Only the kit templates" copies them and swaps each template's items (no duplicates)
+{
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('tpl copy: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
+  await pg.addInitScript(() => { sessionStorage.clear(); });
+  await pg.goto(BASE); await pg.waitForSelector('#whoName', { state: 'visible', ...T });
+  await pg.evaluate(() => { DBX.templates = [{ id: 't1', name: 'Boom Lift' }]; DBX.template_items = [{ id: 'n1', template_id: 't1', item_name: 'Harness', quantity: 1 }, { id: 'n2', template_id: 't1', item_name: 'Large Bungees', quantity: 2 }];
+    DBX.wh_templates = [{ id: 't1', name: 'Boom Lift (old)' }]; DBX.wh_template_items = [{ id: 'o1', template_id: 't1', item_name: 'Harness', quantity: 1 }]; });
+  await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('#whCopy', T); await pg.click('#whCopy');
+  await pg.fill('dialog.ask [name="email"]', 'tablet@x.com'); await pg.fill('dialog.ask [name="pw"]', 'pw'); await pg.check('dialog.ask [name="tplonly"]'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
+  assert.deepEqual(await pg.evaluate(() => [DBX.wh_templates[0].name, DBX.wh_template_items.map(x => x.item_name).sort()]), ['Boom Lift', ['Harness', 'Large Bungees']], 'old items swapped in, none doubled');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

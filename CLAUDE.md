@@ -116,7 +116,7 @@ punctuation, LLC/Inc/Partners/Management; proposals fill from the client record 
    Done 10/12 (025 + 026): Warehouse tab = `warehouse.html` on the CRM database; `can_warehouse()` = Owner/Admin/Senior
    Estimator/Estimator or a `warehouse_logins` email (tablet; not a team member, so every other table stays closed).
    The job drawer shows the kit status (`kitLine`, matched by visit_id or job #). One-time copy of the old KitTracker data:
-   Settings → Warehouse → "Copy data from the old KitTracker". TechSched import stays until Oscar schedules only in the CRM.
+   Settings → Warehouse → "Copy data from the old KitTracker" (option **Only the kit templates**: upserts templates and replaces each one's wh_template_items, for templates edited in the old app after the first copy, 10/19). TechSched import stays until Oscar schedules only in the CRM.
 5. **Leave HCP**: import history from its exports, run both for 1–2 billing cycles, cancel.
 HCP facts: Oscar creates each job in HCP and retypes it in TechSched; HCP job statuses are not kept up (738 "Scheduled",
 29 "Completed"), so "done" = invoiced and "paid" = payment recorded in the CRM. Invoice numbers continue after HCP's last.

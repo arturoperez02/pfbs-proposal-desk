@@ -1439,10 +1439,18 @@ function kitLine(p){
 const OLD_KT={url:'https://eyiuyqrjoamhvpzqggqs.supabase.co', key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aXV5cXJqb2FtaHZwenFnZ3FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODgyMzMsImV4cCI6MjA5NTA2NDIzM30.712zY8myAmb9BFGgGsvXBtPFMTx0mEy88xCGKTau9jI'};
 const WH_TABLES=[['app_settings','key'],['categories'],['inventory_items'],['assets'],['inspections'],['templates'],['template_items'],['vehicles'],['inventory_locations'],['inventory_location_stock','inventory_item_id,location_id'],['jobs'],['job_items'],['key_registry'],['client_keys'],['repair_tickets'],['reorder_queue'],['di_pairs'],['di_readings'],['grab_requests'],['template_requests']];
 async function copyOldKitTracker(){
-  const r=await formDialog('Copy data from the old KitTracker', '<label class="f">KitTracker sign-in email<input name="email" type="email" required></label><label class="f">Password<input name="pw" type="password" required></label><div class="note" style="margin:0">The login the warehouse tablet uses in the old KitTracker. Everything is copied into the Warehouse tab; the old KitTracker is not changed. Safe to run again (it updates rows already copied).</div>', 'Copy');
+  const r=await formDialog('Copy data from the old KitTracker', '<label class="f">KitTracker sign-in email<input name="email" type="email" required></label><label class="f">Password<input name="pw" type="password" required></label><div class="note" style="margin:0">The login the warehouse tablet uses in the old KitTracker. Everything is copied into the Warehouse tab; the old KitTracker is not changed. Safe to run again (it updates rows already copied).</div><label class="f" style="font-weight:400;margin-top:8px"><input type="checkbox" name="tplonly" value="1"> <b>Only the kit templates</b>: replace the Warehouse templates with the old KitTracker\'s (use this after templates were edited in the old app)</label>', 'Copy');
   if(!r) return; const msg=$('#whCopyMsg'), out=[];
   const old=window.supabase.createClient(OLD_KT.url, OLD_KT.key, {auth:{storageKey:'pfbs-old-kt', persistSession:false}});
   const li=await old.auth.signInWithPassword({email:r.email, password:r.pw}); if(li.error){ toast('Old KitTracker sign-in failed: '+li.error.message); return; }
+  if(r.tplonly==='1'){   // templates edited in the old app: copy them, and swap each template's item list for the old one (no duplicate items)
+    const [T,I]=await Promise.all([old.from('templates').select('*'), old.from('template_items').select('*')]);
+    if(T.error||I.error){ toast('Could not read the old templates: '+(T.error||I.error).message); await old.auth.signOut(); return; }
+    const w=await sb.from('wh_templates').upsert(T.data||[], {onConflict:'id'}); if(w.error){ toast(w.error.message); await old.auth.signOut(); return; }
+    const ids=(T.data||[]).map(x=>x.id);
+    if(ids.length){ const d=await sb.from('wh_template_items').delete().in('template_id', ids); if(d.error){ toast(d.error.message); await old.auth.signOut(); return; } }
+    const items=(I.data||[]).filter(x=>ids.includes(x.template_id)); if(items.length){ const w2=await sb.from('wh_template_items').upsert(items, {onConflict:'id'}); if(w2.error){ toast(w2.error.message); await old.auth.signOut(); return; } }
+    await old.auth.signOut(); msg.textContent=`Done: ${ids.length} templates, ${items.length} items copied from the old KitTracker.`; toast('Kit templates copied'); return; }
   for(const [t,key] of WH_TABLES){ msg.textContent=`Copying ${t}…`; let n=0, from=0;
     for(;;){ const {data,error}=await old.from(t).select('*').range(from, from+499); if(error){ out.push(`${t}: skipped (${error.message})`); break; }
       if(!data.length) break; const w=await sb.from('wh_'+t).upsert(data, {onConflict:key||'id'}); if(w.error){ out.push(`${t}: ${w.error.message}`); break; }
