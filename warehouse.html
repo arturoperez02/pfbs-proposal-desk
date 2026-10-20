@@ -1937,6 +1937,8 @@ async function startAppAfterAuth() {
   loadAll();
   loadTechRoster();
   setInterval(loadAll, 30000);
+  // coming back to this tab shows changes made on another computer right away (not only every 30 s)
+  let lastFocusLoad = 0; window.addEventListener('focus', () => { if (Date.now() - lastFocusLoad > 5000) { lastFocusLoad = Date.now(); loadAll(); } });
 }
 
 db.auth.onAuthStateChange((event, session) => {
@@ -4352,18 +4354,19 @@ async function saveTpl() {
   if (!items.length) { alert('Add at least one item.'); return; }
   setSyncStatus('syncing');
   try {
+    const ok = r => { if (r && r.error) throw new Error(r.error.message); return r; };   // a save that fails must say so, not look saved
     if (editTplIdx) {
-      await db.from('wh_templates').update({name, name_es:document.getElementById('tpl-name-es').value.trim(), description:document.getElementById('tpl-desc').value.trim(), updated_at:new Date().toISOString()}).eq('id', editTplIdx);
-      await db.from('wh_template_items').delete().eq('template_id', editTplIdx);
-      await db.from('wh_template_items').insert(items.map(item => ({...item, template_id:editTplIdx})));
+      ok(await db.from('wh_templates').update({name, name_es:document.getElementById('tpl-name-es').value.trim(), description:document.getElementById('tpl-desc').value.trim(), updated_at:new Date().toISOString()}).eq('id', editTplIdx);
+      ok(await db.from('wh_template_items').delete().eq('template_id', editTplIdx));
+      ok(await db.from('wh_template_items').insert(items.map(item => ({...item, template_id:editTplIdx}))));
     } else {
-      const {data:tData} = await db.from('wh_templates').insert({name, name_es:document.getElementById('tpl-name-es').value.trim()||name, description:document.getElementById('tpl-desc').value.trim()}).select();
-      if (tData&&tData[0]) await db.from('wh_template_items').insert(items.map(item => ({...item, template_id:tData[0].id})));
+      const {data:tData} = ok(await db.from('wh_templates').insert({name, name_es:document.getElementById('tpl-name-es').value.trim()||name, description:document.getElementById('tpl-desc').value.trim()}).select());
+      if (tData&&tData[0]) ok(await db.from('wh_template_items').insert(items.map(item => ({...item, template_id:tData[0].id}))));
     }
     closeModal('tpl-modal');
     setSyncStatus('ok');
     await loadAll();
-  } catch(e) { setSyncStatus('error'); alert('Error saving template.'); }
+  } catch(e) { setSyncStatus('error'); alert('The template did NOT save: ' + (e.message || e) + '\nCheck the internet connection and try again.'); }
 }
 
 // ─── HISTORY ────────────────────────────────────────────────
