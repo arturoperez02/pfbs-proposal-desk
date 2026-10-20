@@ -1542,6 +1542,34 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 56. Warehouse: a kit out on site can be edited (crew asked for more): new items, quantity changes and removals all save, stock follows;
+//     every print is the same job packet (kits typed by hand too), with barcode, keys and warnings on the kit slip
+{
+  const pg = await b.newPage({ viewport: { width: 1200, height: 900 } }); pg.on('pageerror', e => errs.push('edit kit: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(() => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [], error: null }) };
+    window.MOCK_KITS = [{ id: 'kE', status: 'picked_up', hcp_job_number: '10089', building_client: '415 Natoma', site_address: '415 Natoma St, San Francisco', tech_names: 'Manuel, Cesar', vehicle: 'Truck #10', scheduled_date: '2026-08-30', picked_up_at: new Date().toISOString(), keys: [{ tag: 'Roof key', qty: 1 }] }];
+    window.MOCK_KIT_ITEMS = [{ id: 'e1', job_id: 'kE', item_name: 'Harness', quantity: 2 }, { id: 'e2', job_id: 'kE', item_name: 'Rain Suit', quantity: 2, inventory_item_id: 'inv-rs' }, { id: 'e3', job_id: 'kE', item_name: 'Hand-Held Wand', quantity: 3 }]; });
+  await pg.goto(BASE + 'warehouse.html'); await pg.waitForTimeout(1200);
+  await pg.evaluate(async () => { DBX.wh_inventory_items.push({ id: 'inv-rs', name: 'Rain Suit', tracking_type: 'bulk', quantity_on_hand: 10 }, { id: 'inv-dg', name: 'Degreaser', tracking_type: 'bulk', quantity_on_hand: 5 }); await loadAll();
+    editActiveJob('kE');
+    editingJobItems.find(i => i.id === 'e2').quantity = 4;                    // 2 more rain suits
+    editingJobItems.splice(editingJobItems.findIndex(i => i.id === 'e3'), 1); // wand not needed
+    editingJobItems.push({ item_name: 'Degreaser', quantity: 2, inventory_item_id: 'inv-dg' });   // crew asked for degreaser
+    await saveActiveJobEdits(false); });
+  await pg.waitForTimeout(500);
+  const r = await pg.evaluate(() => ({ items: DBX.wh_job_items.filter(i => i.job_id === 'kE').map(i => `${i.item_name}:${i.quantity}${i.is_removed ? ':removed' : ''}`).sort(),
+    stock: DBX.wh_inventory_items.filter(i => i.id.startsWith('inv-')).map(i => `${i.name}:${i.quantity_on_hand}`).sort() }));
+  assert.deepEqual(r.items, ['Degreaser:2', 'Hand-Held Wand:3:removed', 'Harness:2', 'Rain Suit:4'], 'all three kinds of change saved');
+  assert.deepEqual(r.stock, ['Degreaser:3', 'Rain Suit:8'], 'stock follows');
+  // one sheet: a kit typed by hand prints the same job packet
+  await pg.evaluate(() => printActiveJobSlip('kE', 'en')); await pg.waitForSelector('#jsWrap .jspage', { state: 'attached', timeout: 8000 });
+  const t = await pg.textContent('#jsWrap');
+  assert.ok(/Job sheet[\s\S]*10089[\s\S]*415 Natoma[\s\S]*Kit slip/.test(t) && /Degreaser/.test(t) && /Rain Suit/.test(t) && /Roof key/.test(t) && !/Hand-Held Wand/.test(t) && !/Kit Checkout Slip/.test(t), 'same packet: ' + t.slice(0, 300));
+  assert.equal(await pg.$eval('#jsWrap svg[data-bc]', e => e.dataset.bc), '10089', 'with the barcode');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

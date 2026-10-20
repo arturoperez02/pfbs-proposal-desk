@@ -718,8 +718,9 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
             <div class="card-title">Step 4 — Print Label & Notify Tech</div>
             <div class="info-g" style="margin-bottom:14px">✓ Job packed and saved! / ¡Trabajo empaquetado y guardado!</div>
             <div style="text-align:center;margin-bottom:16px">
-              <canvas id="qr-canvas"></canvas>
-              <div style="font-size:11px;color:var(--txt2);margin-top:8px">Scan to confirm pickup / Escanear para confirmar recogida</div>
+              <canvas id="qr-canvas" style="display:none"></canvas>
+              <div style="display:inline-block;background:#fff;padding:8px 10px;border-radius:8px"><svg id="kit-bc"></svg></div>
+              <div style="font-size:11px;color:var(--txt2);margin-top:8px">Scan at pickup and return (Home → Scan a kit) / Escanear al recoger y al regresar</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
               <button class="btn btn-p btn-sm" onclick="printDymoLabel()">🖨 Print Dymo Label</button>
@@ -1382,8 +1383,8 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
 <div class="ov" id="edit-job-modal">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-t"><span>✏ Edit Active Job</span><button class="xbtn" onclick="closeModal('edit-job-modal')">✕</button></div>
-    <div class="info-b" style="margin-bottom:13px">Update job details or add items to an active checkout.</div>
+    <div class="modal-t"><span>✏ Edit kit (add material the crew asked for)</span><button class="xbtn" onclick="closeModal('edit-job-modal')">✕</button></div>
+    <div class="info-b" style="margin-bottom:13px">Works while the kit is packed or out on site: add what the crew asked for, change quantities or take items off. Stock is adjusted.</div>
     <div class="fg"><label>Job # / Número</label><input type="text" id="ej-jobnum" placeholder="CRM job #, e.g. 10301"></div>
     <div class="fg"><label>Tech Names</label><input type="text" id="ej-names" placeholder="Mike R., Sara L."></div>
     <div class="fg"><label>Vehicle</label><input type="text" id="ej-vehicle" placeholder="Truck #3..."></div>
@@ -2231,7 +2232,7 @@ function kitSteps(k) { const c = kitStepIdx(k);
 const kNo = k => k.hcp_job_number ? '#' + esc(String(k.hcp_job_number).replace(/^#/, '')) + ' · ' : '';
 function kitMenu(k) { return `<details style="display:inline-block;position:relative"><summary class="btn btn-xs btn-s" style="list-style:none;cursor:pointer">⋯</summary>
   <div style="position:absolute;right:0;z-index:20;background:var(--sur);border:1px solid var(--bdr);border-radius:9px;padding:6px;display:grid;gap:4px;min-width:150px">
-    <button class="btn btn-xs btn-s" onclick="editActiveJob('${k.id}')">✏ Edit kit</button>
+    <button class="btn btn-xs btn-s" onclick="editActiveJob('${k.id}')">✏ Add / edit items</button>
     <button class="btn btn-xs btn-s" onclick="openDispatchVerify('${k.id}')">✓ Verify dispatch</button>
     <button class="btn btn-xs btn-s" onclick="printDymoLabelById('${k.id}')">🖨 Label</button>
     <button class="btn btn-xs btn-r" onclick="deleteActiveJob('${k.id}','${esc(k.hcp_job_number || 'this job')}')">🗑 Delete</button></div></details>`; }
@@ -2256,7 +2257,7 @@ function renderKitBoard() {
         <div class="acts"><button class="btn btn-xs btn-p" onclick="kitPickedUp('${k.id}')">🚚 Picked up</button><button class="btn btn-xs btn-s" onclick="printActiveJobSlip('${k.id}')">🖨</button>${kitMenu(k)}</div></div>`).join(''), 'Nothing waiting for pickup') +
     col('🚚 Out on site', out.length, lateN ? `<span class="kb-chip" style="background:var(--amb-dim);color:var(--amb)">${lateN} late</span>` : '', out.map(k => `<div class="kb-card ${late.has(k.id) ? 'amb' : ''}" data-kb="out"><b class="t">${kNo(k)}${esc(k.building_client || k.site_address || 'No site')}</b>
         <div>${kitSteps(k)} <span style="color:${late.has(k.id) ? 'var(--amb)' : 'var(--txt2)'};font-weight:${late.has(k.id) ? 700 : 400}">${late.has(k.id) ? 'late · ' : ''}out ${osDays(k) ?? 0}d</span></div><div style="color:var(--txt2)">👷 ${esc(k.tech_names || '--')}</div>
-        <div class="acts"><button class="btn btn-xs btn-p" onclick="osReturn('${k.id}')">📥 Return</button><button class="btn btn-xs btn-s" onclick="printActiveJobSlip('${k.id}')">🖨</button>${kitMenu(k)}</div></div>`).join(''), 'Nothing out right now') +
+        <div class="acts"><button class="btn btn-xs btn-p" onclick="osReturn('${k.id}')">📥 Return</button><button class="btn btn-xs btn-s" onclick="editActiveJob('${k.id}')" title="Add material the crew asked for">✏ Items</button><button class="btn btn-xs btn-s" onclick="printActiveJobSlip('${k.id}')">🖨</button>${kitMenu(k)}</div></div>`).join(''), 'Nothing out right now') +
     col('📥 Back', back.length, '', back.map(k => { const bad = (k.job_items || []).filter(i => i.return_condition && i.return_condition !== 'good').length;
       return `<div class="kb-card" data-kb="back"><b class="t">${kNo(k)}${esc(k.building_client || k.site_address || 'No site')}</b><div>${kitSteps(k)} <span style="color:var(--txt2)">${fd(k.returned_at)}</span></div>
         ${bad ? `<div style="color:var(--amb);font-weight:700">⚠ ${bad} item${bad > 1 ? 's' : ''} flagged</div>` : '<div style="color:var(--grn)">All good</div>'}</div>`; }).join(''), 'Returns from the last 3 days show here');
@@ -2276,7 +2277,8 @@ function openKitScan(k) {
     <div style="margin-bottom:10px">${kitSteps(k)} <b>${done ? 'Back ' + fd(k.returned_at) : k.status === 'picked_up' ? 'Out on site' : 'Packed'}</b> · 👷 ${esc(k.tech_names || '--')}</div>
     <div style="display:grid;gap:8px">${done ? '<div class="info info-t">This kit was already returned.</div>' : ''}
       ${k.status === 'packed' ? `<button class="btn btn-p btn-full" style="font-size:16px;padding:14px" onclick="kitPickedUp('${k.id}')">🚚 Picked up: the crew is taking it / Lo recogen</button>` : ''}
-      ${done ? '' : `<button class="btn ${k.status === 'packed' ? 'btn-s' : 'btn-p'} btn-full" style="font-size:16px;padding:14px" onclick="document.getElementById('kit-scan').remove();osReturn('${k.id}')">📥 It's back: return it / Regresó</button>`}</div></div>`;
+      ${done ? '' : `<button class="btn ${k.status === 'packed' ? 'btn-s' : 'btn-p'} btn-full" style="font-size:16px;padding:14px" onclick="document.getElementById('kit-scan').remove();osReturn('${k.id}')">📥 It's back: return it / Regresó</button>`}
+      ${done ? '' : `<button class="btn btn-s btn-full" onclick="document.getElementById('kit-scan').remove();editActiveJob('${k.id}')">✏ Add material / edit items</button>`}</div></div>`;
   d.addEventListener('click', e => { if (e.target === d) d.remove(); });
   document.body.appendChild(d);
 }
@@ -2996,7 +2998,7 @@ async function completeCheckout() {
 
     // Generate QR
     setTimeout(()=>{
-      QRCode.toCanvas(document.getElementById('qr-canvas'), qrData, {width:200,margin:2,color:{dark:'#000000',light:'#ffffff'}}, ()=>{});
+      try { JsBarcode(document.getElementById('kit-bc'), String(jobData.hcp_job_number || jobData.id).replace(/^#/, ''), { format:'CODE128', height:50, width:2, displayValue:true, fontSize:14, margin:2 }); } catch (e) {}
     },100);
 
     // Reset form
@@ -3381,6 +3383,7 @@ function renderOnSite() {
           <div style="font-size:12px;color:var(--txt2);font-family:var(--mono);margin-top:2px">👷 ${esc(k.tech_names || '--')}${k.vehicle ? ' · 🚗 ' + esc(k.vehicle) : ''} · for ${fd(k.scheduled_date)}${d != null ? ` · ${k.status === 'picked_up' ? 'out' : 'packed'} ${d === 0 ? 'today' : d + ' day' + (d > 1 ? 's' : '')}` : ''}</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-xs btn-s" onclick="editActiveJob('${k.id}')">✏ Add / edit items</button>
           <button class="btn btn-xs btn-s" onclick="printActiveJobSlip('${k.id}')">🖨 Packet</button>
           <button class="btn btn-xs btn-p" onclick="osReturn('${k.id}')">📥 Return</button></div>
       </div>
@@ -6771,7 +6774,7 @@ function editActiveJob(jobId) {
   const job = jobs.find(j => j.id === jobId);
   if (!job) return;
   editingJob = job;
-  editingJobItems = (job.job_items || []).map(i => ({...i}));
+  editingJobItems = (job.job_items || []).filter(i => !i.is_removed).map(i => ({...i}));
   document.getElementById('ej-jobnum').value = job.hcp_job_number || '';
   document.getElementById('ej-names').value = job.tech_names || '';
   document.getElementById('ej-vehicle').value = job.vehicle || '';
@@ -6794,6 +6797,7 @@ function renderEditJobItems() {
       <div style="flex:1;min-width:0">
         <span style="font-size:12px;font-weight:600">${esc(item.item_name)}</span>${pn}
       </div>
+      ${item.id ? '' : '<span style="font-size:9px;color:var(--acc);font-weight:700">NEW</span>'}
       <input type="number" min="1" value="${item.quantity}" style="width:54px;text-align:center;font-size:13px;font-family:var(--mono);color:var(--acc);background:var(--acc-dim);border:1px solid rgba(245,166,35,.3);border-radius:6px;padding:4px;margin:0"
         onchange="editingJobItems[${i}].quantity=parseInt(this.value)||1">
       <button class="kit-item-remove" onclick="editingJobItems.splice(${i},1);renderEditJobItems()">✕</button>
@@ -6846,26 +6850,38 @@ function addItemToActiveJob() {
 async function saveActiveJobEdits(saveToTemplate = false) {
   if (!editingJob) return;
   setSyncStatus('syncing');
+  const ok = r => { if (r && r.error) throw new Error(r.error.message); return r; };   // a save that fails must say so
   try {
-    await db.from('wh_jobs').update({
+    // items already on the kit: quantity changed → update; taken out → marked removed (kept for the record);
+    // warehouse stock follows the difference for stocked (bulk) items, same as packing
+    const before = (editingJob.job_items || []).filter(i => !i.is_removed), keep = new Map(editingJobItems.filter(i => i.id).map(i => [i.id, i]));
+    const stock = new Map(), addStock = (invId, d) => { if (invId && d) stock.set(invId, (stock.get(invId) || 0) + d); };
+    for (const o of before) { const n = keep.get(o.id);
+      const was = Number(o.quantity) || 0, inv0 = o.inventory_item_id;   // read before saving
+      if (!n) { ok(await db.from('wh_job_items').update({ is_removed: true }).eq('id', o.id)); addStock(inv0, was); }
+      else if ((Number(n.quantity) || 0) !== was) { const now = Number(n.quantity) || 1; ok(await db.from('wh_job_items').update({ quantity: now }).eq('id', o.id)); addStock(inv0, was - now); } }
+    for (const n of editingJobItems.filter(i => !i.id)) addStock(n.inventory_item_id, -(Number(n.quantity) || 0));
+    for (const [invId, d] of stock) { const inv = inventoryItems.find(i => i.id === invId);
+      if (inv && inv.tracking_type === 'bulk') ok(await db.from('wh_inventory_items').update({ quantity_on_hand: Math.max(0, (inv.quantity_on_hand || 0) + d), updated_at: new Date().toISOString() }).eq('id', inv.id)); }
+    ok(await db.from('wh_jobs').update({
       hcp_job_number: document.getElementById('ej-jobnum').value.trim() || null,
       tech_names: document.getElementById('ej-names').value.trim(),
       vehicle: document.getElementById('ej-vehicle').value.trim(),
       notes: document.getElementById('ej-notes').value.trim(),
       updated_at: new Date().toISOString()
-    }).eq('id', editingJob.id);
+    }).eq('id', editingJob.id));
 
     // Insert new items added to job
     const newItems = editingJobItems.filter(i => !i.id);
     if (newItems.length) {
-      await db.from('wh_job_items').insert(newItems.map(i => ({
+      ok(await db.from('wh_job_items').insert(newItems.map(i => ({
         job_id: editingJob.id,
         item_name: i.item_name,
         item_name_es: i.item_name_es || i.item_name,
         quantity: i.quantity,
         is_oneoff: !i.inventory_item_id,
         inventory_item_id: i.inventory_item_id || null
-      })));
+      }))));
 
       // Save new items to template if requested
       if (saveToTemplate && newItems.length) {
@@ -6917,7 +6933,7 @@ async function saveActiveJobEdits(saveToTemplate = false) {
     closeModal('edit-job-modal');
     setSyncStatus('ok');
     await loadAll();
-    if (!saveToTemplate || !newItems.length) alert('✓ Job updated!');
+    if (!saveToTemplate || !newItems.length) alert('✓ Kit updated. Reprint the packet if the crew needs the new list. / Kit actualizado.');
   } catch(e) {
     setSyncStatus('error');
     alert('Error saving changes: ' + e.message);
@@ -7553,21 +7569,13 @@ async function completeScanReturn() {
 
 // ─── PRINTING ───────────────────────────────────────────────
 function printSlip(lang) {
-  const tid=document.getElementById('co-template').value;
-  const tpl=templates.find(t=>t.id===tid);
   const active=coItems.filter(i=>!i.removed);
-  if (!active.length||!tpl){alert('No items to print.');return;}
-  const es=lang==='es';
-  const rows=[
-    [es?'Proyecto':'Project', es?tpl.name_es||tpl.name:tpl.name],
-    [es?'Número de Trabajo':'WO #', document.getElementById('co-jobnum').value||'--'],
-    [es?'Sitio':'Site', document.getElementById('co-addr').value||'--'],
-    [es?'Edificio':'Building', document.getElementById('co-bldg').value||'--'],
-    [es?'Vehículo':'Vehicle', document.getElementById('co-vehicle').value||'--'],
-    [es?'Técnicos':'Techs', (document.getElementById('co-names').value||'--')+' ('+document.getElementById('co-numtechs').value+')'],
-    [es?'Fecha':'Date', document.getElementById('co-date').value||'--']
-  ];
-  showPrint(buildSlipHTML(es?'Recibo de Materiales':'Kit Checkout Slip', rows, active, coKeys, es, getSlipWarnings(active, tid, es)));
+  if (!active.length){alert('No items to print.');return;}
+  const job = { hcp_job_number: document.getElementById('co-jobnum').value, building_client: document.getElementById('co-bldg').value, site_address: document.getElementById('co-addr').value,
+    scheduled_date: document.getElementById('co-date').value, tech_names: document.getElementById('co-names').value, vehicle: document.getElementById('co-vehicle').value, notes: document.getElementById('co-notes').value,
+    template_id: (selectedTemplateIds[0] || document.getElementById('co-template').value), keys: coKeys,
+    job_items: active.map(i => ({ item_name: i.name, item_name_es: i.name_es, quantity: i.qty, inventory_item_id: i.inventory_item_id })) };
+  printKitPacket(job, lang);   // not saved yet: no barcode until it is
 }
 
 // Warnings surfaced on the printed dispatch checklist: items currently out
@@ -7602,21 +7610,11 @@ function getSlipWarnings(items, templateId, es) {
 // to get a material list PDF was from the checkout wizard at the moment of
 // packing, with no way back to it once a job was already active.
 async function printActiveJobSlip(jobId, lang) {
-  const j = jobs.find(x => x.id === jobId);
+  const j = jobs.find(x => x.id === jobId) || (history || []).find(x => x.id === jobId);
   if (!j) return;
-  if (j.visit_id && await printJobPacket(j, lang || ((localStorage.getItem('kt_wh_lang') || 'en') === 'es' ? 'es' : 'en'))) return;
-  const es = lang === 'es' || (!lang && (localStorage.getItem('kt_wh_lang') || 'en') === 'es');
-  const rows = [
-    [es?'Proyecto':'Project', j.building_client || j.site_address || '--'],
-    ['WO #', j.hcp_job_number || '--'],
-    [es?'Sitio':'Site', j.site_address || '--'],
-    [es?'Edificio':'Building', j.building_client || '--'],
-    [es?'Vehículo':'Vehicle', j.vehicle || '--'],
-    [es?'Técnicos':'Techs', (j.tech_names||'--') + ' (' + (j.num_techs||1) + ')'],
-    [es?'Fecha':'Date', j.scheduled_date || '--']
-  ];
-  const items = (j.job_items || []).map(i => ({name: i.name||i.item_name, qty: i.qty||i.quantity, inventory_item_id: i.inventory_item_id}));
-  showPrint(buildSlipHTML(es?'Recibo de Materiales':'Kit Checkout Slip', rows, items, j.keys||[], es, getSlipWarnings(items, j.template_id, es)));
+  lang = lang || ((localStorage.getItem('kt_wh_lang') || 'en') === 'es' ? 'es' : 'en');
+  if (j.visit_id && await printJobPacket(j, lang)) return;
+  printKitPacket(j, lang);
 }
 
 // The whole job packet (page 1 job sheet from the CRM schedule, page 2 this kit) for kits packed from a CRM visit.
@@ -7627,12 +7625,26 @@ async function crmVisitFor(job) {
   if (!hit) { try { const { data } = await db.rpc('warehouse_jobs', { p_days: 60 }); hit = (data || []).map(crmJob).find(x => x.visit_id === job.visit_id); } catch (e) {} }
   return hit ? hit._raw : null;
 }
+// One sheet for every kit (Arturo 10/19): the job packet. CRM kits get page 1 from the schedule; kits typed by hand (or
+// packed in the old app) get page 1 from the kit itself. Page 2 is always the same kit slip: barcode, items, keys, warnings.
+function kitSlipExtras(job, items, lang) {
+  const es = lang === 'es', w = (() => { try { return getSlipWarnings(items.map(i => ({ name: i.name, inventory_item_id: i.inventory_item_id })), job.template_id, es); } catch (e) { return []; } })();
+  return { keys: (job.keys || []).map(k => ({ tag: k.tag || k.key_tag || k.name || '', qty: k.qty || k.quantity || 1 })).filter(k => k.tag), warnings: w };
+}
+const kitItemsOf = job => (job.job_items || []).filter(i => !i.is_removed && !i.removed).map(i => ({ name: i.item_name || i.name, name_es: i.item_name_es || i.name_es, qty: i.quantity || i.qty || 1, inventory_item_id: i.inventory_item_id }));
+function kitPacketData(job, lang) {
+  const items = kitItemsOf(job);
+  return { job: String(job.hcp_job_number || '').replace(/^#/, ''), client: job.building_client || '', address: job.site_address || '', date: job.scheduled_date,
+    techs: String(job.tech_names || '').split(',').map(x => x.trim()).filter(Boolean), vehicle: job.vehicle, scope: [], notes: job.notes, rentals: [],
+    kit: { id: job.id, items, ...kitSlipExtras(job, items, lang) } };
+}
+function printKitPacket(job, lang) { JP.open(kitPacketData(job, lang), lang === 'es' ? 'es' : 'en'); }
 async function printJobPacket(job, lang) {
   const v = await crmVisitFor(job); if (!v) return false;
-  const items = (job.job_items || []).filter(i => !i.is_removed && !i.removed).map(i => ({ name: i.item_name || i.name, name_es: i.item_name_es || i.name_es, qty: i.quantity || i.qty || 1 }));
+  const items = kitItemsOf(job);
   JP.open({ job: v.job_no || job.hcp_job_number || '', num: v.num || '', client: [v.client, v.property].filter(Boolean).join(' · '), address: v.address || job.site_address || '',
     date: v.visit_date, endDate: v.end_date, skipWeekends: v.skip_weekends, start: v.start_time, end: v.end_time, techs: v.techs || [], vehicle: v.vehicle || job.vehicle,
-    scope: v.scope || [], notes: v.notes, rentals: v.rentals || [], kit: { id: job.id, items } }, lang === 'es' ? 'es' : 'en');
+    scope: v.scope || [], notes: v.notes, rentals: v.rentals || [], kit: { id: job.id, items, ...kitSlipExtras(job, items, lang) } }, lang === 'es' ? 'es' : 'en');
   return true;
 }
 // Every CRM job on a day (tomorrow by default) in one print: job sheet + its kit slip, each packet on new pages
@@ -7657,18 +7669,7 @@ async function printDayPackets(lang, day) {
 async function printSlipLastJob(lang) {
   if (!lastJob) return;
   if (lastJob.visit_id && await printJobPacket(lastJob, lang)) return;
-  const es=lang==='es';
-  const rows=[
-    [es?'Proyecto':'Project', es?lastJob.projName:lastJob.projName],
-    ['WO #', lastJob.hcp_job_number||'--'],
-    [es?'Sitio':'Site', lastJob.site_address||'--'],
-    [es?'Edificio':'Building', lastJob.building_client||'--'],
-    [es?'Vehículo':'Vehicle', lastJob.vehicle||'--'],
-    [es?'Técnicos':'Techs', (lastJob.tech_names||'--')+' ('+lastJob.num_techs+')'],
-    [es?'Fecha':'Date', lastJob.scheduled_date||'--']
-  ];
-  const items=(lastJob.job_items||[]).map(i=>({name:i.item_name,qty:i.quantity,inventory_item_id:i.inventory_item_id}));
-  showPrint(buildSlipHTML(es?'Recibo de Materiales':'Kit Checkout Slip', rows, items, lastJob.keys||[], es, getSlipWarnings(items, lastJob.template_id, es)));
+  printKitPacket(lastJob, lang);
 }
 
 // A physical, blank paper form for manual checkouts — for warehouse staff
@@ -7715,39 +7716,6 @@ function printBlankChecklist(lang) {
   showPrint(html);
 }
 
-function buildSlipHTML(title, rows, items, keys, es, warnings) {
-  return `
-    <h2 style="margin-bottom:4px;font-size:18px">${title}</h2>
-    <p style="color:#666;font-size:11px;margin-bottom:16px">PF Building Services — ${new Date().toLocaleString()}</p>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">
-      ${rows.map(([k,v])=>`<tr><td style="font-weight:bold;padding:4px 8px;border:1.5px solid #000;width:35%">${k}</td><td style="padding:4px 8px;border:1.5px solid #000">${v}</td></tr>`).join('')}
-    </table>
-    ${warnings&&warnings.length?`<div style="border:1px solid #d97706;background:#fff7ed;border-radius:6px;padding:8px 12px;margin-bottom:14px">
-      <div style="font-weight:bold;font-size:11px;color:#9a3412;margin-bottom:4px">⚠ ${es?'Avisos':'Warnings'}</div>
-      ${warnings.map(w=>`<div style="font-size:10px;color:#7c2d12">• ${w}</div>`).join('')}
-    </div>`:''}
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">
-      <tr style="background:#1a237e;color:#fff">
-        <th style="padding:6px 8px;text-align:left">${es?'Artículo':'Item'}</th>
-        <th style="padding:6px 8px;text-align:center;width:60px">Qty</th>
-        <th style="padding:6px 8px;text-align:center;width:80px">[ ] OK</th>
-      </tr>
-      ${items.map((it,i)=>`<tr style="background:${i%2===0?'#fff':'#f8f8f8'}"><td style="padding:6px 8px;border:1.5px solid #000">${it.name||it.item_name}</td><td style="padding:6px 8px;border:1.5px solid #000;text-align:center">${it.qty||it.quantity}</td><td style="padding:6px 8px;border:1.5px solid #000;text-align:center">[ ]</td></tr>`).join('')}
-    </table>
-    ${keys&&keys.length?`<p style="font-weight:bold;margin-bottom:6px;font-size:11px">${es?'Llaves':'Keys'}:</p><table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">${keys.map((k,i)=>`<tr style="background:${i%2===0?'#fff':'#f8f8f8'}"><td style="padding:5px 8px;border:1.5px solid #000">${k.tag}</td><td style="padding:5px 8px;border:1.5px solid #000;text-align:center">${k.qty}</td><td style="padding:5px 8px;border:1.5px solid #000;text-align:center">[ ]</td></tr>`).join('')}</table>`:''}
-    <p style="font-weight:bold;margin-bottom:6px;font-size:11px">${es?'Material Adicional Necesario / No Necesario':'Additional Material Needed / Not Needed'}:</p>
-    <div style="margin-bottom:16px">
-      <div style="border-bottom:1.5px solid #000;height:22px"></div>
-      <div style="border-bottom:1.5px solid #000;height:22px"></div>
-      <div style="border-bottom:1.5px solid #000;height:22px"></div>
-    </div>
-    <p style="font-size:11px;color:#555;margin-bottom:20px;font-style:italic">${es?'Confirmo haber recibido todos los artículos en buen estado.':'I confirm receipt of all items in good condition.'}</p>
-    <div style="display:flex;gap:40px;margin-top:16px">
-      <div><div style="border-top:1.5px solid #000;width:220px;padding-top:5px;font-size:10px;color:#666">${es?'Firma del técnico + fecha':'Tech signature + date'}</div></div>
-      <div><div style="border-top:1.5px solid #000;width:220px;padding-top:5px;font-size:10px;color:#666">${es?'Supervisor que verificó + hora':'Supervisor verifying + time'}</div></div>
-    </div>
-  `;
-}
 
 function buildReturnSlip(job, items, retBy, att) {
   return `
