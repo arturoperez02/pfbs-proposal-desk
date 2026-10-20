@@ -1355,6 +1355,18 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 48. Warehouse-only login (Settings → Warehouse, not Team): opening the CRM lands in the Warehouse; first sign-in creates a password
+{
+  const pg = await b.newPage({ viewport: { width: 1100, height: 900 } }); pg.on('pageerror', e => errs.push('wh-only: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(() => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [], error: null }) }; });
+  await pg.goto(BASE + '?u=tablet@pfb.com'); await pg.waitForURL(/warehouse\.html/, T);
+  assert.ok(!(await pg.evaluate(() => document.body.innerText.includes('Not on the team list'))), 'no dead end');
+  await pg.goto(BASE + 'warehouse.html?u=tablet@pfb.com&setpw=1'); await pg.waitForSelector('#mfaScr input[type="password"]', T);
+  assert.match(await pg.textContent('#mfaScr'), /Create your password/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

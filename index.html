@@ -4161,7 +4161,7 @@ function renderSettings(){
       <div class="note">Until this is set, each visit uses the HCP job # typed on the job. On switch-over day, set it to HousecallPro's last job # + 1: from then on every visit gets the next number, like HCP.</div></div>`:''}
     ${['Owner','Admin'].includes(role())?`<div class="card listedit"><h3>Warehouse</h3><div id="whList" class="note" style="margin:0 0 6px">Loading…</div>
       <label class="f">Add a warehouse login<span style="display:flex;gap:6px"><input id="s-wh" type="email" placeholder="warehouse@pfbuildingservices.com" style="flex:1"><button type="button" class="btn small" id="whAdd">Add</button></span></label>
-      <div class="note">The warehouse tablet signs in to the <b>Warehouse</b> tab with this email and its password (create it once in Supabase → Authentication → Add user). It can use the warehouse and read upcoming jobs: no prices, proposals, clients or money. The office team doesn't need to be listed here.</div>
+      <div class="note"><b>For warehouse staff and the tablet: the Warehouse only.</b> Add their email here (not under Team). They open <b>apps.pfbservices.com/warehouse.html</b>, type the email, tap <b>Email me a link</b> and create a password. They can use the warehouse and read upcoming jobs: no prices, proposals, clients or money, and if they open the CRM they land back in the Warehouse. The office team doesn't need to be listed here.</div>
       ${role()==='Owner'?`<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn ghost small" id="whCopy">Copy data from the old KitTracker</button></div><div id="whCopyMsg" class="note" style="margin:4px 0 0"></div>`:''}</div>`:''}
     ${crewCardHTML(crew(), skillList(), ro)}
     ${ta('s-esterms','Spanish words for crew emails', (S.esTerms||[]).join('\n'), 'English | Español, one per line (e.g. "Loading dock | Andén de carga"). The scope of work is translated with these plus the built-in list for techs who get their schedule in Spanish.')}
@@ -5289,7 +5289,8 @@ async function start(session){
   if(new URLSearchParams(location.search).get('setpw')==='1'){ const u=new URL(location.href); u.searchParams.delete('setpw'); history.replaceState(null,'',u.href); if(window.MFA) await MFA.setPassword(sb,{first:true}); }
   const email=(session.user.email||'').toLowerCase();
   const {data:m}=await sb.from('team_members').select('*').eq('email',email).eq('active',true).maybeSingle();
-  if(!m){ show('blocked'); $('#blockedMsg').textContent=`${email} isn't on the PF Building Services team list. Ask Arturo to add you.`; return; }
+  if(!m){ const w=await sb.rpc('can_warehouse'); if(w.data===true){ location.replace('warehouse.html'); return; }   // a warehouse-only login: straight to the Warehouse
+    show('blocked'); $('#blockedMsg').textContent=`${email} isn't on the PF Building Services team list. Ask Arturo to add you.`; return; }
   me=m; $('#whoName').textContent=`${m.name} · ${m.role}`; $('#who').hidden=false; $('#tabs').hidden=false; $('#gbar').hidden=false;
   const nx=new URLSearchParams(location.search).get('next'); if(nx && /^reports\.html(#\/r\/[a-z0-9-]+)?$|^reports\.html\?num=PFBS-\d+$/i.test(nx)){ location.replace(nx); return; }
   $('#rptLink').hidden = !['Owner','Admin','Senior Estimator'].includes(m.role);
