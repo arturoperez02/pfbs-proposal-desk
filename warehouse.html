@@ -4356,7 +4356,7 @@ async function saveTpl() {
   try {
     const ok = r => { if (r && r.error) throw new Error(r.error.message); return r; };   // a save that fails must say so, not look saved
     if (editTplIdx) {
-      ok(await db.from('wh_templates').update({name, name_es:document.getElementById('tpl-name-es').value.trim(), description:document.getElementById('tpl-desc').value.trim(), updated_at:new Date().toISOString()}).eq('id', editTplIdx);
+      ok(await db.from('wh_templates').update({name, name_es:document.getElementById('tpl-name-es').value.trim(), description:document.getElementById('tpl-desc').value.trim(), updated_at:new Date().toISOString()}).eq('id', editTplIdx));
       ok(await db.from('wh_template_items').delete().eq('template_id', editTplIdx));
       ok(await db.from('wh_template_items').insert(items.map(item => ({...item, template_id:editTplIdx}))));
     } else {
