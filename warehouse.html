@@ -10,9 +10,9 @@
 <title>Warehouse — PF Building Services</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js"></script>
-<script src="mfa.js"></script>
-<script src="jobsheet.js"></script>
+<script src="config.js?v=20261020b"></script>
+<script src="mfa.js?v=20261020b"></script>
+<script src="jobsheet.js?v=20261020b"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
@@ -3577,7 +3577,7 @@ async function completeReturn(jobId) {
 function printLastReturn() {
   if (!lastReturnData) return;
   const {job,items,retBy,att}=lastReturnData;
-  showPrint(buildReturnSlip(job,items,retBy,att));
+  returnedPacket({ ...job, returned_at: new Date().toISOString() }, items, retBy, att);
 }
 
 // ─── INVENTORY ──────────────────────────────────────────────
@@ -4107,9 +4107,12 @@ function getVehicles() {
 async function loadVehicles() {
   try {
     const { data } = await db.from('wh_vehicles').select('*').eq('is_active', true).order('sort_order');
-    if (data && data.length) {
+    if (data) {
+      // the table is the list; names only kept in the old settings (before the table) are added to it once
+      const old = JSON.parse(localStorage.getItem('kt_vehicles') || '[]').filter(n => n && !data.some(v => v.name === n));
       vehiclesList = data;
-      localStorage.setItem('kt_vehicles', JSON.stringify(data.map(v => v.name)));
+      if (!data.length && old.length && !window._vehMigrated) { window._vehMigrated = true; for (const n of old) await addVehicleNamed(n, { quiet: true }); }
+      localStorage.setItem('kt_vehicles', JSON.stringify(vehiclesList.map(v => v.name)));
     }
   } catch(e) { console.warn('Vehicles load:', e.message); }
 }
@@ -4132,7 +4135,7 @@ async function saveVehicles(list) {
 async function addVehicleFull(vehicleData) {
   // Add vehicle with full details
   try {
-    const { data } = await db.from('wh_vehicles').insert({
+    const { data, error: error_ } = await db.from('wh_vehicles').insert({
       name: vehicleData.name,
       type: vehicleData.type || 'van',
       year: vehicleData.year || null,
@@ -4142,6 +4145,7 @@ async function addVehicleFull(vehicleData) {
       notes: vehicleData.notes || null,
       sort_order: vehiclesList.length + 1
     }).select();
+    if (error_) { alert('The vehicle did NOT save: ' + error_.message); return null; }
     if (data) {
       vehiclesList.push(data[0]);
       localStorage.setItem('kt_vehicles', JSON.stringify(vehiclesList.map(v => v.name)));
@@ -4180,10 +4184,7 @@ function handleVehicleSelChange(sel, textInputId) {
     const name = prompt('Enter new vehicle name:\nIngresa el nombre del vehículo:');
     if (name && name.trim()) {
       const vehicles = getVehicles();
-      if (!vehicles.includes(name.trim())) {
-        vehicles.push(name.trim());
-        saveVehicles(vehicles);
-      }
+      if (!vehicles.includes(name.trim())) { addVehicleNamed(name.trim()).then(() => fillAllVehicleDropdowns()); }
       // Rebuild all dropdowns with new vehicle
       fillAllVehicleDropdowns();
       sel.value = name.trim();
@@ -4246,36 +4247,34 @@ function renderVehiclesList() {
     </div>
   `).join('');
 }
-function settingsAddVehicle() {
-  const name = document.getElementById('new-vehicle-name').value.trim();
+// Settings → Vehicles (Arturo 10/20: an added truck didn't show): save to the vehicles table first, then redraw; say if it failed.
+// The CRM reads the same table (Schedule vehicle list).
+async function settingsAddVehicle() {
+  const inp = document.getElementById('new-vehicle-name'), name = inp.value.trim();
   if (!name) { alert('Enter vehicle name.'); return; }
-  const vehicles = getVehicles();
-  if (vehicles.includes(name)) { alert('Already in list.'); return; }
-  vehicles.push(name);
-  saveVehicles(vehicles);
-  document.getElementById('new-vehicle-name').value = '';
-  renderVehiclesList();
-  fillVehicleSelect();
+  if (getVehicles().some(v => v.toLowerCase() === name.toLowerCase())) { alert('Already in list.'); return; }
+  const v = await addVehicleNamed(name); if (!v) return;
+  inp.value = ''; renderVehiclesList(); fillVehicleSelect();
 }
-function deleteVehicle(i) {
+async function addVehicleNamed(name, { quiet = false } = {}) {
+  const { data, error } = await db.from('wh_vehicles').insert({ name, sort_order: vehiclesList.length + 1, is_active: true }).select();
+  if (error || !data || !data[0]) { if (quiet) return null; alert('The vehicle did NOT save: ' + ((error && error.message) || 'no answer') + '\nCheck the connection and try again.'); return null; }
+  vehiclesList.push(data[0]); localStorage.setItem('kt_vehicles', JSON.stringify(vehiclesList.map(x => x.name)));
+  return data[0];
+}
+async function deleteVehicle(i) {
+  const name = getVehicles()[i]; if (!name) return;
+  const v = vehiclesList.find(x => x.name === name);
+  if (v) { await deactivateVehicle(v.id, name); renderVehiclesList(); return; }   // archived (history kept), not deleted
   if (!confirm('Remove this vehicle?')) return;
-  const vehicles = getVehicles();
-  vehicles.splice(i, 1);
-  saveVehicles(vehicles);
-  renderVehiclesList();
-  fillVehicleSelect();
+  const list = getVehicles().filter(x => x !== name); localStorage.setItem('kt_vehicles', JSON.stringify(list)); syncSettingToSupabase('kt_vehicles', list);
+  renderVehiclesList(); fillVehicleSelect();
 }
 function openAddVehicle() {
   const name = prompt('Enter vehicle name (e.g. Truck #1, White Ford F-150):');
   if (!name || !name.trim()) return;
-  const vehicles = getVehicles();
-  if (vehicles.includes(name.trim())) { alert('Already in list.'); return; }
-  vehicles.push(name.trim());
-  saveVehicles(vehicles);
-  fillVehicleSelect();
-  document.getElementById('co-vehicle-sel').value = name.trim();
-  document.getElementById('co-vehicle').value = name.trim();
-  alert('✓ Vehicle added! You can manage all vehicles in Settings.');
+  if (getVehicles().includes(name.trim())) { alert('Already in list.'); return; }
+  addVehicleNamed(name.trim()).then(v => { if (!v) return; fillVehicleSelect(); document.getElementById('co-vehicle-sel').value = name.trim(); document.getElementById('co-vehicle').value = name.trim(); });
 }
 
 // ─── SETTINGS ───────────────────────────────────────────────
@@ -4761,33 +4760,9 @@ function renderHistory() {
 }
 
 function printHistorySlip(jobId) {
-  const job = history.find(h => h.id === jobId);
+  const job = (history || []).find(h => h.id === jobId);
   if (!job) return;
-  const items = (job.job_items||[]).map(i => ({name:i.item_name, qty:i.quantity||i.returned_quantity}));
-  const rows = [
-    ['Project', job.job_type||'--'],
-    ['WO #', job.hcp_job_number||'--'],
-    ['Site', job.building_client||job.site_address||'--'],
-    ['Techs', (job.tech_names||'--')+' ('+job.num_techs+')'],
-    ['Date', fd(job.scheduled_date)],
-    ['Vehicle', job.vehicle||'--'],
-    ['Completed', fd(job.returned_at)]
-  ];
-  const company = getCompanyName();
-  const html = `<h2 style="margin-bottom:4px;font-size:18px">Kit Checkout Slip</h2>
-    <p style="color:#666;font-size:11px;margin-bottom:16px">${company} — ${new Date().toLocaleString()}</p>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">
-      ${rows.map(([k,v])=>`<tr><td style="font-weight:bold;padding:4px 8px;border:1.5px solid #000;width:35%">${k}</td><td style="padding:4px 8px;border:1.5px solid #000">${v}</td></tr>`).join('')}
-    </table>
-    <table style="width:100%;border-collapse:collapse;font-size:11px">
-      <tr style="background:#1a237e;color:#fff"><th style="padding:6px 8px;text-align:left">Item</th><th style="padding:6px 8px;text-align:center;width:60px">Qty</th><th style="padding:6px 8px;text-align:center;width:80px">Condition</th></tr>
-      ${(job.job_items||[]).map((it,i)=>`<tr style="background:${i%2===0?'#fff':'#f8f8f8'}">
-        <td style="padding:5px 8px;border:1.5px solid #000">${it.item_name}</td>
-        <td style="padding:5px 8px;border:1.5px solid #000;text-align:center">${it.quantity}</td>
-        <td style="padding:5px 8px;border:1.5px solid #000;text-align:center;font-weight:bold;color:${it.return_condition==='good'?'#16a34a':it.return_condition==='repair'?'#d97706':'#dc2626'}">${it.return_condition?it.return_condition.toUpperCase():'--'}</td>
-      </tr>`).join('')}
-    </table>`;
-  showPrint(html);
+  returnedPacket(job, job.job_items || [], '', job.attendant_name || '');
 }
 
 function toggleHistDetail(id) {
@@ -7710,6 +7685,17 @@ function kitPacketData(job, lang) {
     kit: { id: job.id, items, ...kitSlipExtras(job, items, lang) } };
 }
 function printKitPacket(job, lang) { JP.open(kitPacketData(job, lang), lang === 'es' ? 'es' : 'en'); }
+// a kit that came back: the same packet, with the Back column filled in from the return (qty back + condition) — one record
+function returnedPacket(job, items, retBy, att, lang) {
+  lang = lang || ((localStorage.getItem('kt_wh_lang') || 'en') === 'es' ? 'es' : 'en'); const es = lang === 'es';
+  const C = { good: es ? 'bien' : 'good', repair: es ? 'reparar' : 'repair', lost: es ? 'perdido' : 'lost' };
+  const d = kitPacketData({ ...job, job_items: items || job.job_items }, lang);
+  d.kit.items = (items || job.job_items || []).filter(i => !i.is_removed).map(i => { const c = i.return_condition || 'good', q = i.returned_quantity ?? i.quantity;
+    return { name: i.item_name, name_es: i.item_name_es, qty: i.quantity, back: `${q} · ${C[c] || c}`, bad: c !== 'good' || Number(q) < Number(i.quantity), note: i.return_notes || '' }; });
+  d.kit.returned = { on: fd(job.returned_at || new Date().toISOString()), by: retBy && retBy !== '-' && retBy !== '--' ? retBy : '', att: att && att !== '-' ? att : '' };
+  d.kit.warnings = [];
+  JP.open(d, lang);
+}
 async function printJobPacket(job, lang) {
   const v = await crmVisitFor(job); if (!v) return false;
   const items = kitItemsOf(job);
@@ -7748,69 +7734,12 @@ async function printSlipLastJob(lang) {
 // hand-writing items, so nothing depends on a job or template being
 // selected in the app first.
 function printBlankChecklist(lang) {
-  const es = lang === 'es';
-  const line = '_'.repeat(28);
-  const rows = [
-    [es ? 'Número de Trabajo' : 'Job #', line],
-    [es ? 'Sitio' : 'Site', line],
-    [es ? 'Edificio' : 'Building', line],
-    [es ? 'Vehículo' : 'Vehicle', line],
-    [es ? 'Técnicos' : 'Techs', line],
-    [es ? 'Fecha' : 'Date', line]
-  ];
-  const blankItems = Array.from({length: 20}, () => ({name: '', qty: ''}));
-  let html = `
-    <h2 style="margin-bottom:4px;font-size:18px">${es ? 'Recibo de Materiales (En Blanco)' : 'Kit Checkout Slip (Blank)'}</h2>
-    <p style="color:#666;font-size:11px;margin-bottom:16px">${getCompanyName()}</p>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">
-      ${rows.map(([k]) => `<tr><td style="font-weight:bold;padding:8px 8px;border:1.5px solid #000;width:35%">${k}</td><td style="padding:8px 8px;border:1.5px solid #000">&nbsp;</td></tr>`).join('')}
-    </table>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">
-      <tr style="background:#1a237e;color:#fff">
-        <th style="padding:6px 8px;text-align:left">${es ? 'Artículo' : 'Item'}</th>
-        <th style="padding:6px 8px;text-align:center;width:60px">Qty</th>
-        <th style="padding:6px 8px;text-align:center;width:80px">[ ] OK</th>
-      </tr>
-      ${blankItems.map((_, i) => `<tr style="background:${i % 2 === 0 ? '#fff' : '#f8f8f8'}"><td style="padding:9px 8px;border:1.5px solid #000">&nbsp;</td><td style="padding:9px 8px;border:1.5px solid #000;text-align:center">&nbsp;</td><td style="padding:9px 8px;border:1.5px solid #000;text-align:center">[ ]</td></tr>`).join('')}
-    </table>
-    <p style="font-weight:bold;margin-bottom:6px;font-size:11px">${es ? 'Material Adicional Necesario / No Necesario' : 'Additional Material Needed / Not Needed'}:</p>
-    <div style="margin-bottom:16px">
-      <div style="border-bottom:1.5px solid #000;height:22px"></div>
-      <div style="border-bottom:1.5px solid #000;height:22px"></div>
-      <div style="border-bottom:1.5px solid #000;height:22px"></div>
-    </div>
-    <div style="display:flex;gap:40px;margin-top:16px">
-      <div><div style="border-top:1.5px solid #000;width:220px;padding-top:5px;font-size:10px;color:#666">${es ? 'Firma del técnico + fecha' : 'Tech signature + date'}</div></div>
-      <div><div style="border-top:1.5px solid #000;width:220px;padding-top:5px;font-size:10px;color:#666">${es ? 'Supervisor que verificó + hora' : 'Supervisor verifying + time'}</div></div>
-    </div>
-  `;
-  showPrint(html);
+  JP.open({ blank: true, job: '', client: '', address: '', techs: [], scope: [], rentals: [],
+    kit: { items: Array.from({ length: 18 }, () => ({ name: '', qty: '' })), keys: [], warnings: [] } }, lang === 'es' ? 'es' : 'en');
 }
 
 
-function buildReturnSlip(job, items, retBy, att) {
-  return `
-    <h2 style="margin-bottom:4px;font-size:18px">Return Record / Registro de Devolución</h2>
-    <p style="color:#666;font-size:11px;margin-bottom:16px">PF Building Services — ${new Date().toLocaleString()}</p>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">
-      ${[['WO #',job.hcp_job_number||'--'],['Site',job.building_client||job.site_address||'--'],['Vehicle',job.vehicle||'--'],['Returned by',retBy],['Attendant',att]].map(([k,v])=>`<tr><td style="font-weight:bold;padding:4px 8px;border:1.5px solid #000;width:35%">${k}</td><td style="padding:4px 8px;border:1.5px solid #000">${v}</td></tr>`).join('')}
-    </table>
-    <table style="width:100%;border-collapse:collapse;font-size:11px">
-      <tr style="background:#1a237e;color:#fff"><th style="padding:6px 8px;text-align:left">Item</th><th style="padding:6px 8px;text-align:center">Qty</th><th style="padding:6px 8px;text-align:center">Returned</th><th style="padding:6px 8px;text-align:center">Condition</th><th style="padding:6px 8px;text-align:left">Notes</th></tr>
-      ${items.map((it,i)=>`<tr style="background:${i%2===0?'#fff':'#f8f8f8'}"><td style="padding:5px 8px;border:1.5px solid #000">${it.item_name}</td><td style="padding:5px 8px;border:1.5px solid #000;text-align:center">${it.quantity}</td><td style="padding:5px 8px;border:1.5px solid #000;text-align:center">${it.returned_quantity??it.quantity}</td><td style="padding:5px 8px;border:1.5px solid #000;text-align:center;font-weight:bold;color:${it.return_condition==='good'?'#16a34a':it.return_condition==='repair'?'#d97706':'#dc2626'}">${(it.return_condition||'good').toUpperCase()}</td><td style="padding:5px 8px;border:1.5px solid #000;font-size:10px">${it.return_notes||'--'}</td></tr>`).join('')}
-    </table>
-    <div style="display:flex;gap:40px;margin-top:24px">
-      <div><div style="border-top:1.5px solid #000;width:200px;padding-top:5px;font-size:10px;color:#666">Attendant + date</div></div>
-      <div><div style="border-top:1.5px solid #000;width:200px;padding-top:5px;font-size:10px;color:#666">Tech signature + date</div></div>
-    </div>
-  `;
-}
-
-function printReturnPreview(jobId) {
-  const job=jobs.find(j=>j.id===jobId);
-  if (!job) return;
-  showPrint(buildReturnSlip(job,job.job_items||[],'-','-'));
-}
+function printReturnPreview(jobId) { printActiveJobSlip(jobId); }
 
 function closePrintArea() {
   document.getElementById('print-area').style.display = 'none';

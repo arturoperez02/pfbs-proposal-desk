@@ -1602,6 +1602,32 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 58. Warehouse: every print is the same packet (History, return record, blank form: no old "Kit Checkout Slip"); a returned kit fills the Back column;
+//     Settings → Vehicles: an added truck shows right away (it used to redraw before the save finished) and reaches the vehicles table the CRM reads
+{
+  const pg = await b.newPage({ viewport: { width: 1200, height: 900 } }); pg.on('pageerror', e => errs.push('sheets/vehicles: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(() => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [], error: null }) };
+    window.MOCK_KITS = [{ id: 'kH', status: 'completed', hcp_job_number: '10089', building_client: '415 Natoma', site_address: '415 Natoma St', tech_names: 'Cesar Lopez, Juan Gaspar', scheduled_date: '2026-08-31', returned_at: '2026-09-02T20:00:00Z', attendant_name: 'Ana', job_type: 'Bosun Chair' }];
+    window.MOCK_KIT_ITEMS = [{ id: 'h1', job_id: 'kH', item_name: 'Bosun Chair', quantity: 2, returned_quantity: 2, return_condition: 'good' }, { id: 'h2', job_id: 'kH', item_name: 'Carabiners', quantity: 4, returned_quantity: 3, return_condition: 'lost', return_notes: 'one left on roof' }]; });
+  await pg.goto(BASE + 'warehouse.html'); await pg.waitForTimeout(1200);
+  const txt = async () => { const t = await pg.textContent('#jsWrap'); await pg.click('#jsWrap [data-js="x"]'); return t; };
+  await pg.evaluate(() => printHistorySlip('kH')); await pg.waitForSelector('#jsWrap', { state: 'attached', timeout: 8000 });
+  const h = await txt();
+  assert.ok(/Job sheet[\s\S]*10089[\s\S]*Kit slip[\s\S]*Returned Sep 2, 2026[\s\S]*checked in by Ana[\s\S]*Bosun Chair[\s\S]*2 · good[\s\S]*Carabiners[\s\S]*one left on roof[\s\S]*3 · lost/.test(h) && !/Kit Checkout Slip/.test(h), 'history print = the packet with Back filled: ' + h.slice(0, 200));
+  await pg.evaluate(() => { lastReturnData = { job: history.find(x => x.id === 'kH'), items: history.find(x => x.id === 'kH').job_items, retBy: 'Rigo', att: 'Ana' }; printLastReturn(); });
+  const r = await txt(); assert.ok(/Kit slip[\s\S]*by Rigo[\s\S]*3 · lost/.test(r) && !/Return Record/.test(r), 'return record = the packet');
+  await pg.evaluate(() => printBlankChecklist('en'));
+  const bl = await txt(); assert.ok(/Job sheet[\s\S]*Kit slip/.test(bl) && !/Kit Checkout Slip/.test(bl), 'blank form = the packet');
+  assert.equal(await pg.evaluate(() => typeof buildReturnSlip), 'undefined', 'old return slip gone');
+  // vehicles
+  await pg.evaluate(async () => { document.getElementById('new-vehicle-name').value = 'Truck #12'; await settingsAddVehicle(); });
+  assert.match(await pg.textContent('#vehicles-list'), /Truck #12/, 'shows right away');
+  assert.ok(await pg.evaluate(() => DBX.wh_vehicles.some(v => v.name === 'Truck #12' && v.is_active)), 'saved in the vehicles table (the CRM reads it)');
+  assert.ok(await pg.evaluate(() => [...document.getElementById('co-vehicle-sel').options].some(o => o.value === 'Truck #12')), 'in the New Job vehicle list');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

@@ -5,7 +5,7 @@ fs.mkdirSync(B, { recursive: true });
 const cfg = '<script>window.PFBS_CONFIG={SUPABASE_URL:"https://x.supabase.co",SUPABASE_ANON_KEY:"k",...(new URLSearchParams(location.search).has("sp")?{SP_CLIENT_ID:"c",SP_TENANT_ID:"t"}:{})}; window.MOCK_EMAIL=new URLSearchParams(location.search).get("u")||"";</script>';
 const swap = s => s
   .replace('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>', '<script src="mock.js"></script>')
-  .replace('<script src="config.js"></script>', cfg)
+  .replace(/<script src="config\.js(\?v=[\w.-]+)?"><\/script>/, cfg)
   .replace('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', 'jspdf.umd.min.js')
   .replace('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf.umd.min.js')
   .replace('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js', 'jspdf.plugin.autotable.min.js');
