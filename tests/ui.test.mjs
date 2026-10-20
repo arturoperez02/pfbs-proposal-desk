@@ -1570,6 +1570,38 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 57. Warehouse: a repeat job copies the exact kit packed last time (search by address / client / job #), the site is offered automatically,
+//     and History → Pack this again copies the items too (it used to only guess the template)
+{
+  const pg = await b.newPage({ viewport: { width: 1200, height: 900 } }); pg.on('pageerror', e => errs.push('copy kit: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
+  await pg.addInitScript(() => { const d = new Date(Date.now() + 864e5), tm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [{ id: 'v901', job_no: '10901', visit_date: tm, client: '415 Natoma', address: '415 Natoma Street, San Francisco', techs: ['Manuel'], work: [], equipment: [], scope: ['Pressure washing'], rentals: [] }], error: null }) };
+    window.MOCK_KITS = [{ id: 'kOld', status: 'completed', hcp_job_number: '10089', building_client: '415 Natoma', site_address: '415 Natoma Street, San Francisco', tech_names: 'Manuel Ochoa, Cesar Lopez', num_techs: 2, vehicle: 'Truck #10', scheduled_date: '2026-08-30', returned_at: '2026-09-02T20:00:00Z', job_type: 'Pressure Washing' },
+      { id: 'kOther', status: 'completed', hcp_job_number: '10050', building_client: 'Other Tower', site_address: '9 Elm St', scheduled_date: '2026-07-01' }];
+    window.MOCK_KIT_ITEMS = [{ id: 'o1', job_id: 'kOld', item_name: 'Harness', quantity: 2 }, { id: 'o2', job_id: 'kOld', item_name: '3/8 PW Hose @ 100\'', quantity: 6 }, { id: 'o3', job_id: 'kOld', item_name: 'Old wand', quantity: 1, is_removed: true },
+      { id: 'o4', job_id: 'kOther', item_name: 'Squeegee', quantity: 4 }]; });
+  await pg.goto(BASE + 'warehouse.html'); await pg.waitForTimeout(1200);
+  // picking the CRM job offers last time's kit for that site
+  await pg.evaluate(() => { _schedJobs = [scheduledJobsCache[0]]; window._skipPick = true; nav('checkout'); applyScheduleJob(0); });
+  await pg.waitForSelector('#co-copy-hint button', { state: 'attached', timeout: 8000 });
+  assert.match(await pg.textContent('#co-copy-hint'), /packed before: #10089 · Aug 30, 2026, 2 items/);
+  await pg.evaluate(() => document.querySelector('#co-copy-hint button').click());
+  assert.deepEqual(await pg.evaluate(() => coItems.filter(i => !i.removed).map(i => i.name + ':' + i.qty)), ['Harness:2', "3/8 PW Hose @ 100':6"], 'exact items, removed ones left out');
+  assert.equal(await pg.$eval('#co-jobnum', e => e.value), '10901', 'the new job # stays');
+  // search by address or job #
+  await pg.evaluate(() => openCopyKit('natoma')); await pg.waitForSelector('#copykit-list [data-ck]', { state: 'attached', timeout: 8000 });
+  assert.equal(await pg.$$eval('#copykit-list [data-ck]', e => e.length), 1, 'only the matching site');
+  await pg.evaluate(async () => { document.getElementById('copykit-q').value = '10050'; await searchCopyKit(); });
+  assert.match(await pg.textContent('#copykit-list'), /#10050 · Other Tower/);
+  await pg.evaluate(() => closeModal('copykit-modal'));
+  // History → Pack this again
+  await pg.evaluate(() => { startAnotherJob(); openRerun('kOld'); document.getElementById('rr-jobnum').value = '10950'; confirmRerun(); });
+  assert.deepEqual(await pg.evaluate(() => [document.getElementById('co-jobnum').value, document.getElementById('co-addr').value, coItems.length, !!coCopy]), ['10950', '415 Natoma Street, San Francisco', 2, true]);
+  await pg.evaluate(() => goStep(2)); assert.ok(await pg.evaluate(() => document.getElementById('s2').classList.contains('active')), 'no template needed when a kit is copied');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

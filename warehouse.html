@@ -584,6 +584,8 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
               </div>
               <input type="hidden" id="co-template">
             </div>
+            <div id="co-copy-hint"></div>
+            <button type="button" class="btn btn-s btn-full" style="margin:-4px 0 12px" onclick="openCopyKit()">📋 Copy a past kit (same site or job) / Copiar un kit anterior</button>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <div class="fg"><label>No. of Techs</label><input type="number" id="co-numtechs" min="1" max="30" value="1" oninput="calcKit()"></div>
               <div class="fg"><label>Date / Fecha</label><input type="date" id="co-date"></div>
@@ -603,7 +605,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
               </div>
             </div>
           </div>
-            <div class="fg"><label>Site Address / Dirección</label><input type="text" id="co-addr" placeholder="123 Main St"></div>
+            <div class="fg"><label>Site Address / Dirección</label><input type="text" id="co-addr" onchange="suggestPastKit(this.value)" placeholder="123 Main St"></div>
             <div class="fg"><label>Building / Client / Edificio</label><input type="text" id="co-bldg" placeholder="Acme Tower..."></div>
             <div class="fg"><label>Vehicle / Vehículo</label>
             <div style="display:flex;gap:6px">
@@ -1240,6 +1242,17 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
   </div>
 </div>
 
+<!-- COPY A PAST KIT (Arturo 10/20): repeat jobs start from what was really packed last time -->
+<div class="ov" id="copykit-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-t"><span>📋 Copy a past kit</span><button class="xbtn" onclick="closeModal('copykit-modal')">✕</button></div>
+    <div class="info-t" style="margin-bottom:10px">Search by address, building / client or job #. The kit's items and quantities are copied; change anything before saving.</div>
+    <input type="search" id="copykit-q" placeholder="🔍 e.g. 415 Natoma, or 10089" oninput="clearTimeout(window._ckT);window._ckT=setTimeout(searchCopyKit,250)" style="margin-bottom:10px">
+    <div id="copykit-list"></div>
+  </div>
+</div>
+
 <!-- SETTINGS MODAL -->
 <div class="ov" id="settings-modal">
   <div class="modal">
@@ -1365,7 +1378,7 @@ hr { border: none; border-top: 1px solid var(--bdr); margin: 14px 0; }
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-t"><span id="rerun-modal-t">Re-run Job</span><button class="xbtn" onclick="closeModal('rerun-modal')">✕</button></div>
-    <div class="info-b" style="margin-bottom:13px">Same site, techs, and kit — just update the job number and date.</div>
+    <div class="info-b" style="margin-bottom:13px">Same site, techs and the exact items packed last time: just update the job number and date. Change any item on the next step.</div>
     <div id="rerun-summary" style="background:var(--sur2);border-radius:9px;padding:12px;font-size:12px;font-family:var(--mono);line-height:2;margin-bottom:14px"></div>
     <div class="fg"><label>New Job # / Número de Trabajo</label><input type="text" id="rr-jobnum" placeholder="CRM job #, e.g. 10302"></div>
     <div class="fg"><label>New Date / Fecha</label><input type="date" id="rr-date"></div>
@@ -2013,7 +2026,8 @@ let invFilter = 'all';
 
 // ─── HELPERS ────────────────────────────────────────────────
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
-const fd = d => d ? new Date(d).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '--';
+// a plain date ("2026-08-30") is that day here, not midnight UTC (which showed the day before in California)
+const fd = d => d ? (/^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? new Date(d + 'T12:00:00') : new Date(d)).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '--';
 const today = () => ymd(new Date());   // local date (toISOString gave tomorrow's date after 5 pm in California)
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const getPin = () => localStorage.getItem('kt_pin') || '0525';
@@ -2283,6 +2297,69 @@ function openKitScan(k) {
   document.body.appendChild(d);
 }
 function scanKitBox(inp) { const k = kitFromScan(inp.value); inp.value = ''; if (k) openKitScan(k); else alert('No kit matches that code / job #.'); }
+// ─── COPY A PAST KIT ────────────────────────────────────────
+// Every kit ever packed stays in the database (History shows the latest; this searches all of them). Copying takes the
+// exact items + quantities that went out last time (after any edits), so a repeat job is packed the same way.
+let coCopy = null;   // { id, label, job_type, items:[{item_name,item_name_es,quantity,inventory_item_id}] }
+const ckStr = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+async function findPastKits(q, limit = 25) {
+  const t = ckStr(q); if (t.length < 2) return [];
+  const words = t.split(' ').filter(w => w.length > 1), num = String(q).replace(/^#/, '').trim();
+  const hit = k => { const h = ckStr(`${k.site_address} ${k.building_client} ${k.hcp_job_number}`); return words.every(w => h.includes(w)) || String(k.hcp_job_number || '').replace(/^#/, '') === num; };
+  let rows = [];
+  try { const w0 = words.sort((a, b) => b.length - a.length)[0] || t;
+    const r = await db.from('wh_jobs').select('*, job_items:wh_job_items(*)').or(`site_address.ilike.%${w0}%,building_client.ilike.%${w0}%,hcp_job_number.ilike.%${num}%`).order('created_at', { ascending: false }).limit(200);
+    if (!r.error) rows = r.data || []; } catch (e) {}
+  const all = new Map(); for (const k of rows.concat(history || [], jobs || [])) if (k && k.id && !all.has(k.id)) all.set(k.id, k);
+  return [...all.values()].filter(k => (k.job_items || []).some(i => !i.is_removed) && hit(k))
+    .sort((a, b) => String(b.scheduled_date || b.created_at || '').localeCompare(String(a.scheduled_date || a.created_at || ''))).slice(0, limit);
+}
+function pastKitCard(k, i) { const items = (k.job_items || []).filter(x => !x.is_removed);
+  return `<div class="sched-job-card" data-ck="${i}"><div class="sched-job-icon">📋</div><div class="sched-job-info">
+    <div class="sched-job-title">${kNo(k)}${esc(k.building_client || k.site_address || 'No site')}</div>
+    <div class="sched-job-sub">${fd(k.scheduled_date || k.created_at)} · ${esc(k.site_address || '')}<br>👷 ${esc(k.tech_names || '--')} · ${items.length} items: ${esc(items.slice(0, 4).map(x => x.quantity + '× ' + x.item_name).join(', '))}${items.length > 4 ? '…' : ''}</div></div></div>`; }
+function openCopyKit(q) {
+  const v = q != null ? q : (document.getElementById('co-addr').value || document.getElementById('co-bldg').value || document.getElementById('co-jobnum').value || '');
+  document.getElementById('copykit-q').value = String(v).split(',')[0].trim();
+  document.getElementById('copykit-list').innerHTML = '';
+  document.getElementById('copykit-modal').classList.add('open');
+  searchCopyKit(); setTimeout(() => document.getElementById('copykit-q').focus(), 50);
+}
+async function searchCopyKit() {
+  const el = document.getElementById('copykit-list'), q = document.getElementById('copykit-q').value;
+  if (ckStr(q).length < 2) { el.innerHTML = '<div style="font-size:12px;color:var(--txt2)">Type at least 2 letters or a job #.</div>'; return; }
+  el.innerHTML = '<div class="sched-loading"><div class="spinner"></div>Searching…</div>';
+  const L = await findPastKits(q); window._ckList = L;
+  el.innerHTML = L.length ? L.map(pastKitCard).join('') : '<div class="empty"><div class="ei">📋</div><p>No past kits match</p></div>';
+  el.querySelectorAll('[data-ck]').forEach(c => c.addEventListener('click', () => useCopyKit(window._ckList[+c.dataset.ck])));
+}
+// copy the past kit into the job being packed (the site / job # / crew already on the form stay; blanks fill from the old kit)
+function useCopyKit(k, { fill = true } = {}) {
+  if (!k) return;
+  coCopy = { id: k.id, label: `${kNo(k)}${k.building_client || k.site_address || ''} · ${fd(k.scheduled_date || k.created_at)}`, job_type: k.job_type || '',
+    items: (k.job_items || []).filter(i => !i.is_removed).map(i => ({ item_name: i.item_name, item_name_es: i.item_name_es, quantity: Number(i.quantity) || 1, inventory_item_id: i.inventory_item_id || null })) };
+  if (fill) { const set = (id, v) => { const e = document.getElementById(id); if (e && !e.value.trim() && v) { e.value = v; return true; } return false; };
+    set('co-addr', k.site_address); set('co-bldg', k.building_client); set('co-vehicle', k.vehicle);
+    if (set('co-names', k.tech_names)) document.getElementById('co-numtechs').value = k.num_techs || 1; }
+  // the copy replaces the template pick (pick templates again to add more on top)
+  selectedTemplateIds = []; document.querySelectorAll('#co-template-options input[type=checkbox]').forEach(c => c.checked = false); updateTemplateDisplay();
+  closeModal('copykit-modal'); calcKit(); showCopyHint();
+}
+function showCopyHint() {
+  const el = document.getElementById('co-copy-hint'); if (!el) return;
+  el.innerHTML = coCopy ? `<div class="info info-t" style="margin-bottom:10px">📋 <b>Copied from ${esc(coCopy.label)}</b>: ${coCopy.items.length} items · <a href="#" onclick="event.preventDefault();coCopy=null;showCopyHint();calcKit()">undo</a></div>` : '';
+}
+// a CRM job / typed address that was packed before: offer last time's kit (one tap)
+async function suggestPastKit(addr, jobNo) {
+  const el = document.getElementById('co-copy-hint'); if (!el || coCopy) return;
+  const key = String(addr || '').split(',')[0].trim(); if (ckStr(key).length < 4) { el.innerHTML = ''; return; }
+  const L = (await findPastKits(key, 5)).filter(k => String(k.hcp_job_number || '') !== String(jobNo || '_') || k.status === 'completed');
+  if (coCopy || !L.length) return;
+  window._ckList = L; const k = L[0], n = (k.job_items || []).filter(i => !i.is_removed).length;
+  el.innerHTML = `<div class="info info-b" style="margin-bottom:10px">↩ This site was packed before: <b>${kNo(k)}${fd(k.scheduled_date || k.created_at)}</b>, ${n} items.
+    <button type="button" class="btn btn-p btn-xs" style="margin-left:6px" onclick="useCopyKit(window._ckList[0],{fill:false})">Use the same kit</button>
+    ${L.length > 1 ? `<button type="button" class="btn btn-s btn-xs" onclick="openCopyKit('${esc(key).replace(/'/g, '')}')">See all ${L.length}</button>` : ''}</div>`;
+}
 function boardPack(visitId) { const sj = (scheduledJobsCache || []).find(x => String(x.visit_id) === String(visitId)); if (!sj) return;
   window._skipPick = true; nav('checkout'); setTimeout(() => { _schedJobs = [sj]; applyScheduleJob(0); }, 50); }
 async function kitPickedUp(id) {
@@ -2752,12 +2829,12 @@ function calcKit() {
     const sel = document.getElementById('co-template');
     if (sel && sel.value) tids = [sel.value];
   }
-  if (!tids.length) {
-    document.getElementById('kit-preview').innerHTML = '<div style="color:var(--txt2);font-size:12px;padding:6px">Select at least one template.</div>';
+  if (!tids.length && !coCopy) {
+    document.getElementById('kit-preview').innerHTML = '<div style="color:var(--txt2);font-size:12px;padding:6px">Select at least one template, or copy a past kit.</div>';
     return;
   }
-  // Merge items from all selected templates
-  const merged = [];
+  // Merge items from all selected templates (a copied past kit goes first, with its exact quantities)
+  const merged = (coCopy ? coCopy.items : []).map(i => ({ id: uid(), name: i.item_name, name_es: i.item_name_es || i.item_name, qty: i.quantity, removed: false, oneoff: !i.inventory_item_id, inventory_item_id: i.inventory_item_id, from_template: 'Copied kit' }));
   tids.forEach(tid => {
     const tpl = templates.find(t => t.id === tid);
     if (!tpl || !tpl.template_items) return;
@@ -2866,7 +2943,7 @@ const STEP_LABELS = ['Job Details','Review Kit','Confirm & Sign Out','Print Labe
 // so finishing a job and starting the next one left old data and the
 // wizard stuck on Step 4.
 function startAnotherJob() {
-  coItems = []; coJobMaterials = []; try { showCoLifts([]); } catch (e) {}
+  coItems = []; coJobMaterials = []; coCopy = null; try { showCoLifts([]); showCopyHint(); } catch (e) {}
   coKeys = [];
   selectedTemplateIds = [];
   lastJob = null;
@@ -2887,8 +2964,8 @@ function startAnotherJob() {
 
 function goStep(n) {
   if (n===2) {
-    if (!selectedTemplateIds.length && !document.getElementById('co-template').value) {
-      alert('Select at least one project template.');return;
+    if (!selectedTemplateIds.length && !document.getElementById('co-template').value && !coCopy) {
+      alert('Select at least one project template, or copy a past kit.');return;
     }
     calcKit(); coKeys=[]; renderCoKeys(); renderCoKeyRegistryPicks();
   }
@@ -2929,7 +3006,7 @@ async function completeCheckout() {
     (document.getElementById('co-template').value ? [document.getElementById('co-template').value] : []);
   const tid = tids[0] || '';
   const tpl = templates.find(t=>t.id===tid);
-  const tplNames = tids.map(id => templates.find(t=>t.id===id)?.name).filter(Boolean).join(' + ') || tpl?.name || '--';
+  const tplNames = tids.map(id => templates.find(t=>t.id===id)?.name).filter(Boolean).join(' + ') || tpl?.name || (coCopy && coCopy.job_type) || '--';
   const num=parseInt(document.getElementById('co-numtechs').value)||1;
   const active=coItems.filter(i=>!i.removed);
   const jobId=uid();
@@ -2994,7 +3071,7 @@ async function completeCheckout() {
       });
     }
 
-    lastJob = { ...jobData, job_items: itemRows, keys: coKeys, projName: tpl.name };
+    lastJob = { ...jobData, job_items: itemRows, keys: coKeys, projName: tpl ? tpl.name : tplNames };
 
     // Generate QR
     setTimeout(()=>{
@@ -3011,7 +3088,7 @@ async function completeCheckout() {
     document.getElementById('co-numtechs').value='1';
     document.getElementById('co-date').value=today();
     document.getElementById('hcp-hint').style.display='none';
-    coItems=[]; coKeys=[]; coJobMaterials=[]; try { showCoLifts([]); } catch (e) {}
+    coItems=[]; coKeys=[]; coJobMaterials=[]; coCopy=null; try { showCoLifts([]); showCopyHint(); } catch (e) {}
     goStep(4);
     setSyncStatus('ok');
     await loadAll();
@@ -4674,7 +4751,7 @@ function renderHistory() {
           </div>`;
         }).join('') : '<div style="font-size:12px;color:var(--txt2)">No item detail available</div>'}
         <div style="display:flex;gap:8px;margin-top:10px">
-          <button class="btn btn-s btn-xs" onclick="event.stopPropagation();openRerun('${h.id}')">↩ Re-run job</button>
+          <button class="btn btn-p btn-xs" onclick="event.stopPropagation();openRerun('${h.id}')">↩ Pack this again</button>
           <button class="btn btn-warn btn-xs" onclick="event.stopPropagation();undoReturn('${h.id}')">⚠ Undo Return</button>
           <button class="btn btn-s btn-xs" onclick="event.stopPropagation();printHistorySlip('${h.id}')">🖨 Print Slip</button>
         </div>
@@ -7159,7 +7236,7 @@ function renderKeysPanel() {
 let rerunJob = null;
 
 function openRerun(jobId) {
-  const job = history.find(h => h.id === jobId);
+  const job = (history || []).find(h => h.id === jobId) || (window._ckList || []).find(h => h.id === jobId);
   if (!job) return;
   rerunJob = job;
   document.getElementById('rerun-modal-t').textContent = `Re-run: ${job.hcp_job_number||'Job'}`;
@@ -7178,7 +7255,10 @@ function openRerun(jobId) {
 function confirmRerun() {
   if (!rerunJob) return;
   const j = rerunJob;
+  closeModal('rerun-modal');
+  window._skipPick = true; nav('checkout'); goStep(1);
   document.getElementById('co-jobnum').value = document.getElementById('rr-jobnum').value || '';
+  delete document.getElementById('co-jobnum').dataset.visit;
   document.getElementById('co-date').value = document.getElementById('rr-date').value || today();
   document.getElementById('co-names').value = document.getElementById('rr-names').value || j.tech_names || '';
   document.getElementById('co-numtechs').value = j.num_techs || 1;
@@ -7186,16 +7266,7 @@ function confirmRerun() {
   document.getElementById('co-bldg').value = j.building_client || '';
   document.getElementById('co-vehicle').value = document.getElementById('rr-vehicle').value || j.vehicle || '';
   document.getElementById('co-notes').value = '';
-  const sel = document.getElementById('co-template');
-  const opt = [...sel.options].find(o => o.text.toLowerCase().includes((j.job_type||'').toLowerCase()));
-  if (opt) { sel.value = opt.value; calcKit(); }
-  closeModal('rerun-modal');
-  nav('checkout');
-  goStep(1);
-  const hint = document.getElementById('hcp-hint');
-  hint.className = 'info info-t';
-  hint.innerHTML = `↩ <strong>Re-run from history</strong> — ${esc(j.building_client||j.site_address||'--')} · Original: ${fd(j.scheduled_date)}`;
-  hint.style.display = '';
+  useCopyKit(j, { fill: false });   // the exact items that went out last time (not just the template)
 }
 
 // ─── REORDER QUEUE ──────────────────────────────────────────
@@ -8204,6 +8275,7 @@ function applyScheduleJob(idx) {
   if (j.visit_id) document.getElementById('co-jobnum').dataset.visit = j.visit_id; else delete document.getElementById('co-jobnum').dataset.visit;
   coJobMaterials = j._src === 'CRM' ? (j.materials || []) : [];
   showCoLifts(j._src === 'CRM' ? ((j._raw || {}).rentals || []) : []);
+  coCopy = null; showCopyHint(); suggestPastKit(j.address || j.client, j.jobNum);
   if (j.date) document.getElementById('co-date').value = j.date;
   document.getElementById('co-addr').value = j.address || '';
   document.getElementById('co-bldg').value = j.client || '';
