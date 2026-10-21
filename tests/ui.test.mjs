@@ -1690,6 +1690,44 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 61. Third-party management: an owner client "Managed by" Cushman & Wakefield picks the manager's contacts on its buildings;
+//     a building's CC list (besides the main contact) is copied on the proposal email; the manager's page lists the owners it runs
+{
+  const CW = { id: 'c-cw', name: 'Cushman & Wakefield', kind: 'Management company', aliases: [], active: true, managed_by: null };
+  const OW = { id: 'c-601', name: '601 12th Street Owner LLC (C&W)', kind: 'Business', aliases: ['Cushman & Wakefield'], active: true, managed_by: 'c-cw', billing_email: 'ap@601owner.example' };
+  const K = [{ id: 'k-nir', client_id: 'c-cw', name: 'Nirmal Patel', email: 'nirmal@cw.example', is_primary: true, active: true },
+             { id: 'k-eng', client_id: 'c-cw', name: 'Sam Engineer', email: 'sam@cw.example', active: true },
+             { id: 'k-asst', client_id: 'c-601', name: 'Jo Assistant', email: 'jo@601owner.example', active: true }];
+  const PR = [{ id: 'p-601', client_id: 'c-601', name: '601 12th St', address: '601 12th St\nOakland, CA', contact_id: 'k-nir', cc_contact_ids: [], active: true }];
+  const prop = { num: 'PFBS-1090', sent_by: 'Arturo', client: '601 12th Street Owner LLC (C&W)', client_id: 'c-601', property_id: 'p-601', property: '601 12th St', contact_name: 'Nirmal Patel', contact_email: 'nirmal@cw.example', status: 'Needs Review', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: 800 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('managed by: ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr/, r => r.abort());
+  await pg.addInitScript(([C, K, PR, x]) => { window.MOCK_CLIENTS = C; window.MOCK_CONTACTS = K; window.MOCK_PROPS = PR; window.MOCK_EXTRA = [x];
+    try { if (window.name !== 't61') { sessionStorage.clear(); window.name = 't61'; } } catch (_) {} }, [[CW, OW], K, PR, prop]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="clients"]'); await pg.click('tr[data-cl="c-601"]'); await pg.waitForSelector('#clP select[data-pf="contact_id"]', T);
+  const opts = await pg.$$eval('#clP select[data-pf="contact_id"] option', o => o.map(x => x.textContent));
+  assert.ok(opts.includes('Nirmal Patel · Cushman & Wakefield') && opts.includes('Jo Assistant'), 'the manager\'s contacts can be picked: ' + opts.join(' | '));
+  assert.equal(await pg.$eval('#cl-mgr', e => e.value), 'c-cw'); assert.match(await pg.textContent('#clientsBody'), /Managed by[\s\S]*Cushman & Wakefield/);
+  // CC: Sam (manager's engineer) + Jo (owner's assistant)
+  await pg.click('#clP [data-ccedit]'); await pg.waitForSelector('dialog.ask [name="cc_k-eng"]', T);
+  await pg.check('dialog.ask [name="cc_k-eng"]'); await pg.check('dialog.ask [name="cc_k-asst"]'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(400);
+  assert.deepEqual(await pg.evaluate(() => DBX.properties.find(x => x.id === 'p-601').cc_contact_ids), ['k-asst', 'k-eng'], 'CC saved on the building');
+  assert.match(await pg.textContent('#clP [data-cclab]'), /Jo Assistant, Sam Engineer/);
+  // the manager's page lists its owners
+  await pg.click('#clientsBody [data-clopen="c-cw"]'); await pg.waitForTimeout(300);
+  assert.match(await pg.textContent('#clientsBody'), /Manages 1 owner[\s\S]*601 12th Street Owner LLC/);
+  // proposal email: To = main contact, CC = the building's list
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-1090"]'); await pg.waitForSelector('#emailD', T);
+  const opened = []; await pg.exposeFunction('__open', u => opened.push(u)); await pg.evaluate(() => { window.open = (u) => { window.__open(u); return null; }; });
+  await pg.click('#emailD'); await pg.waitForSelector('#emCc', T);
+  assert.equal(await pg.$eval('#emCc', e => e.value), 'jo@601owner.example; sam@cw.example');
+  await pg.click('[data-emsend="owa"]'); await pg.waitForTimeout(300);
+  assert.ok(opened.some(u => /to=nirmal%40cw\.example&cc=jo%40601owner\.example%3B%20sam%40cw\.example&subject=/.test(u)), 'Outlook opens with the CC: ' + opened.join(' '));
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

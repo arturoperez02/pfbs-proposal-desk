@@ -2036,6 +2036,7 @@ async function emailOpen(){
   box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Email the ${isBudgetDoc(draft)?'budget proposal':'proposal'}</b><button type="button" class="btn ghost small" id="emClose">Close</button></div>
     ${pre?'<div class="note" style="color:var(--warn)">This proposal has not been reviewed yet. Send it for review before emailing the client.</div>':''}
     <label class="f">To<input id="emTo" type="email" value="${esc(e.to)}" placeholder="client@company.com"></label>
+    <label class="f">CC <span class="note" style="margin:0;font-weight:400">from the building's CC list; take anyone off for this email</span><input id="emCc" value="${esc(ccEmailsFor(draft))}" placeholder="nobody"></label>
     <label class="f">Subject<input id="emSubj" value="${esc(e.subject)}"></label>
     <label class="f">Message<textarea id="emBody" rows="11">${esc(e.body)}</textarea></label>
     <div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn small" data-emsend="owa">Open in Outlook</button><button type="button" class="btn ghost small" data-emsend="mailto">Open in mail app</button><button type="button" class="btn ghost small" data-emsend="copy">Copy text</button></div>
@@ -2044,11 +2045,11 @@ async function emailOpen(){
   if(!pre) makePdf(draft);
 }
 async function emailSend(kind){
-  const to=$('#emTo').value.trim(), subj=$('#emSubj').value, body=$('#emBody').value, enc=encodeURIComponent;
-  if(kind==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(subj)}&body=${enc(body)}`,'_blank','noopener');
-  else if(kind==='mailto') location.href=`mailto:${enc(to)}?subject=${enc(subj)}&body=${enc(body)}`;
-  else { try{ await navigator.clipboard.writeText(`To: ${to}\nSubject: ${subj}\n\n${body}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } return; }
-  if(await addActivity(draft.num,'note',`Proposal emailed to ${to||'client'}: ${subj}`)) loadActivity(draft.num);
+  const to=$('#emTo').value.trim(), cc=($('#emCc')?.value||'').trim(), subj=$('#emSubj').value, body=$('#emBody').value;
+  if(kind==='owa') window.open(composeUrl('owa',to,cc,subj,body),'_blank','noopener');
+  else if(kind==='mailto') location.href=composeUrl('mailto',to,cc,subj,body);
+  else { try{ await navigator.clipboard.writeText(`To: ${to}${cc?'\nCC: '+cc:''}\nSubject: ${subj}\n\n${body}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } return; }
+  if(await addActivity(draft.num,'note',`Proposal emailed to ${to||'client'}${cc?' (cc '+cc+')':''}: ${subj}`)) loadActivity(draft.num);
 }
 $('#drawer').addEventListener('click', e=>{ const t=e.target.closest('button'); if(!t||!draft) return;
   if(t.id==='emailD') emailOpen(); else if(t.id==='emClose') $('#emBox').hidden=true; else if(t.dataset.emsend) emailSend(t.dataset.emsend); });
@@ -2067,6 +2068,7 @@ async function fuOpen(){
   let e=null; try{ const r=await sb.rpc('followup_email',{p_num:draft.num}); if(!r.error && r.data) e=r.data; }catch(_){}
   if(!e) e=fuFallback(draft);
   box.innerHTML=`<label class="f">To<input id="fuTo" type="email" value="${esc(e.to||draft.contactEmail||'')}" placeholder="client@company.com"></label>
+    <label class="f">CC<input id="fuCc" value="${esc(ccEmailsFor(draft))}" placeholder="nobody"></label>
     <label class="f">Subject<input id="fuSubj" value="${esc(e.subject)}"></label>
     <label class="f">Message<textarea id="fuBody" rows="9">${esc(e.text)}</textarea></label>
     <div class="toolbar" style="margin:6px 0 0"><button type="button" class="btn small" data-fusend="owa">Open in Outlook</button><button type="button" class="btn ghost small" data-fusend="mailto">Open in mail app</button><button type="button" class="btn ghost small" data-fusend="copy">Copy text</button></div>
@@ -2074,9 +2076,9 @@ async function fuOpen(){
   box.dataset.step=e.step||fuStep(draft)||1;
 }
 async function fuSend(kind){
-  const to=$('#fuTo').value.trim(), subj=$('#fuSubj').value, body=$('#fuBody').value, enc=encodeURIComponent;
-  if(kind==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}&subject=${enc(subj)}&body=${enc(body)}`,'_blank','noopener');
-  else if(kind==='mailto') location.href=`mailto:${enc(to)}?subject=${enc(subj)}&body=${enc(body)}`;
+  const to=$('#fuTo').value.trim(), cc=($('#fuCc')?.value||'').trim(), subj=$('#fuSubj').value, body=$('#fuBody').value;
+  if(kind==='owa') window.open(composeUrl('owa',to,cc,subj,body),'_blank','noopener');
+  else if(kind==='mailto') location.href=composeUrl('mailto',to,cc,subj,body);
   else { try{ await navigator.clipboard.writeText(`Subject: ${subj}\n\n${body}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } }
   const ok=await addActivity(draft.num,'follow_up',`Follow-up email #${$('#fuBox').dataset.step}: ${subj}`);
   if(ok){ const t=iso(today()); draft.lastFollowUp=t; const o=P.find(x=>x.num===draft.num); if(o) o.lastFollowUp=t; const ol=$('#openline'); if(ol) ol.innerHTML=openLine(draft); loadActivity(draft.num); if(kind!=='copy') toast('Follow-up logged'); }
@@ -2234,7 +2236,7 @@ $('#drawer').addEventListener('click', async e=>{
 // visit editor, and stays until someone marks it done. The building's notes (Addresses → Notes) print with them.
 const openReqs = p => (p?.clientRequests||[]).filter(r=>!r.doneAt);
 function reqHTML(p, ed){ const R=p.clientRequests||[], open=R.filter(r=>!r.doneAt), done=R.filter(r=>r.doneAt), dis=ed?'':'disabled';
-  const c=CL.find(x=>x.id===p.clientId), who=[...new Set([p.contactName, ...(c?contactsOf(c.id).map(k=>k.name):[])].filter(Boolean))];
+  const c=CL.find(x=>x.id===p.clientId), who=[...new Set([p.contactName, ...(c?contactsFor(c.id).map(k=>k.name):[])].filter(Boolean))];
   return `${open.length?`<ul class="rqlist">${open.map(r=>`<li><b>${esc(r.text)}</b><div class="note" style="margin:0">${r.from?'from '+esc(r.from)+' · ':''}${fmtD(r.at)}${r.by?' · noted by '+esc(r.by):''}</div>${ed?`<button type="button" class="btn ghost small" data-rqdone="${esc(r.id)}">✓ Done</button>`:''}</li>`).join('')}</ul>`:'<div class="note" style="margin:0 0 6px">None. Anything the client asks for before the job (a floor first, hours, access, a contact on site) goes here and prints on the crew\'s job packet.</div>'}
     ${ed?`<div class="grid2" style="margin-top:6px"><label class="f full">New request<textarea id="rqText" rows="2" placeholder="e.g. Tower II, suite 3979 first. Their alarm is set 11:55 PM to 6 AM: do it between 6 and 11 PM." ${dis}></textarea></label>
       <label class="f">Asked by<input id="rqFrom" list="rqWho" placeholder="Who asked" ${dis}></label><datalist id="rqWho">${who.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
@@ -2995,6 +2997,19 @@ const clientOf = name => { const n=norm(name); if(!n) return null; return CL.fin
 const contactsOf = id => CC.filter(x=>x.client_id===id && x.active!==false).sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0));
 const propsOf = id => PROPS.filter(x=>x.client_id===id && x.active!==false).sort((a,b)=>String(a.name||a.address).localeCompare(String(b.name||b.address)));
 const propLabel = p => p.name || String(p.address||'').split('\n')[0];
+// "Managed by" (Arturo 10/20): an owner client (e.g. "601 12th St Owner LLC (C&W)") can be managed by another client record
+// (Cushman & Wakefield). The manager's contacts are typed once there and can be picked on every building it manages.
+const mgrOf = c => c && c.managed_by ? CL.find(x=>x.id===c.managed_by && x.active!==false) || null : null;
+const contactsFor = id => { const c=CL.find(x=>x.id===id), m=mgrOf(c); return [...contactsOf(id), ...(m?contactsOf(m.id):[])]; };
+const companyContact = c => (c && (contactsOf(c.id)[0] || (mgrOf(c) && contactsOf(mgrOf(c).id)[0]))) || null;
+const managedBy = id => CL.filter(x=>x.managed_by===id && x.active!==false).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+// a building's CC list (the main contact is the Contact pick): everyone ticked gets copied on proposal, follow-up and report emails
+const ccOf = pr => (pr && pr.cc_contact_ids || []).map(id=>CC.find(k=>k.id===id && k.active!==false)).filter(k=>k && k.email && k.id!==pr.contact_id);
+const ccEmailsFor = p => { const pr=p && p.propertyId && PROPS.find(x=>x.id===p.propertyId); const to=String(p?.contactEmail||'').toLowerCase(); return [...new Set(ccOf(pr).map(k=>k.email).filter(e=>e.toLowerCase()!==to))].join('; '); };
+// Outlook / mail app links with CC
+function composeUrl(kind, to, cc, subj, body){ const enc=encodeURIComponent;
+  return kind==='owa' ? `https://outlook.office.com/mail/deeplink/compose?to=${enc(to)}${cc?`&cc=${enc(cc)}`:''}&subject=${enc(subj)}&body=${enc(body)}`
+    : `mailto:${enc(to)}?${cc?`cc=${enc(cc)}&`:''}subject=${enc(subj)}&body=${enc(body)}`; }
 function clientProposals(c){ const names=[c.name,...(c.aliases||[])].map(norm); return P.filter(p=>p.clientId===c.id || (!p.clientId && names.includes(norm(p.client)))); }
 // a proposal names a client or property nobody has entered yet: create it so it is typed once
 async function ensureClient(d){
@@ -3018,7 +3033,7 @@ async function ensureClient(d){
 function fillClientBlanks(){ if(!draft || !CLOK || !CL.length || isLocked?.()) return 0; const c=(draft.clientId && CL.find(x=>x.id===draft.clientId)) || clientOf(draft.client); if(!c) return 0;
   if(!draft.clientId) draft.clientId=c.id;
   if(!draft.propertyId && draft.siteAddress){ const kk=akey(String(draft.siteAddress).split('\n')[0]), hit=kk && propsOf(c.id).find(x=>x.addr_key===kk || akey(String(x.address||'').split('\n')[0])===kk); if(hit) draft.propertyId=hit.id; }
-  const pr=draft.propertyId && PROPS.find(x=>x.id===draft.propertyId), k=pr ? siteContact(pr) : (propsOf(c.id).some(x=>x.contact_id) ? {} : (contactsOf(c.id)[0]||{}));
+  const pr=draft.propertyId && PROPS.find(x=>x.id===draft.propertyId), k=pr ? siteContact(pr) : (propsOf(c.id).some(x=>x.contact_id) ? {} : (companyContact(c)||{}));
   const src={billAddress:c.billing_address, billingEmail:c.billing_email, poRequired:c.po_required?'true':'', contactName:k.name, contactEmail:k.email, contactPhone:k.phone, siteAddress:pr&&pr.address, property:pr&&propLabel(pr)};
   let n=0; for(const [f,v] of Object.entries(src)) if(v && !String(draft[f]??'').trim()){ draft[f]=v; n++; } return n; }
 // proposal drawer: a drop-down of the client's addresses (picks property, site address and the property's contact in one go)
@@ -3034,7 +3049,7 @@ function pickProperty(id){ if(!draft) return;
   showContactNote(); if(typeof checkDup==='function') checkDup(); toast(k.fallback?`No manager for this building: using ${k.name||'the company contact'}`:'Address, property and site contact filled in'); }
 // who to talk to about a building: its own manager; if it has none, the company's main contact (flagged so the office can add one)
 function siteContact(pr){ const k=pr && pr.contact_id && CC.find(y=>y.id===pr.contact_id && y.active!==false); if(k) return k;
-  const m=pr && contactsOf(pr.client_id)[0]; return m ? {...m, fallback:true} : {fallback:true}; }
+  const m=pr && companyContact(CL.find(x=>x.id===pr.client_id)); return m ? {...m, fallback:true} : {fallback:true}; }
 function contactNoteHTML(p){ const pr=p && p.propertyId && PROPS.find(x=>x.id===p.propertyId); if(!pr) return '';
   const k=siteContact(pr), c=CL.find(x=>x.id===pr.client_id); if(!k.fallback || !c) return '';
   return `<div class="note" style="margin:0;color:var(--warn)">No manager on file for ${esc(propLabel(pr))}: using ${esc(c.name)}'s company contact${k.name?' ('+esc(k.name)+')':''}. Add the building's manager on the client page (Addresses → Contact → + New contact).</div>`; }
@@ -3049,7 +3064,7 @@ function clientFill(k){
   if(!CLOK || !draft) return 0;
   if(k==='client'){ const c=clientOf(draft.client); draft.clientId=c?c.id:null; draft.propertyId=null; if(!c){ refreshPropPick(); return 0; }
     // a management company whose buildings each have their own manager: the contact waits for the building (Arturo 10/20)
-    const pc=propsOf(c.id).some(x=>x.contact_id) ? {} : (contactsOf(c.id)[0]||{});
+    const pc=propsOf(c.id).some(x=>x.contact_id) ? {} : (companyContact(c)||{});
     const src={contactName:pc.name, contactEmail:pc.email, contactPhone:pc.phone, billAddress:c.billing_address, billingEmail:c.billing_email, poRequired:c.po_required?'true':''};
     const n=fillEmpty(src, ['contactName','contactEmail','contactPhone','billAddress','billingEmail','poRequired']);
     const dl=$('#propList'); if(dl){ const opts=[...new Set([...propsOf(c.id).map(propLabel), ...propsFor(draft.client)])]; dl.innerHTML=opts.map(v=>`<option value="${esc(v)}">`).join(''); }
@@ -3164,11 +3179,13 @@ function renderClient(c){
   const main=contactsOf(c.id)[0]||{}, PR=propsOf(c.id);
   const kRow=k=>`<tr data-ck="${esc(k.id||'')}"><td><input data-cf="name" value="${esc(k.name||'')}" placeholder="Name" aria-label="Name"></td><td><input data-cf="role" value="${esc(k.role||'')}" placeholder="Role" aria-label="Role"></td>
       <td><input data-cf="email" type="email" value="${esc(k.email||'')}" placeholder="Email" aria-label="Email"></td><td><input data-cf="phone" value="${esc(k.phone||'')}" placeholder="Phone" aria-label="Phone"></td>
-      <td class="wrap note" style="margin:0">${(()=>{ const B=PR.filter(x=>x.contact_id && x.contact_id===k.id).map(propLabel); return B.length?esc(B.join(', ')):''; })()}</td>
+      <td class="wrap note" style="margin:0">${(()=>{ const all=PROPS.filter(x=>x.active!==false), B=all.filter(x=>x.contact_id===k.id).map(propLabel), Cc=all.filter(x=>x.contact_id!==k.id && (x.cc_contact_ids||[]).includes(k.id)).map(x=>propLabel(x)+' (cc)'); return esc([...B,...Cc].join(', ')); })()}</td>
       <td style="white-space:nowrap"><label class="note" style="margin:0" title="The company contact: billing questions and buildings with no manager of their own"><input type="radio" name="ckPrimary" data-cf="is_primary" ${k.is_primary?'checked':''}> company</label> <button type="button" class="btn ghost small" data-ckdel aria-label="Remove contact">✕</button></td></tr>`;
-  const kOpts=sel=>`<option value="">—</option>${contactsOf(c.id).map(k=>`<option value="${esc(k.id)}" ${k.id===sel?'selected':''}>${esc(k.name||k.email||'')}</option>`).join('')}<option value="__new">+ New contact…</option>`;
+  const MG=mgrOf(c), kLab=k=>esc(k.name||k.email||'')+(MG && k.client_id===MG.id?' · '+esc(MG.name):'');
+  const kOpts=sel=>`<option value="">—</option>${contactsFor(c.id).map(k=>`<option value="${esc(k.id)}" ${k.id===sel?'selected':''}>${kLab(k)}</option>`).join('')}<option value="__new">+ New contact…</option>`;
+  const ccLine=p=>{ const L=ccOf(p); return `<div class="note ccline" style="margin:3px 0 0">CC: <span data-cclab>${L.length?esc(L.map(k=>k.name||k.email).join(', ')):'nobody'}</span> <button type="button" class="btn ghost small" data-ccedit style="padding:1px 6px">Edit</button><input type="hidden" data-pf="cc" value="${esc((p.cc_contact_ids||[]).join(','))}"></div>`; };
   const pRow=p=>`<tr data-cp="${esc(p.id||'')}"><td><input data-pf="name" value="${esc(p.name||'')}" placeholder="Building / property name" aria-label="Property name"></td><td><textarea data-pf="address" rows="2" placeholder="Street\nCity, State Zip" aria-label="Address">${esc(p.address||'')}</textarea></td>
-      <td><select data-pf="contact_id" aria-label="Property contact">${kOpts(p.contact_id)}</select></td>
+      <td><select data-pf="contact_id" aria-label="Property contact (main)">${kOpts(p.contact_id)}</select>${ccLine(p)}</td>
       <td><input data-pf="notes" value="${esc(p.notes||'')}" placeholder="Notes (access, lift, keys…)" aria-label="Property notes"></td><td class="r num">${pp.filter(x=>x.propertyId===p.id||(!x.propertyId && p.addr_key && (akey(x.siteAddress)===p.addr_key||akey(x.property)===p.addr_key))).length||''}</td><td><button type="button" class="btn ghost small" data-cpdel aria-label="Remove property">✕</button></td></tr>`;
   const pTable=(L,cols)=>L.length?`<div class="tablewrap"><table><thead><tr>${cols.map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${L.join('')}</tbody></table></div>`:'<div class="note" style="margin:0">Nothing here yet.</div>';
   const tabs=[['profile','Profile'],['leads',`Leads (${leads.length})`],['proposals',`Proposals (${props.length})`],['jobs',`Jobs (${jobs.length})`],...(canM?[['invoices',`Invoices (${inv.length})`]]:[]),['notes','Notes']];
@@ -3182,10 +3199,13 @@ function renderClient(c){
         <div class="card"><h3>Job notes</h3>${pp.filter(p=>String(p.notes||'').trim()).map(p=>`<div style="padding:6px 0;border-bottom:1px solid var(--line)"><a href="#" data-open="${esc(p.num)}">${jobNoOf(p)?'Job #'+esc(jobNoOf(p)):esc(p.num)} · ${esc(p.property||'')}</a><div style="white-space:pre-wrap;font-size:13px">${esc(p.notes)}</div></div>`).join('')||'<div class="note" style="margin:0">No notes on its proposals or jobs.</div>'}</div>`
     : `<div class="clgrid"><div>
         <div class="card"><h3>Summary</h3><div class="clsum"><div><span>Created</span><b>${fmtD(c.created_at)}</b></div>${canM?`<div><span>Lifetime value</span><b>${usd(life)}</b></div><div><span>Outstanding balance</span><b class="${owed>0.004?'down':''}">${usd(owed)}</b></div>`:''}<div><span>Jobs</span><b>${jobs.length}</b></div><div><span>Open proposals</span><b>${props.filter(p=>outcome(p)==='Open').length}</b></div></div></div>
+        ${managedBy(c.id).length?`<div class="card"><h3>Manages ${managedBy(c.id).length} owner${managedBy(c.id).length>1?'s':''}</h3><div class="note" style="margin:0 0 6px">Their buildings can use this company's contacts.</div>${managedBy(c.id).map(o=>`<div style="padding:4px 0"><a href="#" data-clopen="${esc(o.id)}">${esc(o.name)}</a> <span class="note" style="margin:0">${propsOf(o.id).length} building${propsOf(o.id).length===1?'':'s'}</span></div>`).join('')}</div>`:''}
+        ${mgrOf(c)?`<div class="card"><h3>Managed by</h3><a href="#" data-clopen="${esc(mgrOf(c).id)}"><b>${esc(mgrOf(c).name)}</b></a><div class="note" style="margin:4px 0 0">Their contacts can be picked on this owner's buildings (Addresses → Contact).</div></div>`:''}
         <div class="card"><h3>Contact info</h3><div class="clsum"><div><span>Company contact</span><b>${esc(main.name||'—')}</b></div><div><span>Email</span><b>${main.email?`<a href="mailto:${esc(main.email)}">${esc(main.email)}</a>`:'—'}</b></div><div><span>Phone</span><b>${main.phone?`<a href="tel:${esc(main.phone)}">${esc(main.phone)}</a>`:'—'}</b></div></div></div>
         <div class="card listedit"><h3>Billing</h3>
           <label class="f">Client name<input id="cl-name" value="${esc(c.name)}"></label>
-          <label class="f">Type<select id="cl-kind"><option ${c.kind!=='Homeowner'?'selected':''}>Business</option><option ${c.kind==='Homeowner'?'selected':''}>Homeowner</option></select></label>
+          <label class="f">Type<select id="cl-kind"><option ${!['Homeowner','Management company'].includes(c.kind)?'selected':''}>Business</option>${'managed_by' in c?`<option ${c.kind==='Management company'?'selected':''}>Management company</option>`:''}<option ${c.kind==='Homeowner'?'selected':''}>Homeowner</option></select></label>
+          ${'managed_by' in c ? `<label class="f">Managed by <span class="note" style="margin:0;font-weight:400">the property management company, if a third party runs it for this owner</span><select id="cl-mgr"><option value="">— Nobody (they manage it themselves) —</option>${CL.filter(x=>x.id!==c.id && x.active!==false && !x.managed_by).sort((a,b)=>(b.kind==='Management company')-(a.kind==='Management company')||String(a.name).localeCompare(String(b.name))).map(x=>`<option value="${esc(x.id)}" ${x.id===c.managed_by?'selected':''}>${esc(x.name)}${x.kind==='Management company'?' (management company)':''}</option>`).join('')}</select></label>` : ''}
           <label class="f">Billing (AP) email for invoices<input id="cl-bemail" type="email" value="${esc(c.billing_email||'')}" placeholder="Leave blank to use the main contact"></label>
           <label class="f">Billing address<textarea id="cl-baddr" rows="2">${esc(c.billing_address||'')}</textarea></label>
           <div class="grid2"><label class="f">Requires a PO#<select id="cl-po"><option value="">No</option><option value="true" ${c.po_required?'selected':''}>Yes</option></select></label>
@@ -3224,18 +3244,33 @@ async function newBuildingContact(sel){
   const pid=tr && tr.dataset.cp; let n=0;
   if(pid){ const r=await sb.from('properties').update({contact_id:ins.data.id}).eq('id',pid); if(r.error){ toast(r.error.message); return; }
     const pr=PROPS.find(x=>x.id===pid); if(pr) pr.contact_id=ins.data.id;
-    const main=contactsOf(c.id).find(k=>k.id!==ins.data.id)||{};
+    const main=contactsOf(c.id).find(k=>k.id!==ins.data.id)||companyContact(c)||{};
     for(const p of P.filter(x=>x.propertyId===pid && !['Declined','Expired','Withdrawn','Paid'].includes(x.status) && (!x.contactEmail || (main.email && x.contactEmail===main.email)))){
       const row={contact_name:ins.data.name, contact_email:ins.data.email, contact_phone:ins.data.phone}; const u=await sb.from('proposals').update(row).eq('num',p.num);
       if(!u.error){ Object.assign(p,{contactName:row.contact_name, contactEmail:row.contact_email, contactPhone:row.contact_phone}); n++; await addActivity(p.num,'note',`Site contact set to ${ins.data.name||ins.data.email} (the building's manager)`); } } }
   toast(`${ins.data.name||ins.data.email} added${pid?' as this building\'s manager':''}${n?` · ${n} open proposal${n>1?'s':''} / job${n>1?'s':''} updated`:''}`);
 }
 document.addEventListener('change', e=>{ const s=e.target; if(s.matches && s.matches('#clP select[data-pf="contact_id"]') && s.value==='__new') newBuildingContact(s); });
+async function editBuildingCc(btn){
+  const tr=btn.closest('tr'), c=CL.find(x=>x.id===CLSEL); if(!tr||!c) return;
+  const hid=tr.querySelector('[data-pf="cc"]'), main=tr.querySelector('[data-pf="contact_id"]')?.value, cur=new Set((hid.value||'').split(',').filter(Boolean));
+  const L=contactsFor(c.id).filter(k=>k.id!==main); if(!L.length){ toast('Add another contact first (Contacts → + Contact, or + New contact in the drop-down).'); return; }
+  const v=await formDialog('Who else gets copied for this building?', `<div class="note" style="margin:0 0 8px">Ticked people are CC'd on proposals, follow-ups and service reports for this building. The main contact (the drop-down) gets them directly. Invoices still go to the billing (AP) email.</div>
+    ${L.map(k=>`<label style="display:block;margin:4px 0"><input type="checkbox" name="cc_${esc(k.id)}" value="1" ${cur.has(k.id)?'checked':''}> ${esc(k.name||'')} <span class="note" style="margin:0">${esc(k.email||'no email')}${k.client_id!==c.id?' · '+esc((CL.find(x=>x.id===k.client_id)||{}).name||''):''}</span></label>`).join('')}`, 'Save');
+  if(!v) return;
+  const ids=L.filter(k=>v['cc_'+k.id]).map(k=>k.id); hid.value=ids.join(',');
+  tr.querySelector('[data-cclab]').textContent=ids.length?ids.map(id=>{ const k=CC.find(x=>x.id===id); return k.name||k.email; }).join(', '):'nobody';
+  const pid=tr.dataset.cp; if(pid && PROPS.some(x=>'cc_contact_ids' in x)){ const r=await sb.from('properties').update({cc_contact_ids:ids}).eq('id',pid); if(r.error){ toast(r.error.message); return; } const pr=PROPS.find(x=>x.id===pid); if(pr) pr.cc_contact_ids=ids; toast('CC saved'); }
+  else if(!PROPS.some(x=>'cc_contact_ids' in x)) toast('Run database update 039 to save CCs');
+}
+document.addEventListener('click', e=>{ const b=e.target.closest && e.target.closest('[data-ccedit]'); if(b){ e.preventDefault(); editBuildingCc(b); return; }
+  const o=e.target.closest && e.target.closest('[data-clopen]'); if(o){ e.preventDefault(); CLSEL=o.dataset.clopen; CLTAB='profile'; try{ sessionStorage.setItem('pfbs.client', CLSEL); }catch(_){} renderClients(); } });
 async function saveClient(c){
   const box=$('#clientsBody'), has=id=>!!document.getElementById(id), v=id=>document.getElementById(id).value.trim();   // only the fields on the open tab change
   const row={name:has('cl-name')?v('cl-name'):c.name, kind:has('cl-kind')?v('cl-kind'):c.kind, billing_email:has('cl-bemail')?(v('cl-bemail')||null):c.billing_email, po_required:has('cl-po')?v('cl-po')==='true':!!c.po_required,
     billing_address:has('cl-baddr')?(v('cl-baddr')||null):c.billing_address, terms_days:has('cl-terms')?num(v('cl-terms')):c.terms_days, notes:has('cl-notes')?(v('cl-notes')||null):c.notes,
     aliases:has('cl-alias')?[...new Set(v('cl-alias').split('\n').map(s=>s.trim()).filter(Boolean))]:(c.aliases||[])};
+  if(has('cl-mgr')) row.managed_by=v('cl-mgr')||null;   // only shown once update 039 is in
   if(!row.name){ toast('The client needs a name.'); return; }
   const r=await sb.from('clients').update(row).eq('id',c.id); if(r.error){ toast(/unique|duplicate/i.test(r.error.message)?'Another client already has that name.':r.error.message); return; }
   for(const tr of box.querySelectorAll('#clK tr')){ const g=f=>tr.querySelector(`[data-cf="${f}"]`); const k={name:g('name').value.trim()||null, role:g('role').value.trim()||null, email:g('email').value.trim()||null, phone:g('phone').value.trim()||null, is_primary:g('is_primary').checked};
@@ -3243,6 +3278,7 @@ async function saveClient(c){
     if(!k.name && !k.email) continue;
     if(tr.dataset.ck) await sb.from('client_contacts').update(k).eq('id',tr.dataset.ck); else await sb.from('client_contacts').insert({...k, client_id:c.id}); }
   for(const tr of box.querySelectorAll('#clP tr')){ const g=f=>tr.querySelector(`[data-pf="${f}"]`); const p={name:g('name').value.trim()||null, address:g('address').value.trim()||null, notes:g('notes').value.trim()||null, contact_id:(g('contact_id').value!=='__new'&&g('contact_id').value)||null};
+    if(PROPS.some(x=>'cc_contact_ids' in x)) p.cc_contact_ids=(g('cc')?.value||'').split(',').filter(Boolean).filter(id=>id!==p.contact_id);
     if(tr.dataset.gone){ if(tr.dataset.cp) await sb.from('properties').update({active:false}).eq('id',tr.dataset.cp); continue; }
     if(!p.name && !p.address) continue;
     if(tr.dataset.cp) await sb.from('properties').update(p).eq('id',tr.dataset.cp); else await sb.from('properties').insert({...p, client_id:c.id}); }
@@ -3426,75 +3462,75 @@ async function makePdf(p, o={}){
   doc.setTextColor(0);
   // header
   if(logo) doc.addImage(logo,'JPEG',51,41,142,33);
-  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('PF Building Services',51,104);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
-  ['7172 Calais Pl  |  Newark, CA 94560','(510) 359-5181  |  info@pfbuildingservices.com','License #114036'].forEach((t,i)=>doc.text(t,51,117+i*11));
-  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...NAVY); doc.text(isBudgetDoc(p)?'BUDGET PROPOSAL':'PROPOSAL CONTRACT',R0,66,{align:'right'});
-  doc.setFontSize(8.5); doc.setTextColor(0);
-  [`Proposal # ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`,`Date: ${p.dateSent?fmtLong(p.dateSent):fmtLong(iso(today()))}`,(isBudgetDoc(p)?`For budget year ${p.budgetYear||today().getFullYear()+1}`:`Expires: After ${S.expiryDays} Days`)].forEach((t,i)=>doc.text(t,R0,84+i*12,{align:'right'}));
-  doc.setDrawColor(...NAVY); doc.setLineWidth(1.5); doc.line(40,150,572,150);
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('PF Building Services',51,104);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  ['7172 Calais Pl  |  Newark, CA 94560','(510) 359-5181  |  info@pfbuildingservices.com','License #114036'].forEach((t,i)=>doc.text(t,51,120+i*13));
+  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(...NAVY); doc.text(isBudgetDoc(p)?'BUDGET PROPOSAL':'PROPOSAL CONTRACT',R0,66,{align:'right'});
+  doc.setFontSize(10); doc.setTextColor(0);
+  [`Proposal # ${p.num}${(p.rev||1)>1?' Rev '+p.rev:''}`,`Date: ${p.dateSent?fmtLong(p.dateSent):fmtLong(iso(today()))}`,(isBudgetDoc(p)?`For budget year ${p.budgetYear||today().getFullYear()+1}`:`Expires: After ${S.expiryDays} Days`)].forEach((t,i)=>doc.text(t,R0,86+i*14,{align:'right'}));
+  doc.setDrawColor(...NAVY); doc.setLineWidth(1.5); doc.line(40,160,572,160);
   // bill to / site
-  doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text('BILL TO',51,172); doc.text('PROPERTY / JOB SITE',320,172);
-  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0);
+  doc.setFontSize(9); doc.setTextColor(...NAVY); doc.text('BILL TO',51,184); doc.text('PROPERTY / JOB SITE',320,184);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(0);
   const bill=[p.client,p.contactName,...String(p.billAddress||'').split('\n'),p.contactEmail,p.contactPhone].map(x=>(x||'').trim()).filter(Boolean);
   const site=(p.siteAddress?String(p.siteAddress).split('\n'):[p.property]).map(x=>(x||'').trim()).filter(Boolean);
-  bill.forEach((t,i)=>doc.text(t,51,188+i*13)); site.forEach((t,i)=>doc.text(doc.splitTextToSize(t,230)[0],320,188+i*13));
-  let y=188+Math.max(bill.length,site.length)*13+18;
+  bill.forEach((t,i)=>doc.text(doc.splitTextToSize(t,255)[0],51,202+i*15)); site.forEach((t,i)=>doc.text(doc.splitTextToSize(t,240)[0],320,202+i*15));
+  let y=202+Math.max(bill.length,site.length)*15+16;
   // tables
   const groups=[], seen=new Map();
   for(const it of items){ const key=it.type==='Add-on'?'__addon':(it.group||''); if(!seen.has(key)){ seen.set(key,[]); groups.push(key); } seen.get(key).push(it); }
   groups.sort((a,b)=>(a==='__addon')-(b==='__addon'));
   const multi=groups.filter(g=>g!=='__addon').length>1;
-  if(multi){ doc.setFont('helvetica','italic'); doc.setFontSize(8.5); doc.setTextColor(60); doc.text('This proposal includes more than one option. Please indicate which option(s) you would like to approve.',L0,y); y+=14; doc.setTextColor(0); }
+  if(multi){ doc.setFont('helvetica','italic'); doc.setFontSize(10); doc.setTextColor(60); { const mt=doc.splitTextToSize('This proposal includes more than one option. Please indicate which option(s) you would like to approve.',W); doc.text(mt,L0,y); y+=mt.length*12+4; } doc.setTextColor(0); }
   for(const g of groups){
     const rows=seen.get(g), title = g==='__addon' ? 'OPTIONAL ADD-ONS' : (g ? g.toUpperCase() : (multi?'BASE SERVICES':''));
     if(y>660){ doc.addPage(); y=60; }
-    if(title){ doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(0); doc.text(title,L0,y); y+=8; }
+    if(title){ doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(0); doc.text(title,L0,y); y+=8; }
     const body=[];
     for(const it of rows){
       const desc=(it.description||it.service||'').toUpperCase();
-      if(it.note){ body.push([{content:String(num(it.qty)??1),rowSpan:2},{content:desc,styles:{fontStyle:'bold'}},{content:it.frequency||'',rowSpan:2,styles:{halign:'center'}},{content:usd(it.amount),rowSpan:2}]); body.push([{content:it.note,styles:{fontStyle:'italic',fontSize:7.5,textColor:[70,70,70]}}]); }
+      if(it.note){ body.push([{content:String(num(it.qty)??1),rowSpan:2},{content:desc,styles:{fontStyle:'bold'}},{content:it.frequency||'',rowSpan:2,styles:{halign:'center'}},{content:usd(it.amount),rowSpan:2}]); body.push([{content:it.note,styles:{fontStyle:'italic',fontSize:9,textColor:[70,70,70]}}]); }
       else body.push([String(num(it.qty)??1),{content:desc,styles:{fontStyle:'bold'}},{content:it.frequency||'',styles:{halign:'center'}},usd(it.amount)]);
     }
     const foot = rows.length>1 && g!=='__addon' ? [[ '', {content:'TOTAL',styles:{fontStyle:'bold'}}, {content:[...new Set(rows.map(r=>r.frequency))].length===1?(rows[0].frequency||''):'',styles:{halign:'center'}}, {content:usd(rows.reduce((s,r)=>s+(num(r.amount)||0),0)),styles:{fontStyle:'bold'}} ]] : undefined;
     doc.autoTable({startY:y, margin:{left:L0,right:612-R0}, head:[['QTY','DESCRIPTION','FREQUENCY','AMOUNT']], body, foot, showFoot:'lastPage',
-      theme:'grid', styles:{font:'helvetica',fontSize:8.5,cellPadding:5,lineColor:[200,200,200],lineWidth:0.5,textColor:20,valign:'middle'},
-      headStyles:{fillColor:NAVY,textColor:255,fontStyle:'bold',fontSize:7.5}, footStyles:{fillColor:[245,246,249],textColor:20},
-      columnStyles:{0:{cellWidth:36,halign:'center'},2:{cellWidth:76},3:{cellWidth:72,halign:'right'}},
+      theme:'grid', styles:{font:'helvetica',fontSize:10.5,cellPadding:6,lineColor:[200,200,200],lineWidth:0.5,textColor:20,valign:'middle'},
+      headStyles:{fillColor:NAVY,textColor:255,fontStyle:'bold',fontSize:9}, footStyles:{fillColor:[245,246,249],textColor:20},
+      columnStyles:{0:{cellWidth:38,halign:'center'},2:{cellWidth:86},3:{cellWidth:84,halign:'right'}},
       didParseCell:d=>{ if(d.section==='head'){ if(d.column.index===3) d.cell.styles.halign='right'; if(d.column.index===2) d.cell.styles.halign='center'; } } });
     y=doc.lastAutoTable.finalY+20;
   }
-  if(isBudgetDoc(p)){ doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(60); const t=doc.splitTextToSize(`Budget pricing for ${p.budgetYear||today().getFullYear()+1}. This proposal is for budgeting purposes; final pricing and scheduling are confirmed when the work is approved.`, R0-L0); doc.text(t,L0,y); y+=t.length*11+10; doc.setTextColor(0); }
+  if(isBudgetDoc(p)){ doc.setFont('helvetica','italic'); doc.setFontSize(10.5); doc.setTextColor(60); const t=doc.splitTextToSize(`Budget pricing for ${p.budgetYear||today().getFullYear()+1}. This proposal is for budgeting purposes; final pricing and scheduling are confirmed when the work is approved.`, R0-L0); doc.text(t,L0,y); y+=t.length*13+10; doc.setTextColor(0); }
   // clarifications
   const svcs=new Set(items.filter(i=>i.type!=='Add-on').map(i=>i.service||guessService(i.description)).concat(p.service?[p.service]:[]).filter(Boolean)), gdOnly=svcs.size>0 && [...svcs].every(v=>v==='Gates & Doors');
   const clar = (p.clarifications&&p.clarifications.trim()) ? p.clarifications.split('\n').map(x=>x.replace(/^\s*\d+[.)]\s*/,'').trim()).filter(Boolean)
     : S.clarifications.filter(([svc])=>(svc==='All' && !gdOnly) || svcs.has(svc)).map(c=>c[1]);
   if(clar.length){
     if(y>680){ doc.addPage(); y=60; }
-    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text('PROPOSAL CLARIFICATIONS',L0,y); y+=13;
-    doc.setFont('helvetica','normal'); doc.setTextColor(0);
-    clar.forEach((c,i)=>{ const ls=doc.splitTextToSize(`${i+1}. ${c}`,W); if(y+ls.length*10>740){ doc.addPage(); y=60; } doc.text(ls,L0,y); y+=ls.length*10+2; });
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...NAVY); doc.text('PROPOSAL CLARIFICATIONS',L0,y); y+=15;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(0);
+    clar.forEach((c,i)=>{ const ls=doc.splitTextToSize(`${i+1}. ${c}`,W); if(y+ls.length*12>740){ doc.addPage(); y=60; } doc.text(ls,L0,y); y+=ls.length*12+3; });
     y+=12;
   }
   if(y>720){ doc.addPage(); y=60; }
-  doc.setDrawColor(190); doc.setLineWidth(0.7); doc.rect(L0,y,W,22); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
-  doc.text('WINDOW WASHING  •  PRESSURE WASHING  •  SOLAR PANEL CLEANING  •  JANITORIAL SERVICES  •  GATES & DOORS',306,y+14,{align:'center'});
+  doc.setDrawColor(190); doc.setLineWidth(0.7); doc.rect(L0,y,W,24); doc.setFont('helvetica','bold'); doc.setTextColor(...NAVY);
+  { const SV='WINDOW WASHING  •  PRESSURE WASHING  •  SOLAR PANEL CLEANING  •  JANITORIAL SERVICES  •  GATES & DOORS'; let fs=8.5; doc.setFontSize(fs); while(fs>7 && doc.getTextWidth(SV)>W-14){ fs-=0.25; doc.setFontSize(fs); } doc.text(SV,306,y+15.5,{align:'center'}); }
   const photos=(p.photos||[]).filter(x=>x&&x.path);
   if(photos.length){   // site photos get their own page (page 2), before the terms
     doc.addPage(); if(logo) doc.addImage(logo,'JPEG',51,28,142,33); y=80; doc.setTextColor(0);
     let first=true;
     for(const ph of photos){ const d=await photoData(ph.path); if(!d) continue;
-      const maxH=330, w=Math.min(W, d.w*(maxH/d.h)), h=w*d.h/d.w, cap=ph.caption?doc.splitTextToSize(ph.caption,W):[];
-      if(y+(first?14:0)+h+cap.length*10+10>740){ doc.addPage(); y=60; }
-      if(first){ doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY); doc.text('SITE PHOTOS',L0,y); y+=8; first=false; }
+      const maxH=330, w=Math.min(W, d.w*(maxH/d.h)), h=w*d.h/d.w, cap=ph.caption?(doc.setFontSize(9.5),doc.splitTextToSize(ph.caption,W)):[];
+      if(y+(first?14:0)+h+cap.length*12+10>740){ doc.addPage(); y=60; }
+      if(first){ doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...NAVY); doc.text('SITE PHOTOS',L0,y); y+=9; first=false; }
       doc.addImage(d.url,'JPEG',L0+(W-w)/2,y,w,h); y+=h+4;
-      if(cap.length){ doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(60); doc.text(cap,L0,y+8); y+=cap.length*10+4; }
+      if(cap.length){ doc.setFont('helvetica','italic'); doc.setFontSize(9.5); doc.setTextColor(60); doc.text(cap,L0,y+9); y+=cap.length*12+4; }
       y+=12; doc.setTextColor(0); }
   }
   // terms page
   doc.addPage(); if(logo) doc.addImage(logo,'JPEG',51,28,142,33);
-  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(...NAVY); doc.text('PF BUILDING SERVICES — TERMS AND CONDITIONS',51,72);
-  y=88; const TW=510, FS=7.3, LH=9;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text('PF BUILDING SERVICES — TERMS AND CONDITIONS',51,74);
+  y=92; const TW=510, FS=8.5, LH=10.5;
   doc.setFontSize(FS); doc.setTextColor(0);
   for(const [h,t] of S.terms){
     const lab = h ? h+': ' : ''; doc.setFont('helvetica','bold'); const lw=doc.getTextWidth(lab);
@@ -3502,14 +3538,14 @@ async function makePdf(p, o={}){
     if(y+(1+more.length)*LH>690){ doc.addPage(); y=60; }
     doc.setFont('helvetica','bold'); doc.text(lab,51,y); doc.setFont('helvetica','normal'); doc.text(first,51+lw,y); y+=LH; if(more.length){ doc.text(more,51,y); y+=more.length*LH; } y+=3;
   }
-  y+=6; doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...NAVY); doc.text('ACKNOWLEDGMENT & ACCEPTANCE',51,y); y+=11;
+  y+=8; if(y>640){ doc.addPage(); y=60; } doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(...NAVY); doc.text('ACKNOWLEDGMENT & ACCEPTANCE',51,y); y+=13;
   doc.setFont('helvetica','normal'); doc.setFontSize(FS); doc.setTextColor(0); const ack=doc.splitTextToSize(S.ack||'',TW); doc.text(ack,51,y); y+=ack.length*LH+16;
-  doc.setFontSize(9.5); doc.text('Client Name: _______________________________________     Date: _____________',51,y); y+=20;
-  doc.text('Signature: __________________________________________________________________',51,y); y+=20;
+  if(y>690){ doc.addPage(); y=60; } doc.setFontSize(10); doc.text('Client Name: _______________________________________     Date: _____________',51,y); y+=22;
+  doc.text('Signature: __________________________________________________________________',51,y); y+=22;
   doc.text('Title / Company: _____________________________________________________________',51,y);
   // footer on every page
   const n=doc.getNumberOfPages();
-  for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(0); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'}); }
+  for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(0); doc.text('PF BUILDING SERVICES  •  License #114036  •  (510) 359-5181',306,770,{align:'center'}); }
   await deliverPdf(doc, docName(p), p, 'Proposal PDF', o);
 }
 async function makeEstimatePdf(p, pairs, o={preview:true}){

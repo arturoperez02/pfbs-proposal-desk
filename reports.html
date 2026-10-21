@@ -783,25 +783,37 @@ function defaultSubject(r) { return DEFAULT_SUBJECT; }
 function defaultBody(r) { const f = (r.contact_first || '').trim(); return `Hi ${f ? f.charAt(0).toUpperCase() + f.slice(1).toLowerCase() : 'there'},\n\n${DEFAULT_MESSAGE}`; }
 function titleAddr(s) { return String(s || '').toLowerCase().replace(/\b([a-z])/g, c => c.toUpperCase()).replace(/\b(Ca|Ne|Nw|Se|Sw)\b/g, x => x.toUpperCase()); }
 
+// the building's CC list from the CRM (client page → Addresses → CC), minus whoever the report already goes to
+async function buildingCc(r, to) {
+  try {
+    if (!r.num) return '';
+    const { data: p } = await sb.from('proposals').select('property_id').eq('num', r.num).maybeSingle(); if (!p || !p.property_id) return '';
+    const { data: pr } = await sb.from('properties').select('*').eq('id', p.property_id).maybeSingle(); const ids = (pr && pr.cc_contact_ids) || []; if (!ids.length) return '';
+    const { data: K } = await sb.from('client_contacts').select('id,email,active').in('id', ids);
+    const have = String(to || '').toLowerCase();
+    return [...new Set((K || []).filter(k => k.email && k.active !== false && !have.includes(k.email.toLowerCase())).map(k => k.email))].join('; ');
+  } catch (_) { return ''; }
+}
 // download the PDF and open the email, like proposals in the CRM (Outlook adds the signature)
 async function emailFlow(r, blob) {
   const name = (r.pdf && r.pdf.file_name) || SRV.reportFileName(r, ENV.TZ);
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  const to = SRV.splitEmails(r.email_to).join('; '), subj = r.email_subject || defaultSubject(r), body = r.email_body || defaultBody(r);
+  const to = SRV.splitEmails(r.email_to).join('; '), subj = r.email_subject || defaultSubject(r), body = r.email_body || defaultBody(r), cc = await buildingCc(r, to);
   const o = document.createElement('div'); o.className = 'overlay';
   o.innerHTML = `<div class="dialog"><h3>Email the report</h3><p class="small">The PDF just downloaded (<b>${esc(name)}</b>). Open the email, attach the PDF, and send.</p>
     <label>To</label><input id="emTo" type="email" value="${esc(to)}" placeholder="client@company.com">
+    <label>CC</label><input id="emCc" type="text" value="${esc(cc)}" placeholder="nobody">
     <label>Subject</label><input id="emSubj" type="text" value="${esc(subj)}">
     <label>Message</label><textarea id="emBody" rows="6">${esc(body)}</textarea>
     <div class="acts" style="flex-wrap:wrap"><button class="btn sec" data-em="close">Close</button><button class="btn sec" data-em="copy">Copy</button><button class="btn sec" data-em="mailto">Mail app</button><button class="btn pri" data-em="owa">Open in Outlook</button></div></div>`;
   document.body.appendChild(o);
   o.querySelectorAll('[data-em]').forEach(b => b.onclick = async () => {
-    const k = b.dataset.em, t = $('#emTo', o).value.trim(), s = $('#emSubj', o).value, m = $('#emBody', o).value, enc = encodeURIComponent;
+    const k = b.dataset.em, t = $('#emTo', o).value.trim(), c = ($('#emCc', o)?.value || '').trim(), s = $('#emSubj', o).value, m = $('#emBody', o).value, enc = encodeURIComponent;
     if (k === 'close') { o.remove(); return; }
     if (k === 'copy') { try { await navigator.clipboard.writeText(`To: ${t}\nSubject: ${s}\n\n${m}`); toast('Copied'); } catch (_) { toast('Select the text and copy it'); } return; }
-    if (k === 'owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(t)}&subject=${enc(s)}&body=${enc(m)}`, '_blank', 'noopener');
-    else location.href = `mailto:${enc(t)}?subject=${enc(s)}&body=${enc(m)}`;
-    if (r.num) await sb.from('proposal_activity').insert({ num: r.num, kind: 'note', note: `Service report emailed to ${t || 'client'}: ${s}` });
+    if (k === 'owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(t)}${c ? '&cc=' + enc(c) : ''}&subject=${enc(s)}&body=${enc(m)}`, '_blank', 'noopener');
+    else location.href = `mailto:${enc(t)}?${c ? 'cc=' + enc(c) + '&' : ''}subject=${enc(s)}&body=${enc(m)}`;
+    if (r.num) await sb.from('proposal_activity').insert({ num: r.num, kind: 'note', note: `Service report emailed to ${t || 'client'}${c ? ' (cc ' + c + ')' : ''}: ${s}` });
     o.remove(); toast('Attach the downloaded PDF, then send');
   });
 }

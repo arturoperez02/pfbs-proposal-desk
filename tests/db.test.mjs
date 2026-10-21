@@ -435,3 +435,16 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: client requests passed');
 }
+
+// 039: building CC list, management companies
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role; insert into clients(id, name, kind) values ('00000000-0000-0000-0000-0000000c0039', 'Cushman Test', 'Management company');
+    insert into clients(id, name, managed_by) values ('00000000-0000-0000-0000-0000000c0040', '601 Owner LLC (C&W)', '00000000-0000-0000-0000-0000000c0039');`);
+  assert.equal((await q1(`select count(*)::int c from clients where managed_by = '00000000-0000-0000-0000-0000000c0039'`)).c, 1);
+  await assert.rejects(db.query(`update clients set managed_by = id where id = '00000000-0000-0000-0000-0000000c0039'`), /clients_not_own_manager/);
+  await assert.rejects(db.query(`insert into clients(name, kind) values ('X', 'Alien')`), /clients_kind_check/);
+  await db.exec(`insert into properties(client_id, address) values ('00000000-0000-0000-0000-0000000c0040', '601 12th St')`);
+  assert.deepEqual((await q1(`select cc_contact_ids c from properties where address = '601 12th St'`)).c, [], 'empty CC list by default');
+  console.log('db: building CC & managed by passed');
+}
