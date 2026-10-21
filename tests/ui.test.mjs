@@ -1728,6 +1728,27 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 62. New client with the name of an archived one: offered "Bring it back empty" (old contacts / buildings archived) instead of a unique-name error
+{
+  const pg = await b.newPage(); pg.on('pageerror', e => errs.push('t62 ' + e.message));
+  const OLD = { id: 'c-old', name: '601 Test Center', kind: 'Business', active: false, managed_by: null, aliases: [] };
+  const K = [{ id: 'k-old', client_id: 'c-old', name: 'Old Person', email: 'old@x.example', active: true }];
+  const PR = [{ id: 'p-old', client_id: 'c-old', name: 'Wrong Name', address: '1 Test St', active: true }];
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr/, r => r.abort());
+  await pg.addInitScript(([C, K, PR]) => { window.MOCK_CLIENTS = C; window.MOCK_CONTACTS = K; window.MOCK_PROPS = PR;
+    try { if (window.name !== 't62') { sessionStorage.clear(); window.name = 't62'; } } catch (_) {} }, [[OLD], K, PR]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="clients"]'); await pg.click('#clNew'); await pg.waitForSelector('dialog.ask [name="name"]', T);
+  assert.ok(await pg.$('dialog.ask option:text("Management company")'), 'Management company offered once 039 is in');
+  await pg.fill('dialog.ask [name="name"]', '601 test center '); await pg.click('dialog.ask [data-a="ok"]');
+  await pg.waitForSelector('dialog.ask [name="how"][value="fresh"]', T);
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(500);
+  const db = await pg.evaluate(() => ({ c: DBX.clients.find(x => x.id === 'c-old'), k: DBX.client_contacts.find(x => x.id === 'k-old'), p: DBX.properties.find(x => x.id === 'p-old'), n: DBX.clients.length }));
+  assert.equal(db.c.active, true); assert.equal(db.k.active, false); assert.equal(db.p.active, false); assert.equal(db.n, 1, 'no second client');
+  assert.match(await pg.textContent('#clientsBody'), /601 Test Center/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

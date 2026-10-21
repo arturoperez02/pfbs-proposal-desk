@@ -5128,8 +5128,19 @@ $('#clientsBody').addEventListener('click', async e=>{ const t=e.target, box=$('
   if(t.id==='clSave' && c){ t.disabled=true; await saveClient(c); t.disabled=false; return; }
   if(t.id==='clArch' && c){ if(!confirm(`Archive ${c.name}? It disappears from lists and pickers; its proposals and invoices stay.`)) return; const {error}=await sb.from('clients').update({active:false}).eq('id',c.id); if(error) toast(error.message); else { CLSEL=null; toast(`${c.name} archived`); loadClients(); } return; }
   if(t.id==='clProp' && c){ await openDrawer(null); draft.client=c.name; clientFill('client'); const pc=propsOf(c.id); if(pc.length===1){ draft.property=propLabel(pc[0]); clientFill('property'); } drawDrawer(); return; }
-  if(t.id==='clNew'){ const r=await formDialog('New client', '<label class="f">Client (company, or the homeowner\'s name)<input name="name" required></label><label class="f">Type<select name="kind"><option>Business</option><option>Homeowner</option></select></label>', 'Create');
+  if(t.id==='clNew'){ const r=await formDialog('New client', '<label class="f">Client (company, or the homeowner\'s name)<input name="name" required></label><label class="f">Type<select name="kind"><option>Business</option>'+(CL.some(x=>'managed_by' in x)?'<option>Management company</option>':'')+'<option>Homeowner</option></select></label>', 'Create');
     if(!r) return; if(clientOf(r.name)){ toast('That client already exists.'); CLSEL=clientOf(r.name).id; renderClients(); return; }
+    const old=CL.find(x=>x.active===false && norm(x.name)===norm(r.name));   // archived clients keep their name (proposals / invoices point at it)
+    if(old){ const nk=propsOf(old.id).length, nc=contactsOf(old.id).length;
+      const a=await formDialog('Archived client', `<p class="note" style="margin:0 0 8px"><b>${esc(old.name)}</b> was archived, so the name is taken. Archived clients are kept (never deleted) because old proposals and invoices point at them.</p>
+        <label class="f"><input type="radio" name="how" value="fresh" checked> Bring it back <b>empty</b>: its ${nc} contact${nc===1?'':'s'} and ${nk} building${nk===1?'':'s'} are archived, type set to ${esc(r.kind)} — start over</label>
+        <label class="f"><input type="radio" name="how" value="keep"> Bring it back as it was (keep its contacts and buildings)</label>`, 'Bring it back');
+      if(!a) return;
+      const row={active:true, kind:r.kind}; if(a.how==='fresh' && 'managed_by' in old) row.managed_by=null;
+      const {error}=await sb.from('clients').update(row).eq('id',old.id); if(error){ toast(error.message); return; }
+      if(a.how==='fresh'){ for(const k of contactsOf(old.id)){ const e=(await sb.from('client_contacts').update({active:false}).eq('id',k.id)).error; if(e){ toast(e.message); break; } }
+        for(const x of propsOf(old.id)){ const e=(await sb.from('properties').update({active:false}).eq('id',x.id)).error; if(e){ toast(e.message); break; } } }
+      toast(`${old.name} is back`); CLSEL=old.id; await loadClients(); return; }
     const {data,error}=await sb.from('clients').insert({name:r.name, kind:r.kind}).select().single(); if(error){ toast(invMissing(error)?'Run database update 019 in Supabase first.':error.message); return; }
     CL.push(data); CLSEL=data.id; renderClients(); }
 });
