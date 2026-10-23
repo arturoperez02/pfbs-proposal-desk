@@ -188,13 +188,13 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   // only this visit
   await pg.click('#tabs [data-tab="schedule"]', T); await pg.waitForTimeout(300);
   for (let i = 0; i < 4; i++) { if ((await pg.$eval('#schedBody b', e => e.textContent)).startsWith('February 2027')) break; await pg.click('#schNext'); await pg.waitForTimeout(100); }
-  await pg.click('.vchip:has-text("Demo Towers")', T); await pg.waitForSelector('dialog.inved', T);
+  await pg.click('.vchip:has-text("Demo Towers")', T); await pg.click('.vpop [data-vp="edit"]'); await pg.waitForSelector('dialog.inved', T);
   await pg.fill('[name="start_time"]', '06:00'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForSelector('[name="sc"]', T); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(500);
   let v = await pg.evaluate(() => DBX.visits.filter(v => v.num === 'PFBS-0980').sort((a, b) => a.visit_date.localeCompare(b.visit_date)).map(v => [v.visit_date, v.start_time, v.detached || false, (v.techs || []).join('+')]));
   assert.deepEqual(v.slice(0, 3), [['2026-11-03', '08:00', false, 'Rigo Perez'], ['2027-02-02', '06:00', true, 'Rigo Perez'], ['2027-05-04', '08:00', false, 'Rigo Perez']], 'only this visit changed');
   // this and all future visits
   for (let i = 0; i < 4; i++) { if ((await pg.$eval('#schedBody b', e => e.textContent)).startsWith('May 2027')) break; await pg.click('#schNext'); await pg.waitForTimeout(100); }
-  await pg.click('.vchip:has-text("Demo Towers")', T); await pg.waitForSelector('dialog.inved', T);
+  await pg.click('.vchip:has-text("Demo Towers")', T); await pg.click('.vpop [data-vp="edit"]'); await pg.waitForSelector('dialog.inved', T);
   await pg.check('dialog.inved [name="techs"][value="Baldemar Cervantes"]'); await pg.click('dialog.inved [data-a="save"]'); await pg.waitForSelector('[name="sc"]', T);
   await pg.check('[name="sc"][value="future"]'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(700);
   v = await pg.evaluate(() => DBX.visits.filter(v => v.num === 'PFBS-0980').sort((a, b) => a.visit_date.localeCompare(b.visit_date)).map(v => [v.visit_date, (v.techs || []).join('+')]));
@@ -285,7 +285,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('[data-schnew="PFBS-0990"]', T); await pg.waitForSelector('dialog.inved', T);
   await pg.click('dialog.inved [data-a="save"]'); await pg.waitForTimeout(500);
   await pg.click('#tabs [data-tab="schedule"]', T); await pg.click('#schToday'); await pg.waitForTimeout(300);
-  await pg.click('.vchip:has-text("Demo Co")', T); await pg.waitForSelector('dialog.schedpop .sp-top h3', T);
+  await pg.click('.vchip:has-text("Demo Co")', T); await pg.click('.vpop [data-vp="edit"]'); await pg.waitForSelector('dialog.schedpop .sp-top h3', T);
   assert.match(await pg.$eval('dialog.schedpop .sp-top h3', e => e.textContent), /Job #10240$/);
   assert.ok(await pg.$eval('dialog.schedpop .sp-top h3', e => parseFloat(getComputedStyle(e).fontSize) >= 20), 'big');
   await pg.close();
@@ -469,7 +469,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.ok(luis && luis[1] === 'luis@example.com' && luis[3].includes('Swing Stage'), 'TechSched tech added with email and capability');
   assert.ok(((await pg.evaluate(() => DBX.settings[0].data.vehicles)) || []).includes('Truck 9'), 'vehicles merged');
   // capability filter in the visit editor
-  await pg.evaluate(() => document.querySelector('[data-vis]')?.click()); await pg.waitForSelector('dialog.inved [name="capf"]', T);
+  await pg.evaluate(() => document.querySelector('[data-vis]')?.click()); await pg.click('.vpop [data-vp="edit"]'); await pg.waitForSelector('dialog.inved [name="capf"]', T);
   await pg.selectOption('dialog.inved [name="capf"]', 'Swing Stage'); await pg.waitForTimeout(100);
   const shown = await pg.$$eval('dialog.inved .vtechs [data-tech]', L => L.filter(l => !l.hidden).map(l => l.dataset.tech));
   assert.ok(shown.includes('Luis Aldana') && !shown.includes('Israel Hernandez'), 'only techs who can do it (plus ones already picked): ' + shown.join(','));
@@ -500,7 +500,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   if (!(await pg.$('[data-vis="n2"]'))) { await pg.click('#schNext'); await pg.waitForTimeout(200); }
   assert.ok(await pg.$('.vchip.dbl[data-vis="n2"]'), 'the 5 AM job overlaps the night shift: orange');
   assert.equal(await pg.$('.vchip.dbl[data-vis="n3"]'), null, 'the 10 AM job does not overlap');
-  await pg.click('[data-vis="n2"]'); await pg.waitForSelector('dialog.inved', T);
+  await pg.click('[data-vis="n2"]'); await pg.click('.vpop [data-vp="edit"]'); await pg.waitForSelector('dialog.inved', T);
   await pg.click('dialog.inved [data-a="save"]'); await pg.waitForSelector('text=Double booked', T);
   assert.match(await pg.textContent('dialog.ask:last-of-type'), /Rigo Perez/);
   await pg.close();
@@ -1482,7 +1482,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const pg = await b.newPage({ viewport: { width: 1100, height: 900 } }); pg.on('pageerror', e => errs.push('dup/onsite: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|firestore/, r => r.abort());
   await pg.addInitScript(() => { window.MOCK_RPC = { can_warehouse: () => ({ data: true, error: null }), warehouse_jobs: () => ({ data: [], error: null }), warehouse_rentals: () => ({ data: [{ job_no: '10701', rentals: [{ desc: 'Scissor lift', status: 'Delivered' }] }], error: null }) };
-    window.MOCK_KITS = [{ id: 'kA', status: 'picked_up', hcp_job_number: '10701', building_client: 'Plaza Co', site_address: '1 Plaza', tech_names: 'Rigo, Israel', scheduled_date: '2026-10-19', picked_up_at: new Date().toISOString() },
+    window.MOCK_KITS = [{ id: 'kA', status: 'picked_up', hcp_job_number: '10701', building_client: 'Plaza Co', site_address: '1 Plaza', tech_names: 'Rigo, Israel', scheduled_date: new Date(Date.now() - 864e5).toISOString().slice(0, 10), picked_up_at: new Date().toISOString() },
                         { id: 'kB', status: 'packed', hcp_job_number: '10702', building_client: 'Tower Co', tech_names: 'Rolando', scheduled_date: '2099-01-01' },
                         { id: 'kC', status: 'completed', hcp_job_number: '10600', building_client: 'Done Co' }];
     window.MOCK_KIT_ITEMS = [{ id: 'i1', job_id: 'kA', item_name: 'Harness', quantity: 2 }, { id: 'i2', job_id: 'kA', item_name: 'Degreaser 5 gal', quantity: 1 }, { id: 'i3', job_id: 'kB', item_name: 'Harness', quantity: 3 }, { id: 'i4', job_id: 'kB', item_name: 'Old rope', quantity: 1, is_removed: true }]; });
@@ -1746,6 +1746,54 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   const db = await pg.evaluate(() => ({ c: DBX.clients.find(x => x.id === 'c-old'), k: DBX.client_contacts.find(x => x.id === 'k-old'), p: DBX.properties.find(x => x.id === 'p-old'), n: DBX.clients.length }));
   assert.equal(db.c.active, true); assert.equal(db.k.active, false); assert.equal(db.p.active, false); assert.equal(db.n, 1, 'no second client');
   assert.match(await pg.textContent('#clientsBody'), /601 Test Center/);
+  await pg.close();
+}
+
+// 63. Schedule (Arturo 10/22, like HCP): click a visit → card with Open job / Edit; drag a visit to another day;
+//     a repeating job asks "only this visit / this and all future visits"; the job's Schedule step edits the visit picked
+{
+  const now = new Date(), ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`, D = n => `${ym}-${String(n).padStart(2, '0')}`;
+  const jj = { num: 'PFBS-1301', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Drag Co', property: '9 Drag St', amount: 500, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10500', contract_on: '2026-10-01', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 500 }] };
+  const ser = { id: 's63', num: 'PFBS-1301', rule: { unit: 'month', every: 1, mode: 'nth', nth: 2, weekday: 3 }, starts: D(1), ends: { type: 'never' }, template: {}, exceptions: [], active: true };
+  const vis = [{ id: 'va', num: 'PFBS-1301', job_no: '10500', kind: 'job', status: 'Scheduled', visit_date: D(10), start_time: '06:00', end_time: '14:30', techs: ['Rigo Perez'], work: [], equipment: [] },
+               { id: 'vb', num: 'PFBS-1301', job_no: '10501', kind: 'job', status: 'Scheduled', visit_date: D(14), occ_date: D(14), series_id: 's63', start_time: '06:00', end_time: '14:30', techs: [], work: [], equipment: [] },
+               { id: 'vc', num: 'PFBS-1301', job_no: '10502', kind: 'job', status: 'Scheduled', visit_date: D(20), occ_date: D(20), series_id: 's63', start_time: '06:00', end_time: '14:30', techs: [], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t63 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr/, r => r.abort());
+  await pg.addInitScript(([x, v, s]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; window.MOCK_SERIES = [s]; sessionStorage.clear(); }, [jj, vis, ser]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('[data-vis="va"]', T);
+  // the card
+  await pg.click('[data-vis="va"]'); await pg.waitForSelector('.vpop', T);
+  const card = await pg.textContent('.vpop'); assert.match(card, /Job #10500/); assert.match(card, /Drag Co · 9 Drag St/); assert.match(card, /Rigo Perez/); assert.match(card, /Open job/);
+  await pg.keyboard.press('Escape'); await pg.waitForSelector('.vpop', { state: 'detached', timeout: 3000 });
+  // drag a one-time visit: moves, no question
+  await pg.dragAndDrop('[data-vis="va"]', `[data-day="${D(12)}"]`); await pg.waitForTimeout(500);
+  assert.equal(await pg.$('dialog.ask'), null, 'no scope question for a one-time visit');
+  assert.equal(await pg.evaluate(() => DBX.visits.find(x => x.id === 'va').visit_date), D(12));
+  assert.ok(await pg.$(`[data-day="${D(12)}"] [data-vis="va"]`), 'chip redrawn on the new day');
+  // drag a repeating visit: asks; "Only this visit" moves just that one
+  await pg.dragAndDrop('[data-vis="vb"]', `[data-day="${D(15)}"]`); await pg.waitForSelector('dialog.ask [name="sc"]', T);
+  assert.match(await pg.textContent('dialog.ask'), /Move recurring job[\s\S]*Only this visit[\s\S]*This and all future visits/);
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(500);
+  const vb = await pg.evaluate(() => DBX.visits.find(x => x.id === 'vb'));
+  assert.equal(vb.visit_date, D(15)); assert.equal(vb.detached, true);
+  assert.equal(await pg.evaluate(() => DBX.visits.find(x => x.id === 'vc').visit_date), D(20), 'the later visit stays');
+  // Open job from the card → the job's Schedule step edits that visit, and Save asks only this / this and future
+  await pg.click('[data-vis="vc"]'); await pg.click('.vpop [data-vp="job"]'); await pg.waitForSelector('[data-jf="sched"]', T);
+  await pg.click('[data-jf="sched"]'); await pg.waitForSelector('dialog.schedpop', T);
+  assert.equal(await pg.$eval('dialog.schedpop [name="visit_date"]', e => e.value), D(20), 'the visit picked on the schedule');
+  await pg.click('dialog.schedpop .sp-top [data-a="save"]'); await pg.waitForSelector('dialog.ask [name="sc"]', T);
+  assert.match(await pg.textContent('dialog.ask:last-of-type'), /Change recurring job/);
+  await pg.click('dialog.ask:last-of-type [data-a="x"]');
+  // "This and all future visits": the series restarts on the new day (same repeat, moved)
+  await pg.goto(BASE); await pg.waitForTimeout(900); await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('[data-vis="vc"]', T);
+  await pg.dragAndDrop('[data-vis="vc"]', `[data-day="${D(21)}"]`); await pg.waitForSelector('dialog.ask [name="sc"]', T);
+  await pg.check('dialog.ask [name="sc"][value="future"]'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(700);
+  const after = await pg.evaluate(() => ({ old: DBX.visit_series.find(x => x.id === 's63'), nu: DBX.visit_series.filter(x => x.id !== 's63'), vc: DBX.visits.find(x => x.id === 'vc'), vb: DBX.visits.find(x => x.id === 'vb') }));
+  assert.equal(after.old.active, false); assert.equal(after.vc, undefined, 'the old future visit is replaced'); assert.ok(after.vb, 'the earlier visit stays');
+  assert.equal(after.nu.length, 1); assert.equal(after.nu[0].starts, D(21)); assert.equal(after.nu[0].rule.weekday, new Date(D(21) + 'T12:00').getDay(), 'repeat moved to the new weekday');
+  assert.ok(await pg.evaluate(d => DBX.visits.some(x => x.num === 'PFBS-1301' && x.visit_date === d), D(21)), 'a visit on the new day');
   await pg.close();
 }
 
