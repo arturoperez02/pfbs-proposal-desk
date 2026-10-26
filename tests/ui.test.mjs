@@ -2035,6 +2035,34 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 70. Schedule card → Invoice (Arturo 10/26, like HCP): opens that visit's invoice full screen with the invoice itself beside the form,
+//     updating as you type; once saved the card says so and the button reads Finish / View invoice
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date(), d1 = loc(new Date(now.getFullYear(), now.getMonth(), 12));
+  const jj = { num: 'PFBS-1801', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Walnut Owner LLC', property: '100 Pringle Ave', site_address: '100 Pringle Ave\nWalnut Creek, CA 94596', bill_address: '100 Pringle Ave Suite 235\nWalnut Creek, CA 94596', billing_email: 'ap@walnut.example', amount: 5640, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10141',
+    items: [{ type: 'Service', qty: 1, description: '(Annual) Interior perimeter glass and partitions (9 shifts)', amount: 5640 }] };
+  const vis = [{ id: 'iv1', num: 'PFBS-1801', job_no: '10141', kind: 'job', status: 'Done', visit_date: d1, start_time: '18:00', end_time: '02:30', techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1400, height: 950 } }); pg.on('pageerror', e => errs.push('t70 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); try { localStorage.setItem('pfbs.schView', 'month'); } catch (_) {} }, [jj, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(900); await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('[data-vis="iv1"]', T);
+  await pg.click('[data-vis="iv1"]'); await pg.waitForSelector('.vpop [data-vp="inv"]', T); await pg.waitForTimeout(300);
+  assert.match(await pg.textContent('.vpop'), /\$5,640[\s\S]*not invoiced yet/);
+  await pg.click('.vpop [data-vp="inv"]'); await pg.waitForSelector('dialog.invfs .ivlive .ivdoc', T);
+  const doc = await pg.textContent('dialog.invfs .ivlive');
+  assert.match(doc, /Walnut Owner LLC[\s\S]*#10141[\s\S]*Interior perimeter glass/); assert.match(await pg.textContent('dialog.invfs .ivfbar'), /Send invoice[\s\S]*Job #10141 · Walnut Owner LLC/);
+  await pg.fill('dialog.invfs .invrow [data-f="amount"]', '6000'); await pg.waitForTimeout(400);
+  assert.match(await pg.textContent('dialog.invfs .ivlive'), /\$6,000\.00/, 'preview follows the form');
+  await pg.screenshot({ path: '/tmp/claude-0/inv-fs.png' });
+  await pg.click('dialog.invfs .ivfbar [data-a="save"]'); await pg.waitForTimeout(600);
+  const inv = await pg.evaluate(() => DBX.invoices.filter(x => x.num === 'PFBS-1801').map(x => [x.status, x.service_date, x.job_no]));
+  assert.deepEqual(inv, [['Draft', d1, '10141']]);
+  await pg.click('[data-vis="iv1"]'); await pg.waitForTimeout(500);
+  assert.match(await pg.textContent('.vpop'), /Invoice #\d+ · Draft/); assert.equal((await pg.textContent('.vpop [data-vp="inv"]')).trim(), 'Finish invoice');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
