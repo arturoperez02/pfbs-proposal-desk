@@ -2134,6 +2134,44 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 74. Client work schedule (Arturo 10/26, like the competitors' sheet): dates from the Schedule, completed days from the Done
+//     visits, quick fill "A1–A6" two per day, saved on the job, PDF, email to the client (CC the building's CCs), reminder
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const R = n => { const d = new Date(); d.setDate(d.getDate() + n); return loc(d); };
+  const j = { num: 'PFBS-2201', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Tower Owner LLC', property: 'Tower One', site_address: '1 Tower Way, San Jose', contact_name: 'Courtney Smith', contact_email: 'courtney@example.com', amount: 30000, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10900', items: [{ type: 'Service', qty: 1, description: 'Exterior window cleaning', amount: 30000 }] };
+  const vis = [{ id: 'w1', num: 'PFBS-2201', kind: 'job', status: 'Done', visit_date: R(-2), end_date: R(-1), skip_weekends: false, techs: ['Rigo Perez'], work: [], equipment: [] },
+               { id: 'w2', num: 'PFBS-2201', kind: 'job', status: 'Scheduled', visit_date: R(1), techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t74 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); window.OPENED = []; window.open = u => { window.OPENED.push(u); return null; }; try { localStorage.setItem('pfbs.schView', 'month'); } catch (_) {} }, [j, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('[data-vis="w2"]', T); await pg.click('[data-vis="w2"]'); await pg.click('.vpop [data-vp="job"]'); await pg.waitForSelector('#drawer:not([hidden])', T);
+  await pg.evaluate(() => document.querySelector('#drawer [data-dtab="job"],#drawer [data-tab2="job"]')?.click());
+  await pg.waitForSelector('#cwOpen', { state: 'attached', timeout: 8000 });
+  assert.match(await pg.textContent('#cwBox'), /work days · 2 done · nothing typed yet · not sent yet/);
+  await pg.evaluate(() => document.getElementById('cwOpen').click()); await pg.waitForSelector('dialog.cwdlg', T);
+  const n = await pg.$$eval('dialog.cwdlg tr[data-cw]', L => L.length);
+  assert.ok(n >= 3, 'one row per work day: ' + n);
+  assert.equal(await pg.$$eval('dialog.cwdlg tr.cwdone', L => L.length), 2, 'the two Done days show the actual date');
+  await pg.fill('dialog.cwdlg [name="drops"]', 'A1–A5, B1'); await pg.fill('dialog.cwdlg [name="suffix"]', '(roof)'); await pg.click('dialog.cwdlg [data-a="fill"]');
+  assert.equal(await pg.$eval('dialog.cwdlg tr[data-cw="0"] [data-cwf="work"]', e => e.value), 'Day 1 – A1 & A2 (roof)');
+  assert.equal(await pg.$eval('dialog.cwdlg tr[data-cw="2"] [data-cwf="work"]', e => e.value), 'Day 3 – A5 & B1 (roof)');
+  await pg.fill('dialog.cwdlg tr[data-cw="2"] [data-cwf="note"]', 'Please move the cars from the north lot'); await pg.check('dialog.cwdlg tr[data-cw="2"] [data-cwf="red"]');
+  const [dl] = await Promise.all([pg.waitForEvent('download', T), pg.click('dialog.cwdlg [data-a="send"]')]); await pg.waitForTimeout(800);
+  assert.match(dl.suggestedFilename(), /Work Schedule/);
+  const pdf = (await import('node:fs')).readFileSync(await dl.path(), 'latin1');
+  assert.ok(/Work Schedule/.test(pdf) && /2 of \d+ days complete/.test(pdf) && /A5 & B1/.test(pdf) && /north lot/.test(pdf), 'pdf text');
+  assert.ok(!/Rigo|30,000|hrs/.test(pdf), 'no crew, hours or prices on the client PDF');
+  const cs = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-2201').client_schedule);
+  assert.equal(cs.rows[0].work, 'Day 1 – A1 & A2 (roof)'); assert.equal(cs.rows[2].red, true); assert.equal(cs.sent.length, 1); assert.equal(cs.sent[0].to, 'courtney@example.com');
+  const url = decodeURIComponent((await pg.evaluate(() => window.OPENED))[0] || '');
+  assert.match(url, /to=courtney@example\.com[\s\S]*Work schedule – Tower One \(revised[\s\S]*Hi Courtney,\n\nAttached is the updated work schedule for Tower One\./);
+  assert.ok(!/hours|crew/i.test(url));
+  assert.match(await pg.textContent('#cwBox'), /3 days described · last sent/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

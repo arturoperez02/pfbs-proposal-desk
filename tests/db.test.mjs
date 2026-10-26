@@ -465,3 +465,11 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: supervisor, visit requests, site map passed');
 }
+
+// 041: client work schedule
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role; insert into proposals(num, client, status, date_sent, sent_by, client_schedule) values ('PFBS-7841', 'Plan Co', 'Scheduled', '2026-10-01', 'Arturo', '{"rows":[{"work":"Day 1 – A1 & A2 (roof)"}]}')`);
+  assert.equal((await q1(`select client_schedule->'rows'->0->>'work' w from proposals where num = 'PFBS-7841'`)).w, 'Day 1 – A1 & A2 (roof)');
+  console.log('db: client work schedule passed');
+}
