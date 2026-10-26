@@ -664,7 +664,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.goto(BASE); await pg.waitForTimeout(900);
   await pg.click('#tabs [data-tab="settings"]'); await pg.waitForSelector('#crewCard', T);
   assert.ok(await pg.evaluate(() => !!document.querySelector('.savebar #saveS') && !!document.querySelector('.setnav a')), 'Save is always in reach and sections have jump links');
-  assert.equal(await pg.$$eval('#crewCard tr[data-crew="0"] [data-cap]', L => L.map(x => x.checked).join()), 'true,false', 'a checkbox per capability');
+  assert.equal(await pg.$$eval('#crewCard tr[data-crew="0"] [data-cap]', L => L.map(x => x.checked).join()), 'true,false,false', 'a checkbox per capability (+ Field supervisor)');
   assert.match(await pg.textContent('#crewCard tr[data-crew="0"] .capdd summary'), /Swing Stage/, 'capabilities sit in a dropdown that shows what is ticked');
   assert.equal(await pg.$eval('#crewCard tr[data-crew="2"]', e => e.hidden), true, 'inactive techs hidden by default');
   await pg.fill('#crewQ', 'bald'); assert.deepEqual(await pg.$$eval('#crewCard tr[data-crew]', L => L.filter(x => !x.hidden).map(x => x.dataset.crew)), ['1'], 'search finds a tech');
@@ -682,7 +682,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('#saveS'); await pg.waitForTimeout(800);
   const saved = await pg.evaluate(() => DBX.settings[0].data);
   assert.deepEqual(saved.crew[0], ['Rigo Perez', 'rigo@example.com', 'es', ['Swing Stage', 'Pressure Washing'], ['Rigoberto']]);
-  assert.deepEqual(saved.crew[3], ['Juan Nuevo', '', 'es', ['Rope Access']]); assert.deepEqual(saved.skillOptions, ['Swing Stage', 'Pressure Washing', 'Rope Access']);
+  assert.deepEqual(saved.crew[3], ['Juan Nuevo', '', 'es', ['Rope Access']]); assert.deepEqual(saved.skillOptions, ['Swing Stage', 'Pressure Washing', 'Field supervisor', 'Rope Access']);
   assert.deepEqual(await pg.evaluate(() => DBX.visits.filter(v => v.id.startsWith('cr')).map(v => v.techs)), [['Rigo Perez', 'Juan Nuevo'], ['Rigo Perez']], 'other spellings fixed on the visits');
   await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('#schTech', T);
   assert.deepEqual(await pg.$$eval('#schTech option', L => L.map(o => o.textContent)), ['All techs', 'Rigo Perez', 'Baldemar Cervantes', 'Juan Nuevo'], 'each tech once; inactive left out');
@@ -1794,6 +1794,85 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.equal(after.old.active, false); assert.equal(after.vc, undefined, 'the old future visit is replaced'); assert.ok(after.vb, 'the earlier visit stays');
   assert.equal(after.nu.length, 1); assert.equal(after.nu[0].starts, D(21)); assert.equal(after.nu[0].rule.weekday, new Date(D(21) + 'T12:00').getDay(), 'repeat moved to the new weekday');
   assert.ok(await pg.evaluate(d => DBX.visits.some(x => x.num === 'PFBS-1301' && x.visit_date === d), D(21)), 'a visit on the new day');
+  await pg.close();
+}
+
+// 64. Arturo 10/25: field supervisors (oversee only, own email), client requests from the schedule (job or visit), site map on the job packet,
+//     Tomorrow check on Home, rain ☔ on outdoor jobs, Week / By person views, invoice drafts for done recurring visits
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const tm = loc(new Date(Date.now() + 864e5));
+  const crewS = { crew: [['Rigo Perez', 'rigo@x.example', 'es', ['Swing Stage']], ['Sam Super', 'sam@x.example', 'en', ['Field supervisor']]], frequencies: [['One-time', 1], ['Monthly', 12]] };
+  const jj = { num: 'PFBS-1401', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Super Co', property: '5 Super St', site_address: '5 Super St\nOakland, CA 94607', amount: 300, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10600', contract_on: '2026-10-02',
+    items: [{ type: 'Service', qty: 1, frequency: 'Monthly', description: 'Pressure washing plaza', amount: 300 }], photos: [{ path: 'PFBS-1401/a.png', caption: 'Wash the plaza', client: false }] };
+  const vis = [{ id: 'sa', num: 'PFBS-1401', job_no: '10600', kind: 'job', status: 'Scheduled', visit_date: tm, start_time: '06:00', end_time: '14:00', address: '5 Super St\nOakland, CA 94607', techs: ['Rigo Perez'], work: [], equipment: [] },
+               { id: 'su', kind: 'job', status: 'Scheduled', visit_date: tm, start_time: '18:00', end_time: '23:00', address: '2150 Webster St, Oakland', title: 'Bart HQ', client: 'Bart', techs: [], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1400, height: 950 } }); pg.on('pageerror', e => errs.push('t64 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr/, r => r.abort());
+  const geo = [], fc = [];
+  await pg.route(/geocoding-api\.open-meteo\.com/, r => { geo.push(r.request().url()); r.fulfill({ contentType: 'application/json', body: JSON.stringify({ results: [{ name: 'Oakland', latitude: 37.8044, longitude: -122.2712, admin1: 'California' }] }) }); });
+  await pg.route(/api\.open-meteo\.com\/v1\/forecast/, r => { fc.push(r.request().url()); r.fulfill({ contentType: 'application/json', body: JSON.stringify({ daily: { time: [tm], precipitation_probability_max: [80], precipitation_sum: [6] } }) }); });
+  await pg.addInitScript(([s, x, v]) => { window.MOCK_SETTINGS = s; window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); try { localStorage.clear(); } catch (_) {}
+    const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), c => c.charCodeAt(0));
+    window.__ST = { 'PFBS-1401/a.png': new Blob([png], { type: 'image/png' }) }; }, [crewS, jj, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(1200);
+  // Tomorrow check
+  await pg.waitForSelector('#hTomorrow', T); await pg.waitForTimeout(400);
+  let h = await pg.textContent('#hTomorrow');
+  assert.match(h, /Tomorrow check/); assert.match(h, /#10600[\s\S]*no supervisor[\s\S]*kit not packed[\s\S]*☔ rain 80%/, 'missing pieces + rain: ' + h);
+  assert.match(h, /Bart HQ[\s\S]*no techs/);
+  assert.ok(geo.length === 1 && fc.length === 1, 'one geocode, one forecast call');
+  // Schedule: ☔ on the outdoor job; supervisors aren't in the tech list
+  await pg.click('#tabs [data-tab="schedule"]'); await pg.click('[data-schview="month"]'); await pg.waitForSelector('[data-vis="sa"] .crain', T);
+  assert.equal(await pg.$('[data-vis="su"] .crain'), null, 'no rain mark when the job type is unknown');
+  // visit editor: supervisor + client request saved on the job
+  await pg.click('[data-vis="sa"]'); await pg.click('.vpop [data-vp="edit"]'); await pg.waitForSelector('dialog.schedpop [name="supervisor"]', T);
+  assert.equal(await pg.$('dialog.schedpop .vtechs [data-tech="Sam Super"]'), null, 'supervisors are not picked as techs');
+  await pg.selectOption('dialog.schedpop [name="supervisor"]', 'Sam Super');
+  await pg.fill('dialog.schedpop [name="reqnew"]', 'Lobby first, before 7 AM'); await pg.fill('dialog.schedpop [name="reqfrom"]', 'Mandy'); await pg.click('dialog.schedpop [data-a="addreq"]'); await pg.waitForTimeout(300);
+  assert.deepEqual(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1401').client_requests.map(r => [r.text, r.from])), [['Lobby first, before 7 AM', 'Mandy']]);
+  assert.match(await pg.textContent('dialog.schedpop #vScope'), /Lobby first/, 'shows right away');
+  await pg.click('dialog.schedpop .sp-top [data-a="save"]'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.visits.find(x => x.id === 'sa').supervisor), 'Sam Super');
+  assert.equal(await pg.textContent('[data-vis="sa"] .csup'), 'SS', 'supervisor initials on the chip');
+  // a visit with no CRM job keeps its own request
+  await pg.click('[data-vis="su"]'); await pg.click('.vpop [data-vp="edit"]'); await pg.waitForSelector('dialog.schedpop [name="client_request"]', T);
+  await pg.fill('dialog.schedpop [name="client_request"]', 'Badge at the security desk'); await pg.click('dialog.schedpop .sp-top [data-a="save"]'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.visits.find(x => x.id === 'su').client_request), 'Badge at the security desk');
+  await pg.click('[data-vis="su"]'); assert.match(await pg.textContent('.vpop'), /Client requests:[\s\S]*Badge at the security desk/); await pg.keyboard.press('Escape');
+  // filter by supervisor
+  await pg.selectOption('#schTech', 'sup:Sam Super'); await pg.waitForTimeout(200);
+  assert.ok(await pg.$('[data-vis="sa"]') && !(await pg.$('[data-vis="su"]')), 'only the supervisor\'s projects');
+  await pg.selectOption('#schTech', '');
+  // supervisor email: tomorrow, their own address, no prices
+  await pg.click('#schSup'); await pg.waitForSelector('dialog.ask [name="when"]', T); await pg.check('dialog.ask [name="when"][value="tomorrow"]'); await pg.click('dialog.ask [data-a="ok"]');
+  await pg.waitForSelector('dialog.ask [data-t="Sam Super"]', T); await pg.click('dialog.ask [data-t="Sam Super"]'); await pg.waitForSelector('#cmBody', T);
+  assert.equal(await pg.$eval('#cmTo', e => e.value), 'sam@x.example');
+  const body = await pg.$eval('#cmBody', e => e.value);
+  assert.match(body, /Projects you oversee tomorrow[\s\S]*Job # 10600[\s\S]*Crew: Rigo Perez[\s\S]*Kit: not packed yet[\s\S]*Client requests: Lobby first/); assert.ok(!/\$/.test(body), 'never prices');
+  await pg.click('dialog.ask:last-of-type [data-a="x"]'); await pg.click('dialog.ask [data-a="x"]');
+  // Week and By person
+  await pg.click('[data-schview="week"]'); await pg.waitForSelector('.wgrid [data-vis="sa"]', T);
+  await pg.click('[data-schview="person"]'); await pg.waitForSelector('.pgrid', T);
+  assert.match(await pg.textContent('.pgrid'), /🦺 Sam Super[\s\S]*Rigo Perez[\s\S]*No techs yet/);
+  assert.equal(await pg.$$eval('.pgrid [data-vis="sa"]', L => L.length), 2, 'under the supervisor and under Rigo');
+  await pg.click('[data-schview="month"]');
+  // the packet: supervisor, the request in the red box, the site map page
+  await pg.click('[data-vis="sa"]'); await pg.click('.vpop [data-vp="edit"]'); await pg.waitForSelector('dialog.schedpop [data-a="sheet"]', T);
+  await pg.click('dialog.schedpop [data-a="sheet"]'); await pg.waitForSelector('#jsWrap .jsph img', T);
+  const pk = await pg.textContent('#jsWrap');
+  assert.match(pk, /Supervisor de campo\s*Sam Super/); assert.match(pk, /Lobby first, before 7 AM/); assert.match(pk, /Mapa del sitio \/ fotos[\s\S]*Lavar the plaza|Mapa del sitio \/ fotos[\s\S]*plaza/);
+  await pg.click('#jsWrap [data-js="x"]');
+  // the job's Site map box (Job tab), not on the client PDF
+  await pg.click('[data-vis="sa"]'); await pg.click('.vpop [data-vp="job"]'); await pg.waitForSelector('#phBoxJ textarea[data-phc="0"]', { state: 'attached', timeout: 8000 });
+  assert.equal(await pg.$eval('#phBoxJ [data-phcl="0"]', e => e.checked), false, 'job photo: not on the proposal PDF'); assert.equal(await pg.$eval('#phBoxJ [data-phcr="0"]', e => e.checked), true);
+  await pg.evaluate(() => document.querySelector('#drawer .x, #drawer [data-a="close"], #dClose')?.click()); await pg.keyboard.press('Escape'); await pg.waitForTimeout(300);
+  // recurring visit marked Done → an invoice draft for that visit
+  await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('[data-vis="sa"]', T);
+  await pg.click('[data-vis="sa"]'); await pg.click('.vpop [data-vp="edit"]'); await pg.waitForSelector('dialog.schedpop [name="status"]', T);
+  await pg.selectOption('dialog.schedpop [name="status"]', 'Done'); await pg.click('dialog.schedpop .sp-top [data-a="save"]'); await pg.waitForTimeout(800);
+  const inv = await pg.evaluate(() => DBX.invoices.filter(x => x.num === 'PFBS-1401').map(x => [x.status, x.service_date, x.job_no, (x.items || []).length]));
+  assert.deepEqual(inv, [['Draft', tm, '10600', 1]], 'one draft for the visit');
   await pg.close();
 }
 

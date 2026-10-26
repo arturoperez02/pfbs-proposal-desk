@@ -448,3 +448,20 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.deepEqual((await q1(`select cc_contact_ids c from properties where address = '601 12th St'`)).c, [], 'empty CC list by default');
   console.log('db: building CC & managed by passed');
 }
+
+// 040: supervisor + a visit's own client request + site map photos reach the warehouse packet
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role;
+    insert into proposals(num, client, status, date_sent, sent_by, client_requests, photos) values ('PFBS-7840', 'Req2 Co', 'Scheduled', '2026-10-01', 'Arturo',
+      '[{"id":"a","text":"Do lobby first","from":"Mandy"},{"id":"x","text":"old one","doneAt":"2026-10-02"}]',
+      '[{"path":"PFBS-7840/1.jpg","caption":"Work area"},{"path":"PFBS-7840/2.jpg","caption":"client only","crew":false}]');
+    insert into visits(num, visit_date, job_no, status, kind, supervisor, client_request) values ('PFBS-7840', current_date + 1, '10840', 'Scheduled', 'job', 'Rigo Perez', 'Badge at the front desk');
+    select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  const j = (await q1(`select warehouse_jobs(7) j`)).j.find(x => x.num === 'PFBS-7840');
+  assert.equal(j.supervisor, 'Rigo Perez');
+  assert.deepEqual(j.requests, [{ text: 'Badge at the front desk', from: null }, { text: 'Do lobby first', from: 'Mandy' }], "the visit's request + the job's open ones");
+  assert.deepEqual(j.photos, [{ path: 'PFBS-7840/1.jpg', caption: 'Work area' }], 'job packet photos only');
+  await db.exec('reset role');
+  console.log('db: supervisor, visit requests, site map passed');
+}
