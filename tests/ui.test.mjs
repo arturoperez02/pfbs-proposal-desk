@@ -2124,9 +2124,16 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('tr[data-id="PFBS-2101"]'); await pg.waitForSelector('[data-est="0"]', T); await pg.click('[data-est="0"]'); await pg.waitForSelector('#estTot', T);
   await pg.evaluate(() => { const d = document.querySelector('#est details.calcbox'); if (d) d.open = true; });
   if (await pg.$('#est [data-c="type"]')) await pg.selectOption('#est [data-c="type"]', 'swing');
-  for (const [k, v] of [['techs', '2'], ['wpt', '6'], ['floors', '22'], ['mins', '2'], ['drops', '18'], ['dpd', '2.5']]) await pg.fill(`#est [data-c="${k}"]`, v);
+  for (const [k, v] of [['techs', '2'], ['wpt', '6'], ['floors', '44'], ['mins', '2'], ['drops', '17'], ['dpd', '2']]) await pg.fill(`#est [data-c="${k}"]`, v);
   await pg.waitForTimeout(200);
+  // default = experience (Arturo 10/26: "2 drops / day is enough for the façade and the windows"): 8 ÷ 2 = 4 hrs / drop, 17 ÷ 2 = 8.5 days
   let out = await pg.textContent('#calcOut');
+  assert.match(out, /Hours \/ drop \(8 hrs ÷ drops \/ day\)\s*4[\s\S]*Project days \(drops ÷ drops \/ day\)\s*8\.5[\s\S]*Project hrs \/ tech\s*68/, 'experience: ' + out);
+  assert.match(out, /Check: windows × minutes says 5\.4 hrs \/ drop/); assert.ok(!/more than an 8-hour day/.test(out));
+  await pg.selectOption('#est [data-c="basis"]', 'math');
+  for (const [k, v] of [['floors', '22'], ['drops', '18'], ['dpd', '2.5']]) await pg.fill(`#est [data-c="${k}"]`, v);
+  await pg.waitForTimeout(200);
+  out = await pg.textContent('#calcOut');
   assert.match(out, /Hours \/ drop\s*3\.2[\s\S]*Project days\s*7\.2[\s\S]*Project hrs \/ tech\s*57\.6/, '22 floors: ' + out); assert.ok(!/more than an 8-hour day/.test(out));
   await pg.fill('#est [data-c="floors"]', '44'); await pg.waitForTimeout(200); out = await pg.textContent('#calcOut');
   assert.match(out, /Hours \/ drop\s*5\.4[\s\S]*Project days\s*12\.15[\s\S]*Project hrs \/ tech\s*97\.2/, '44 floors: ' + out);

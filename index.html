@@ -2885,6 +2885,7 @@ function calcHTML(){
   const opts=(SHEET_CALCS[E?.sheet]||SHEET_CALCS.WC);
   return `<div class="grid2 cgrid">${opts.length>1?`<label class="f">Calculator<select data-c="type">${Object.entries(CALC_DEF).filter(([k])=>opts.includes(k)).map(([k,x])=>`<option value="${k}" ${k===t?'selected':''}>${x.label}</option>`).join('')}</select></label>`:''}
     ${t==='swing'||E?.stageWire?`<label class="f">Swing stage motor<select data-ew="1"><option value="">Not picked yet</option><option value="1" ${E?.stageWire==='1'?'selected':''}>1-wire (single cable)</option><option value="2" ${E?.stageWire==='2'?'selected':''}>2-wire (double cable)</option></select></label>`:''}
+    ${t==='swing'?`<label class="f">Time per drop from<select data-c="basis"><option value="exp" ${CALC.basis!=='math'?'selected':''}>My drops / day (experience)</option><option value="math" ${CALC.basis==='math'?'selected':''}>Windows × minutes</option></select></label>`:''}
     ${d.rig?`<label class="f">Rig<select data-c="rig"><option value="1" ${CALC.rig!=='1.5'?'selected':''}>RR / no balance (+1 hr / drop)</option><option value="1.5" ${CALC.rig==='1.5'?'selected':''}>GR / RR balance (+1.5 hr / drop)</option></select></label>`:''}
     ${d.inputs.map(([k,l])=>inp(k,l)).join('')}</div>
     ${d.areas?`<div class="tablewrap" style="margin-top:6px"><table class="et"><thead><tr><th>Location</th><th>Length (ft)</th><th>Width (ft)</th><th class="r">Sq ft</th><th></th></tr></thead><tbody>${CALC.areas.map((a,i)=>`<tr><td><input data-ca="${i}.name" value="${esc(a.name||'')}" placeholder="e.g. Front sidewalk" aria-label="Location"></td><td><input data-ca="${i}.l" type="number" step="any" value="${esc(a.l??'')}" aria-label="Length"></td><td><input data-ca="${i}.w" type="number" step="any" value="${esc(a.w??'')}" aria-label="Width"></td><td class="r num" id="ca-${i}">${fmtH((num(a.l)||0)*(num(a.w)||0))}</td><td><button type="button" class="x" data-carm="${i}" aria-label="Remove location">×</button></td></tr>`).join('')}</tbody></table></div><button type="button" class="btn ghost small" id="caAdd" style="margin-top:6px">+ Location</button>`:''}
@@ -2908,15 +2909,19 @@ function gdTasksHTML(){ const T=S.est.gdTasks||[];
 const gdTot = () => (CALC.gd||[]).reduce((a,g)=>({hrs:a.hrs+(num(g.qty)||0)*(num(g.hrs)||0), parts:a.parts+(num(g.qty)||0)*(num(g.parts)||0)}),{hrs:0,parts:0});
 // Same formulas as the Calculator tab of the WC bid sheet.
 function calcOut(){
-  const n=k=>num(CALC[k])||0, t=CALC.type, T=n('techs'), rows=[]; let per=null, warn='';
+  const n=k=>num(CALC[k])||0, t=CALC.type, T=n('techs'), rows=[]; let per=null, warn='', info='';
   const div=(a,b)=>b?a/b:null, f=x=>x==null?'—':fmtH(x);
   if(t==='swing'){
-    // Arturo 10/26: the hours follow the math (drops × hours / drop), so floors, windows and minutes count; the typed
-    // drops / day is only checked against an 8-hour day (it used to set the days by itself, so 22 or 44 floors gave the same hours)
-    const twd=T*n('wpt')*n('floors'), wpt=div(twd,T), hpd=wpt==null?null:wpt*n('mins')/60/T+(num(CALC.rig)||1), hday=hpd==null||!n('dpd')?null:n('dpd')*hpd,
-      hpt=hpd==null||!n('drops')?null:n('drops')*hpd, days=hpt==null?null:hpt/8, fit=hpd?8/hpd:null;
-    rows.push(['Total windows / drop',twd],['Windows / tech',wpt],['Hours / drop',hpd],['Drops / day that fit 8 hrs',fit],['Total hours / day',hday],['Project days',days],['Project hrs / tech',hpt]); per=hpt;
-    if(hday!=null && hday>8.25) warn=`${fmtH(n('dpd'))} drops × ${fmtH(hpd)} hrs = ${fmtH(hday)} hrs: more than an 8-hour day. The hours use the math instead: about ${fmtH(Math.round(fit*10)/10)} drops / day.`;
+    // Arturo 10/26: two ways to get the time per drop. "Experience" (default): the typed drops / day sets it (8 hrs ÷ drops / day,
+    // façade + windows + rigging all in), days = drops ÷ drops / day. "Windows × minutes": hours / drop = windows each tech
+    // cleans × minutes + rigging, the typed drops / day is only checked against an 8-hour day. Each shows the other as a check.
+    const twd=T*n('wpt')*n('floors'), wpt=div(twd,T), mhpd=wpt==null||!n('mins')?null:wpt*n('mins')/60/T+(num(CALC.rig)||1), dpd=n('dpd'), exp=CALC.basis!=='math';
+    const hpd=exp ? (dpd?8/dpd:null) : mhpd, hday=hpd==null||!dpd?null:dpd*hpd, hpt=hpd==null||!n('drops')?null:n('drops')*hpd, days=hpt==null?null:hpt/8, fit=hpd?8/hpd:null;
+    if(exp) rows.push(['Hours / drop (8 hrs ÷ drops / day)',hpd],['Project days (drops ÷ drops / day)',days],['Project hrs / tech',hpt]);
+    else rows.push(['Total windows / drop',twd],['Windows / tech',wpt],['Hours / drop',hpd],['Drops / day that fit 8 hrs',fit],['Total hours / day',hday],['Project days',days],['Project hrs / tech',hpt]);
+    per=hpt;
+    if(exp && dpd && mhpd) info=`Check: windows × minutes says ${fmtH(mhpd)} hrs / drop (about ${fmtH(Math.round(8/mhpd*10)/10)} drops / day). Your ${fmtH(dpd)} drops / day = ${fmtH(hpd)} hrs / drop${mhpd<hpd-0.25?': the extra time covers façade cleaning, moves and anything the window count leaves out.':mhpd>hpd+0.25?': faster than the window count, so make sure that pace is real.':'.'}`;
+    if(!exp && hday!=null && hday>8.25) warn=`${fmtH(dpd)} drops × ${fmtH(hpd)} hrs = ${fmtH(hday)} hrs: more than an 8-hour day. The hours use the math instead: about ${fmtH(Math.round(fit*10)/10)} drops / day.`;
   }
   if(t==='bosun'){
     // same as the swing stage (Arturo 10/26): each drop takes hours / drop of one tech; the drops are shared by the techs
@@ -2944,7 +2949,7 @@ function calcOut(){
     const hpt=T? n('windows')*n('mins')/60/T+1 : null;
     rows.push(['Total hrs / tech',hpt]); per=hpt;
   }
-  const html = (warn?`<div class="calcwarn">⚠ ${esc(warn)}</div>`:'') + `<table class="cres">${rows.map(([l,x],i)=>`<tr class="${i===rows.length-1?'last':''}"><td>${l}</td><td class="r num">${f(x)}</td></tr>`).join('')}</table>`
+  const html = (warn?`<div class="calcwarn">⚠ ${esc(warn)}</div>`:'') + (info?`<div class="note" style="margin:0 0 6px">${esc(info)}</div>`:'') + `<table class="cres">${rows.map(([l,x],i)=>`<tr class="${i===rows.length-1?'last':''}"><td>${l}</td><td class="r num">${f(x)}</td></tr>`).join('')}</table>`
     + (per!=null && T ? `<div class="note" style="margin:6px 0 0">Applies <b>${f(per)} hrs</b> to each of ${T} tech line${T===1?'':'s'}${t==='interior'&&!n('floors')?' (no floors entered, so hours / tech)':''}.</div>` : '');
   const qty = t==='solar' ? n('panels') : t==='pw' ? (CALC.areas||[]).reduce((s,a)=>s+(num(a.l)||0)*(num(a.w)||0),0) : null;
   return {per, techs:T, html, qty};
@@ -2991,6 +2996,7 @@ $('#est').addEventListener('change', e=>{
     E=newEstimate(v); CALC.type = calcFor(v); CALC.gd=undefined; CALC.open=['PW','GD'].includes(v)||CALC.open; renderEst(); return; }
   if(t.dataset.c==='type'){ CALC.type=t.value; CALC.open=true; renderEst(); }
   else if(t.dataset.c==='rig'){ CALC.rig=t.value; $('#calcOut').innerHTML=calcOut().html; }
+  else if(t.dataset.c==='basis'){ CALC.basis=t.value; $('#calcOut').innerHTML=calcOut().html; }
   else if(t.dataset.ew){ if(t.value) E.stageWire=t.value; else delete E.stageWire; }
   else if(t.dataset.e && t.tagName==='SELECT'){ const [a,i,f]=t.dataset.e.split('.'); E[a][+i][f]=t.value; const r=S.est.labor.find(x=>x[0]===t.value), T=SHEETS[E.sheet]||{}, L=E[a][+i];
     if(f==='role' && r){ if(t.value==='Administration'){ L.rate=r[1]; L.wage=''; } else if(T.unit){ L.rate=0; L.wage=sheetWage(T,t.value); } else if(T.bill){ L.rate=T.bill; L.wage=sheetWage(T,t.value); } else { L.rate=r[1]; L.wage=''; } } renderEst(); }
