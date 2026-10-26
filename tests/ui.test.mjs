@@ -2063,6 +2063,22 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 71. A click on a schedule visit that turns into a tiny drag (mouse moved a hair, same day) opens the card instead of doing nothing
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date(), d1 = loc(new Date(now.getFullYear(), now.getMonth(), 9));
+  const jj = { num: 'PFBS-1902', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Jiggle Co', property: '2 Jiggle St', amount: 400, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10902', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 400 }] };
+  const vis = [{ id: 'jg1', num: 'PFBS-1902', job_no: '10902', kind: 'job', status: 'Scheduled', visit_date: d1, start_time: '08:00', techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t71 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); try { localStorage.setItem('pfbs.schView', 'month'); } catch (_) {} }, [jj, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(900); await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('[data-vis="jg1"]', T);
+  await pg.dragAndDrop('[data-vis="jg1"]', `[data-day="${d1}"]`, { targetPosition: { x: 20, y: 60 } }); await pg.waitForTimeout(400);
+  assert.ok(await pg.$('.vpop'), 'the card opened'); assert.match(await pg.textContent('.vpop'), /Job #10902/);
+  assert.equal(await pg.evaluate(() => DBX.visits.find(x => x.id === 'jg1').visit_date), d1, 'not moved');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

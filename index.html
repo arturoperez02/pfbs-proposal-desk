@@ -5172,6 +5172,10 @@ function visInvoice(v){ const j=visJob(v); if(!j) return null; const L=(INV[j.nu
 async function invForVisit(v){ const j=visJob(v); if(!j) return toast('This visit has no CRM job to invoice.'); if(!INVOK) return toast('Run database update 018 in Supabase first.');
   if(!INV[j.num]) await loadInvoices(j.num); const have=visInvoice(v); if(have) return invEdit(j, have);
   const iv=invBlank(j); iv.service_date=visEnd(v); if(v.job_no) iv.job_no=v.job_no; return invEdit(j, iv); }
+// clicking a visit always does something (Arturo 10/26: "nothing happens"): the card, or the visit itself if the card fails
+function openVisCard(chip){ const v=VIS.find(x=>x.id===chip.dataset.vis); if(!v){ toast('That visit changed: reloading the schedule.'); loadSchedule(); return; }
+  try{ visPop(v, chip); if(!document.querySelector('.vpop')) throw new Error('card did not open'); }
+  catch(err){ console.error('visit card', err); visPopClose(); toast(`Couldn't show the card (${err.message}). Opening the visit.`); try{ visEdit(v); }catch(e2){ toast('Could not open this visit: '+e2.message); } } }
 // ---- HCP-style card when a visit is clicked on the Schedule: Open job / Edit (Arturo 10/22) ----
 let SCHED_PICK=null;   // the visit picked on the Schedule; the job's Schedule step edits that one
 function visPopClose(){ document.querySelectorAll('.vpop').forEach(x=>x.remove()); document.removeEventListener('mousedown', visPopOut, true); document.removeEventListener('keydown', visPopKey, true); }
@@ -5610,7 +5614,9 @@ $('#clientsBody').addEventListener('click', async e=>{ const t=e.target, box=$('
   sb_.addEventListener('dragover', e=>{ const c=DRAG && e.target.closest('[data-day]'); if(!c) return; e.preventDefault(); sb_.querySelectorAll('.dropon').forEach(x=>x!==c&&x.classList.remove('dropon')); c.classList.add('dropon'); });
   sb_.addEventListener('dragleave', e=>{ const c=e.target.closest('[data-day]'); if(c && !c.contains(e.relatedTarget)) c.classList.remove('dropon'); });
   sb_.addEventListener('drop', async e=>{ const c=e.target.closest('[data-day]'); const d=DRAG; DRAG=null; sb_.querySelectorAll('.dropon,.dragging').forEach(x=>x.classList.remove('dropon','dragging'));
-    if(!c || !d) return; e.preventDefault(); const v=VIS.find(x=>x.id===d.id); if(!v) return; await moveVisit(v, dayDiff(d.from||v.visit_date, c.dataset.day)); });
+    if(!c || !d) return; e.preventDefault(); const v=VIS.find(x=>x.id===d.id); if(!v) return; const k=dayDiff(d.from||v.visit_date, c.dataset.day);
+    if(!k){ const chip=sb_.querySelector(`[data-vis="${CSS.escape(v.id)}"]`); if(chip) openVisCard(chip); return; }   // a click that turned into a tiny drag: open the card
+    await moveVisit(v, k); });
 }
 $('#schedBody').addEventListener('change', e=>{ if(e.target.id==='schTech'){ schTech=e.target.value; renderSchedule(); } });
 $('#schedBody').addEventListener('click', e=>{ const t=e.target;
@@ -5623,7 +5629,7 @@ $('#schedBody').addEventListener('click', e=>{ const t=e.target;
   if(t.id==='schSup'){ supEmails(); return; }
   if(t.id==='schTs'){ techSchedImport(); return; }
   if(t.id==='schEvent'){ const v=visitDraft(null, iso(today())); visEdit(v); return; }
-  const c=t.closest('[data-vis]'); if(c){ const v=VIS.find(x=>x.id===c.dataset.vis); if(v) visPop(v, c); return; }
+  const c=t.closest('[data-vis]'); if(c){ openVisCard(c); return; }
   const dl=t.closest('[data-daylist]'); if(dl){ const ds=dl.dataset.daylist, L=VIS.filter(v=>v.status!=='Cancelled' && visOn(v,ds) && schShow(v));
     const d=document.createElement('dialog'); d.className='ask'; d.innerHTML=`<h3>${dLong(ds,'en')}</h3>${L.map(v=>`<div><button type="button" class="vchip" data-vis="${esc(v.id)}" style="width:100%">${esc(t12(v.start_time))} ${esc(visLabel(v))}${(v.techs||[]).length?' — '+esc(v.techs.join(', ')):''}</button></div>`).join('')}<div class="toolbar"><span style="flex:1"></span><button type="button" class="btn ghost" data-a="x">Close</button></div>`;
     document.body.appendChild(d); d.addEventListener('click', ev=>{ const x=ev.target.closest('[data-vis]'); if(x){ d.close(); d.remove(); const v=VIS.find(y=>y.id===x.dataset.vis); if(v) visEdit(v); } if(ev.target.closest('[data-a="x"]')){ d.close(); d.remove(); } }); d.showModal(); return; }
