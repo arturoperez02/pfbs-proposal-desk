@@ -2111,6 +2111,29 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 73. Swing stage hours follow the math (Arturo 10/26: 22 or 44 floors gave the same hours): hours = drops × hours / drop;
+//     a typed drops / day that doesn't fit an 8-hour day shows a red warning
+{
+  const est = { sheet: 'WC', labor: [{ role: 'Expert', hours: 10, rate: 75 }], materials: [], taxRate: 0, rentals: [], equipment: [], misc: [] };
+  const pr = { num: 'PFBS-2101', sent_by: 'Arturo', client: 'Tall Co', property: '101 Tall St', status: 'Estimating', items: [{ type: 'Base', qty: 1, description: 'Swing stage windows', amount: 9000, estimate: est }], amount: 9000 };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t73 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, pr);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-2101"]'); await pg.waitForSelector('[data-est="0"]', T); await pg.click('[data-est="0"]'); await pg.waitForSelector('#estTot', T);
+  await pg.evaluate(() => { const d = document.querySelector('#est details.calcbox'); if (d) d.open = true; });
+  if (await pg.$('#est [data-c="type"]')) await pg.selectOption('#est [data-c="type"]', 'swing');
+  for (const [k, v] of [['techs', '2'], ['wpt', '6'], ['floors', '22'], ['mins', '2'], ['drops', '18'], ['dpd', '2.5']]) await pg.fill(`#est [data-c="${k}"]`, v);
+  await pg.waitForTimeout(200);
+  let out = await pg.textContent('#calcOut');
+  assert.match(out, /Hours \/ drop\s*3\.2[\s\S]*Project days\s*7\.2[\s\S]*Project hrs \/ tech\s*57\.6/, '22 floors: ' + out); assert.ok(!/more than an 8-hour day/.test(out));
+  await pg.fill('#est [data-c="floors"]', '44'); await pg.waitForTimeout(200); out = await pg.textContent('#calcOut');
+  assert.match(out, /Hours \/ drop\s*5\.4[\s\S]*Project days\s*12\.15[\s\S]*Project hrs \/ tech\s*97\.2/, '44 floors: ' + out);
+  assert.match(out, /2\.5 drops × 5\.4 hrs = 13\.5 hrs: more than an 8-hour day/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
