@@ -975,8 +975,8 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.evaluate(() => document.getElementById('closeD')?.click()); await pg.waitForTimeout(200);
   await pg.click('#tabs [data-tab="orders"]'); await pg.waitForTimeout(400);
   assert.match(await pg.$eval('#jobsBody', e => e.innerText), /Service reports to send \(\d+\)[\s\S]*PFBS-1030/, 'finished job is on Service reports to send');
-  assert.ok(await pg.$('#jobsBody tr[data-qrow="PFBS-1030"]'), 'finished job is on Log actual hours');
-  assert.equal(await pg.$eval('#jobsBody tr[data-qrow="PFBS-1030"] [data-qa="start"]', e => e.value), d(-1), 'start date filled from the schedule');
+  assert.ok(await pg.$('#jobsBody [data-hwcard="PFBS-1030"]'), 'finished job is on Waiting for hours');
+  assert.equal(await pg.$eval('#jobsBody [data-hwcard="PFBS-1030"] [data-hwf="fin"]', e => e.value), d(-1), 'finish date filled from the schedule');
   await pg.click('#tabs [data-tab="home"]'); await pg.click('[data-hopen="PFBS-1030"]'); await pg.waitForSelector('.jflow2', T);
   // UNDO above Finish and Schedule, like HCP
   const msgs = []; const acc = dlg => { msgs.push(dlg.message()); dlg.accept(); }; pg.on('dialog', acc);
@@ -1873,6 +1873,76 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.selectOption('dialog.schedpop [name="status"]', 'Done'); await pg.click('dialog.schedpop .sp-top [data-a="save"]'); await pg.waitForTimeout(800);
   const inv = await pg.evaluate(() => DBX.invoices.filter(x => x.num === 'PFBS-1401').map(x => [x.status, x.service_date, x.job_no, (x.items || []).length]));
   assert.deepEqual(inv, [['Draft', tm, '10600', 1]], 'one draft for the visit');
+  await pg.close();
+}
+
+// 65. Waiting for hours (Arturo 10/25): one card per finished job, typed once from the daily sign-in sheets or read by AI (checked before saving);
+//     saving fills the job's actual hours, finishes the visits, the off-rent #, the activity and the payroll week (+ CSV)
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const D = n => loc(new Date(Date.now() + n * 864e5));
+  // a 2-day job that ended yesterday (or before), nobody clicked Finish
+  const d1 = D(-2), d2 = D(-1);
+  const crewS = { crew: [['Rigo Perez', '', 'es', [], ['Rigoberto']], ['Israel Hernandez', '', 'es', []], ['Baldemar Cervantes', '', 'es', ['Field supervisor'], ['Baldemar Ochoa-Cervantes']]] };
+  const jj = { num: 'PFBS-1501', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Harbor Co', property: '400 Harbor Way', site_address: '400 Harbor Way, Oakland', amount: 2000, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10612',
+    items: [{ type: 'Service', qty: 1, description: 'Exterior window cleaning', amount: 2000 }], parts: [{ kind: 'rental', desc: 'Boom lift', status: 'Delivered' }] };
+  const vis = [{ id: 'hw1', num: 'PFBS-1501', job_no: '10612', kind: 'job', status: 'Scheduled', visit_date: d1, end_date: d2, start_time: '06:00', end_time: '14:30', techs: ['Rigo Perez', 'Israel Hernandez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('t65 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(([s, x, v, d1, d2]) => { window.MOCK_SETTINGS = s; window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear();
+    window.__FN = [];
+    window.MOCK_FN = async (n, body) => { window.__FN.push([n, body.crew, !!body.image]);
+      return { data: { date: d1, job: '#10612 Harbor', supervisor: 'Baldemar', rows: [
+        { name: 'PEREZ, RIGOBERTO', match: null, in: '06:00', out: '14:30', signed: true, sure: true },
+        { name: 'Israel H', match: 'Israel Hernandez', in: '06:00', out: '11:00', signed: true, sure: false, note: 'out time smudged' },
+        { name: 'OCHOA-CERVANTES, BALDEMAR', match: null, in: '07:00', out: '13:00', signed: true, sure: true }] }, error: null }; }; }, [crewS, jj, vis, d1, d2]);
+  await pg.goto(BASE); await pg.waitForTimeout(1000);
+  await pg.click('#tabs [data-tab="orders"]'); await pg.waitForSelector('[data-hwcard="PFBS-1501"].open', T);
+  const head = await pg.textContent('[data-hwcard="PFBS-1501"]');
+  assert.match(head, /#10612[\s\S]*Harbor Co · 400 Harbor Way/); assert.ok(await pg.$('[data-hwcard="PFBS-1501"] [data-hwf="offRent"]'), 'off-rent # asked (the job has a lift)');
+  assert.equal(await pg.$$eval('[data-hwcard="PFBS-1501"] .hwt thead th', L => L.length), 4, 'tech + 2 days + total');
+  // AI reads the sheet for day 1
+  await pg.setInputFiles('[data-hwread="PFBS-1501"]', { name: 'sheet1.jpg', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
+  await pg.waitForSelector('[data-hwcard="PFBS-1501"] .hwainote', T);
+  const fn = await pg.evaluate(() => window.__FN); assert.equal(fn[0][0], 'read-timesheet'); assert.ok(fn[0][2] && fn[0][1].includes('Rigo Perez'), 'sends the photo + crew list');
+  const v = await pg.$$eval(`[data-hwcard="PFBS-1501"] [data-hwh$="|${d1}"]`, L => L.map(x => [x.value, x.className.includes('unsure') ? 'unsure' : x.className.includes('ai') ? 'ai' : '']));
+  assert.deepEqual(v, [['8', 'ai'], ['5', 'unsure'], ['5.5', 'ai']], 'Rigo 8.5 − 0.5 meal = 8; Israel 5 (no meal); Baldemar matched by his other name, added');
+  assert.match(await pg.textContent('[data-hwcard="PFBS-1501"] .hwainote'), /out time smudged/);
+  // correct a number by hand, type day 2, the off-rent #
+  await pg.fill(`[data-hwcard="PFBS-1501"] [data-hwh="1|${d1}"]`, '5.5');
+  await pg.fill(`[data-hwcard="PFBS-1501"] [data-hwh="0|${d2}"]`, '6.5'); await pg.fill(`[data-hwcard="PFBS-1501"] [data-hwh="1|${d2}"]`, '6.5');
+  assert.equal(await pg.textContent('[data-hwcard="PFBS-1501"] [data-hwall]'), '32');
+  await pg.fill('[data-hwcard="PFBS-1501"] [data-hwf="offRent"]', 'OR-55821'); await pg.fill('[data-hwcard="PFBS-1501"] [data-hwf="problems"]', 'Client asked for the skylight too');
+  await pg.click('[data-hwsave="PFBS-1501"]'); await pg.waitForTimeout(800);
+  const p = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1501'));
+  assert.equal(p.actuals[0].hrs, '32'); assert.equal(p.actuals[0].techs, '3'); assert.equal(p.actuals[0].date, d2);
+  assert.deepEqual(p.actuals[0].crew.find(c => c.name === 'Rigo Perez').h, { [d1]: 8, [d2]: 6.5 });
+  assert.equal(p.parts[0].offRentNo, 'OR-55821', 'off-rent # on the lift');
+  assert.equal(await pg.evaluate(() => DBX.visits.find(x => x.id === 'hw1').status), 'Done', 'visits finished');
+  const act = await pg.evaluate(() => DBX.proposal_activity.filter(a => a.num === 'PFBS-1501').map(a => a.note).join(' | '));
+  assert.match(act, /Actual hours from the sign-in sheets \(read by AI, checked\): Rigo Perez 14\.5, Israel Hernandez 12, Baldemar Cervantes 5\.5 = 32 hrs over 2 days/); assert.match(act, /skylight/);
+  assert.equal(await pg.$('[data-hwcard="PFBS-1501"]'), null, 'leaves the list once saved');
+  // payroll week
+  if (!(await pg.$eval('#payBox', e => /Harbor|Rigo Perez/.test(e.textContent)))) { await pg.click('#payBox [data-payw="-1"]'); }
+  const pay = await pg.textContent('#payBox'); assert.match(pay, /Rigo Perez/); assert.match(pay, /🦺 Baldemar Cervantes/);
+  const [dl] = await Promise.all([pg.waitForEvent('download'), pg.click('#payBox [data-paycsv]')]);
+  const csv = fs.readFileSync(await dl.path(), 'utf8'); assert.match(csv, /^Employee,Date,Hours,Jobs/); assert.match(csv, new RegExp(`"Rigo Perez",${d1},8,"#10612"`));
+  await pg.close();
+}
+// 66. The AI reader not set up yet: a clear message, typing still works
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const d1 = loc(new Date(Date.now() - 2 * 864e5));
+  const jj = { num: 'PFBS-1502', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'NoAI Co', property: '1 No St', amount: 500, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10613', items: [{ type: 'Service', qty: 1, description: 'Pressure washing', amount: 500 }] };
+  const vis = [{ id: 'hw2', num: 'PFBS-1502', job_no: '10613', kind: 'job', status: 'Done', visit_date: d1, start_time: '06:00', end_time: '12:00', techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t66 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); }, [jj, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(900); await pg.click('#tabs [data-tab="orders"]'); await pg.waitForSelector('[data-hwcard="PFBS-1502"].open', T);
+  await pg.setInputFiles('[data-hwread="PFBS-1502"]', { name: 's.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
+  await pg.waitForSelector('text=AI sheet reader isn', T);
+  await pg.fill(`[data-hwcard="PFBS-1502"] [data-hwh="0|${d1}"]`, '5.5'); await pg.click('[data-hwsave="PFBS-1502"]'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1502').actuals[0].hrs), '5.5');
   await pg.close();
 }
 
