@@ -365,6 +365,19 @@ async function fillFromJob(r, num) {
   const lines = items.filter(i => i.type === 'Add-on' ? !!i.accepted : (!i.group || pick.includes(i.group)))
     .map(i => String(i.description || i.service || '').trim()).filter(Boolean);
   if (blankList(r.work) && lines.length) { r.work = lines.map(SRV.up); const c = SRV.guessCategories(lines.join(' ')); r.categories = c; r.other_text = c.other ? SRV.otherText(lines) : ''; }
+  // the dates worked (from the hours typed once on the job, else the schedule), the visit's arrival / finish time and the
+  // field supervisor as crew lead (Arturo 10/25): everything stays editable on the report. Never crew size or hours.
+  try {
+    const { data: vs } = await sb.from('visits').select('*').eq('num', num).neq('status', 'Cancelled');
+    const done = (vs || []).filter(v => v.kind !== 'event').sort((a, b) => String(a.visit_date).localeCompare(String(b.visit_date)));
+    const act = (p.actuals || []).find(a => Array.isArray(a.days) && a.days.length);
+    const days = act ? act.days.slice().sort() : done.filter(v => v.status === 'Done').flatMap(v => [v.visit_date, v.end_date || v.visit_date]).sort();
+    if (!r.date_start && days.length) { r.date_start = days[0]; r.date_end = days[days.length - 1] !== days[0] ? days[days.length - 1] : ''; }
+    const v0 = done.find(v => days.includes(v.visit_date)) || done[done.length - 1];
+    if (v0 && !r.time_start && v0.start_time) { r.time_start = String(v0.start_time).slice(0, 5); r.time_end = v0.end_time ? String(v0.end_time).slice(0, 5) : ''; }
+    if (v0 && v0.supervisor && r.source === 'crm' && !r.crew_lead_set) r.crew_lead = SRV.up(String(v0.supervisor).split(/\s+/)[0]);
+    if (r.date_start || r.time_start) syncDateTime(r);
+  } catch (_) {}
   return r;
 }
 // a report that just arrived from HousecallPro: build it the same way the old app did, then add what the CRM knows

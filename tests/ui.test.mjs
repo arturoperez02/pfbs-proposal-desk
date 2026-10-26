@@ -1904,7 +1904,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   // AI reads the sheet for day 1
   await pg.setInputFiles('[data-hwread="PFBS-1501"]', { name: 'sheet1.jpg', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
   await pg.waitForSelector('[data-hwcard="PFBS-1501"] .hwainote', T);
-  const fn = await pg.evaluate(() => window.__FN); assert.equal(fn[0][0], 'read-timesheet'); assert.ok(fn[0][2] && fn[0][1].includes('Rigo Perez'), 'sends the photo + crew list');
+  const fn = await pg.evaluate(() => window.__FN); assert.equal(fn[0][0], 'ai-reader'); assert.ok(fn[0][2] && fn[0][1].includes('Rigo Perez'), 'sends the photo + crew list');
   const v = await pg.$$eval(`[data-hwcard="PFBS-1501"] [data-hwh$="|${d1}"]`, L => L.map(x => [x.value, x.className.includes('unsure') ? 'unsure' : x.className.includes('ai') ? 'ai' : '']));
   assert.deepEqual(v, [['8', 'ai'], ['5', 'unsure'], ['5.5', 'ai']], 'Rigo 8.5 − 0.5 meal = 8; Israel 5 (no meal); Baldemar matched by his other name, added');
   assert.match(await pg.textContent('[data-hwcard="PFBS-1501"] .hwainote'), /out time smudged/);
@@ -1940,7 +1940,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); }, [jj, vis]);
   await pg.goto(BASE); await pg.waitForTimeout(900); await pg.click('#tabs [data-tab="orders"]'); await pg.waitForSelector('[data-hwcard="PFBS-1502"].open', T);
   await pg.setInputFiles('[data-hwread="PFBS-1502"]', { name: 's.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
-  await pg.waitForSelector('text=AI sheet reader isn', T);
+  await pg.waitForSelector('text=AI reader isn', T);
   await pg.fill(`[data-hwcard="PFBS-1502"] [data-hwh="0|${d1}"]`, '5.5'); await pg.click('[data-hwsave="PFBS-1502"]'); await pg.waitForTimeout(500);
   assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1502').actuals[0].hrs), '5.5');
   await pg.close();
@@ -1974,6 +1974,64 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.ok(up.some(u => /items\/ts1:\/WC Actual Hours .* - PFBS-1503\.pdf/.test(u)), 'actual hours PDF filed: ' + JSON.stringify(up));
   assert.ok(up.some(u => /items\/ts1:\/WC Sign-in Sheet 1 .* - PFBS-1503\.jpg/.test(u)), 'original sheet filed');
   assert.match(await pg.evaluate(() => DBX.proposal_activity.filter(x => x.num === 'PFBS-1503').map(x => x.note).join(' | ')), /Filed in the client folder: Timesheets\/WC Actual Hours/);
+  await pg.close();
+}
+
+// 68. Paperwork inbox: drop the texted sign-in sheet photo and the lift company's invoice; AI says what each is and which job;
+//     the sheet fills that job's hours card, the invoice is applied (final cost, invoice #, picked up) only on "Apply to the job"
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const d1 = loc(new Date(Date.now() - 3 * 864e5));
+  const crewS = { crew: [['Rigo Perez', '', 'es', []], ['Israel Hernandez', '', 'es', []]] };
+  const jA = { num: 'PFBS-1601', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Inbox Co', property: '77 Bay St', site_address: '77 Bay Street, Oakland', amount: 3000, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10701',
+    items: [{ type: 'Service', qty: 1, description: 'Exterior window cleaning', amount: 3000 }], parts: [{ kind: 'rental', desc: 'Boom lift 60ft', status: 'Delivered', vendor: 'Cresco', reservationNo: 'C-88123', estCost: 1800 }] };
+  const jB = { num: 'PFBS-1602', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Other Co', property: '5 Elm Ave', amount: 800, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10702', items: [{ type: 'Service', qty: 1, description: 'Pressure washing', amount: 800 }] };
+  const vis = [{ id: 'ib1', num: 'PFBS-1601', job_no: '10701', kind: 'job', status: 'Done', visit_date: d1, start_time: '06:00', end_time: '14:30', techs: ['Rigo Perez', 'Israel Hernandez'], work: [], equipment: [] },
+               { id: 'ib2', num: 'PFBS-1602', job_no: '10702', kind: 'job', status: 'Done', visit_date: d1, start_time: '06:00', end_time: '14:30', techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t68 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(([s, a, c, v, d1]) => { window.MOCK_SETTINGS = s; window.MOCK_EXTRA = [a, c]; window.MOCK_VIS = v; sessionStorage.clear(); window.__K = [];
+    window.MOCK_FN = async (n, body) => { window.__K.push([n, body.kind, body.mediaType]);
+      if (body.mediaType === 'application/pdf') return { data: { type: 'rental_invoice', rows: [], invoice: { vendor: 'Cresco Equipment Rentals', invoice_no: 'INV-55120', invoice_date: d1, customer_po: '', job_ref: '', site_address: '77 Bay St, Oakland CA', contract_no: 'C-88123', delivered: '2026-10-12', off_rent: d1, total: 2140.5, sure: true } }, error: null };
+      return { data: { type: 'timesheet', date: d1, job: '10701 Bay St', rows: [{ name: 'RIGO', match: 'Rigo Perez', in: '06:00', out: '14:30', sure: true }, { name: 'Israel', match: 'Israel Hernandez', in: '06:00', out: '14:00', sure: true }] }, error: null }; }; }, [crewS, jA, jB, vis, d1]);
+  await pg.goto(BASE); await pg.waitForTimeout(1000); await pg.click('#tabs [data-tab="orders"]'); await pg.waitForSelector('#inbox [data-inbfile]', { state: 'attached', timeout: 8000 });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await pg.setInputFiles('#inbox [data-inbfile]', [{ name: 'IMG_2231.jpg', mimeType: 'image/png', buffer: png }, { name: 'Cresco INV-55120.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake') }]);
+  await pg.waitForSelector('#inbox [data-inbinv]', T); await pg.waitForTimeout(300);
+  assert.deepEqual(await pg.evaluate(() => window.__K.map(k => [k[0], k[1]])), [['ai-reader', 'auto'], ['ai-reader', 'auto']]);
+  const ib = await pg.textContent('#inbox');
+  assert.match(ib, /Sign-in sheet[\s\S]*→ #10701 Inbox Co: check the hours card/, 'sheet routed by job # + crew: ' + ib);
+  assert.match(ib, /Cresco Equipment Rentals invoice INV-55120[\s\S]*\$2,140\.50[\s\S]*→ #10701 Inbox Co · Boom lift 60ft/, 'invoice matched by contract # + address');
+  // the sheet filled the right card, gold
+  assert.ok(await pg.$('[data-hwcard="PFBS-1601"].open'), 'that job\'s card opened');
+  assert.deepEqual(await pg.$$eval(`[data-hwcard="PFBS-1601"] [data-hwh$="|${d1}"]`, L => L.map(x => [x.value, x.classList.contains('ai')])), [['8', true], ['7.5', true]]);
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1601').actuals), undefined, 'nothing saved until Save hours');
+  // the invoice: nothing saved until Apply
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1601').parts[0].finalCost), undefined);
+  await pg.click('#inbox [data-inbinv]'); await pg.waitForTimeout(700);
+  const part = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1601').parts[0]);
+  assert.equal(part.finalCost, 2140.5); assert.equal(part.invoiceNo, 'INV-55120'); assert.equal(part.status, 'Picked up'); assert.match(part.invoiceFile || '', /^PFBS-1601\/rentals\/INV-55120\.pdf$/);
+  assert.match(await pg.evaluate(() => DBX.proposal_activity.filter(a => a.num === 'PFBS-1601').map(a => a.note).join(' | ')), /final invoice \$2,140\.50 \(#INV-55120\) from Cresco Equipment Rentals/);
+  assert.ok(!(await pg.$('#inbox [data-inbinv]')), 'invoice leaves the inbox once applied');
+  // save the hours: job profit uses the lift's final invoice, not the estimate
+  await pg.click('[data-hwsave="PFBS-1601"]'); await pg.waitForTimeout(700);
+  const act = await pg.evaluate(() => DBX.proposal_activity.filter(a => a.num === 'PFBS-1601').map(a => a.note).join(' | '));
+  assert.match(act, /Rigo Perez 8, Israel Hernandez 7\.5 = 15\.5 hrs/);
+  await pg.close();
+}
+
+// 69. A service report started from a CRM job is pre-filled with the dates worked (from the saved hours), the visit's times
+//     and the field supervisor as crew lead; everything stays editable
+{
+  const jr = { ...job, num: 'PFBS-1701', hcp_job: '10801', actuals: [{ date: '2026-10-21', hrs: '30', crew: [{ name: 'Rigo Perez', h: { '2026-10-20': 8, '2026-10-21': 7 } }], days: ['2026-10-20', '2026-10-21'] }] };
+  const pg = await b.newPage({ viewport: { width: 430, height: 900 } }); pg.on('pageerror', e => errs.push('t69 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo|jsdelivr/, r => r.abort());
+  await pg.addInitScript(([x]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = [{ id: 'rv1', num: 'PFBS-1701', kind: 'job', status: 'Done', visit_date: '2026-10-20', end_date: '2026-10-21', start_time: '06:00:00', end_time: '14:30:00', techs: ['Rigo Perez'], supervisor: 'Sam Super', work: [], equipment: [] }]; }, [jr]);
+  await pg.goto(BASE + 'reports.html?num=PFBS-1701'); await pg.waitForSelector('#f_ds', T);
+  assert.equal(await val(pg, '#f_ds'), '2026-10-20'); assert.equal(await val(pg, '#f_de'), '2026-10-21');
+  assert.equal(await val(pg, '#f_ts'), '06:00'); assert.equal(await val(pg, '#f_te'), '14:30');
+  assert.match(await pg.textContent('#dtprev'), /10\/20\/2026 – 10\/21\/2026/);
+  await pg.fill('#f_ds', '2026-10-19'); assert.equal(await val(pg, '#f_ds'), '2026-10-19', 'still typed by hand when needed');
   await pg.close();
 }
 

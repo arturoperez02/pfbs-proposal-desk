@@ -203,22 +203,24 @@ To cut a device off, remove its email in Settings → Warehouse.
    paid ones, pick the Jobs file → Continue. Paid invoices come in as history with their job's amount.
 4. Look any invoice up in Money → **Find an invoice**. History invoices never change a job, commission or what's owed.
 
-## AI sign-in sheet reader (Jobs → Waiting for hours → 📷 Fill from sign-in sheets)
-The crew keeps writing their times on the daily sign-in sheet. The office takes a photo of each sheet, and the CRM asks
-Claude (Anthropic's AI) to read the names and times into the job's hours card. Every number shows in gold (read) or red
-(not sure), and nothing is saved until someone checks it and clicks **Save hours**. Typing the hours by hand works
-without any of this setup.
+## AI reader: sign-in sheets and lift invoices (Jobs → 📥 Paperwork inbox, and 📷 on each hours card)
+Drop (or paste, or pick) the sign-in sheet photos the techs text you and the lift company's final invoices (PDF from the
+email, or a photo) into **Jobs → 📥 Paperwork inbox**. Claude (Anthropic's AI) reads each one and works out which job it
+belongs to:
+- a **sign-in sheet** fills that job's hours card (gold = read, red = not sure). Check it and click **Save hours**.
+- a **lift invoice** shows the job and lift it matched, with the total and dates. Click **Apply to the job** to save the
+  final cost (job profit uses it), the invoice #, delivered / picked up, and file the PDF in the client folder (Rentals).
+Nothing is saved until someone checks it. Everything still works by typing if the AI isn't set up.
 
 One-time setup (about 10 minutes):
 1. **Anthropic account**: go to console.anthropic.com, sign up with your company email, open **Billing**, add a card and
-   set a monthly limit (for example $20; a sheet costs a few cents). Then **API Keys → Create key**, name it
-   "PFBS sign-in sheets" and copy it. Don't paste it anywhere else.
+   set a monthly limit ($5 is plenty: a sheet or invoice costs about a cent). Then **API Keys → Create key**, name it
+   "PFBS AI reader" and copy it. Don't paste it anywhere else.
 2. **Save the key in Supabase**: Supabase → your project → **Edge Functions → Secrets → Add new secret**:
    name `ANTHROPIC_API_KEY`, value = the key. Save.
 3. **Add the reader**: Supabase → **Edge Functions → Deploy a new function → Via Editor**. Name it exactly
-   `read-timesheet`, delete the sample code, paste everything from `supabase/functions/read-timesheet/index.ts`
-   in this repository, and click **Deploy**. Leave "Verify JWT" on.
-4. Try it: CRM → Jobs → Waiting for hours → open a job → **📷 Fill from sign-in sheets** → pick the sheet photos
-   (one per day). Check the gold and red numbers against the photo, then **Save hours**.
+   `ai-reader`, delete the sample code, paste everything from `supabase/functions/ai-reader/index.ts`
+   in this repository (on GitHub, open the file and click **Raw** to copy it), and click **Deploy**. Leave "Verify JWT" on.
+4. Try it: CRM → Jobs → drop one sign-in sheet photo into the Paperwork inbox.
 
 Only managers and the accountant can use it; the key stays in Supabase and never reaches the page.
