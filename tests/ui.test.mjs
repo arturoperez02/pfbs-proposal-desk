@@ -1946,6 +1946,37 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 67. Saving hours files the original sign-in sheet photos + an "Actual hours" PDF in the client folder (Timesheets), internal only
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const d1 = loc(new Date(Date.now() - 2 * 864e5));
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t67 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  const up = [];
+  await pg.route(/msal-browser/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.msal={PublicClientApplication:class{getAllAccounts(){return [{username:"a"}]} async acquireTokenSilent(){return {accessToken:"t"}} async acquireTokenPopup(){return {accessToken:"t"}}}}' }));
+  await pg.route(/graph\.microsoft\.com/, r => { const u = decodeURIComponent(r.request().url()), m = r.request().method(), j = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
+    if (m === 'PUT') { up.push(u); return j({ id: 'x' }); } if (m === 'POST') return j({});
+    if (/\/drives\?/.test(u)) return j({ value: [{ id: 'd1', name: 'Clients', webUrl: 'https://x.sharepoint.com/sites/team/Clients' }] });
+    if (/\/shares\//.test(u)) return j({ id: 'f1', parentReference: { driveId: 'd1' } });
+    if (/items\/f1:\/Timesheets/.test(u)) return j({ id: 'ts1' });
+    if (/children/.test(u)) return j({ value: [] });
+    return r.fulfill({ status: 404, body: '{}' }); });
+  const jj = { num: 'PFBS-1503', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Sheet Co', property: '3 Sheet St', service: 'Window Cleaning', amount: 900, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10614',
+    folder_link: 'https://x.sharepoint.com/sites/team/Clients/Sheet%20Co/3%20Sheet%20St/Window%20Cleaning', items: [{ type: 'Service', qty: 1, description: 'Exterior window cleaning', amount: 900 }] };
+  const vis = [{ id: 'hw3', num: 'PFBS-1503', job_no: '10614', kind: 'job', status: 'Done', visit_date: d1, start_time: '06:00', end_time: '12:00', techs: ['Rigo Perez'], work: [], equipment: [] }];
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); }, [jj, vis]);
+  await pg.goto(BASE + '?sp=1'); await pg.waitForTimeout(900); await pg.click('#tabs [data-tab="orders"]'); await pg.waitForSelector('[data-hwcard="PFBS-1503"].open', T);
+  await pg.setInputFiles('[data-hwread="PFBS-1503"]', { name: 's.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
+  await pg.waitForSelector('[data-hwcard="PFBS-1503"] >> text=1 sheet photo attached', T);
+  await pg.fill(`[data-hwcard="PFBS-1503"] [data-hwh="0|${d1}"]`, '5.5'); await pg.click('[data-hwsave="PFBS-1503"]'); await pg.waitForTimeout(1500);
+  const a = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-1503').actuals[0]);
+  assert.equal(a.sheetFiles.length, 1, 'the photo is kept with the job'); assert.match(a.sheetFiles[0], /^PFBS-1503\/sheets\//);
+  assert.ok(up.some(u => /items\/ts1:\/WC Actual Hours .* - PFBS-1503\.pdf/.test(u)), 'actual hours PDF filed: ' + JSON.stringify(up));
+  assert.ok(up.some(u => /items\/ts1:\/WC Sign-in Sheet 1 .* - PFBS-1503\.jpg/.test(u)), 'original sheet filed');
+  assert.match(await pg.evaluate(() => DBX.proposal_activity.filter(x => x.num === 'PFBS-1503').map(x => x.note).join(' | ')), /Filed in the client folder: Timesheets\/WC Actual Hours/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

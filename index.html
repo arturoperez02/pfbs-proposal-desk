@@ -1994,10 +1994,11 @@ function hwCardHTML(p){ const st=hwState(p), jn=jobNoOf(p), ed=canEditRow(p), di
       ${st.crew.map((c,i)=>`<tr><td>${isSup(c.name)?'🦺 ':''}${esc(c.name)}${ed?` <button type="button" class="hwx" data-hwdel="${i}" aria-label="Remove ${esc(c.name)}">✕</button>`:''}</td>${st.days.map(d=>cell(c,i,d)).join('')}<td class="r"><b data-hwtot="${i}">${fmtH(hwTot(st,c))}</b></td></tr>`).join('')}
       ${ed?`<tr><td colspan="${st.days.length+2}"><select data-hwaddsel aria-label="Add a tech"><option value="">+ Add a tech who wasn't on the schedule</option>${[...all, ...sups].filter(n=>!st.crew.some(c=>c.name===n)).map(n=>`<option>${esc(n)}</option>`).join('')}</select> <input type="date" data-hwaddday aria-label="Add a day" style="width:auto"> <button type="button" class="btn ghost small" data-hwday>+ Add a day</button></td></tr>`:''}
       </tbody><tfoot><tr><td><b>All techs</b></td>${st.days.map(d=>`<td class="r" data-hwday-tot="${d}">${fmtH(st.crew.reduce((s,c)=>s+(num(c.h[d])||0),0))}</td>`).join('')}<td class="r"><b data-hwall>${fmtH(hwAll(st))}</b></td></tr></tfoot></table></div>
+    ${(st.files||[]).length&&!Object.keys(st.ai).length?`<div class="note hwainote">📎 ${st.files.length} sheet photo${st.files.length===1?'':'s'} attached: filed in the client folder (Timesheets) when you save.${st.sheetNotes&&st.sheetNotes.length?'<br>'+st.sheetNotes.map(esc).join('<br>'):''}</div>`:''}
     ${Object.keys(st.ai).length?`<div class="note hwainote">✨ Filled from ${st.sheets.length} sheet photo${st.sheets.length===1?'':'s'}: <span class="hwk ai">gold</span> = read by AI, <span class="hwk unsure">red</span> = AI wasn't sure. Check them against the sheet, fix anything, then Save.${st.sheetNotes&&st.sheetNotes.length?'<br>'+st.sheetNotes.map(esc).join('<br>'):''}</div>`:''}
     <div data-hwcmp>${hwCompare(p, st)}</div>
     <label class="f" style="margin-top:8px">Problems, damage or extra work the client asked for<textarea data-hwf="problems" rows="2" placeholder="From the packet's Back from the job box" ${dis}>${esc(st.problems)}</textarea></label>
-    ${ed?`<div class="toolbar" style="margin:8px 0 0;flex-wrap:wrap;gap:6px"><label class="btn ghost small" title="Take or pick the photos of the daily sign-in sheets, one per day">📷 Fill from sign-in sheets<input type="file" accept="image/*" multiple hidden data-hwread="${esc(p.num)}"></label><span class="note" data-hwbusy style="margin:0"></span><span style="flex:1"></span><button type="button" class="btn ghost small" data-hwskip="${esc(p.num)}">Skip for now</button><button type="button" class="btn small" data-hwsave="${esc(p.num)}">Save hours</button></div>`:''}
+    ${ed?`<div class="toolbar" style="margin:8px 0 0;flex-wrap:wrap;gap:6px"><label class="btn ghost small" title="Take or pick the photos of the daily sign-in sheets, one per day">📷 Fill from sign-in sheets<input type="file" accept="image/*,application/pdf" multiple hidden data-hwread="${esc(p.num)}"></label><span class="note" data-hwbusy style="margin:0"></span><span style="flex:1"></span><button type="button" class="btn ghost small" data-hwskip="${esc(p.num)}">Skip for now</button><button type="button" class="btn small" data-hwsave="${esc(p.num)}">Save hours</button></div>`:''}
   </div>`; }
 function hwSectionHTML(L){ const first=L.slice(0,12);
   if(first.length && !first.some(p=>HW[p.num]?.open)) hwState(first[0]).open=true;
@@ -2041,7 +2042,8 @@ function crewMatch(name){ const s=String(name||'').trim(); if(!s) return ''; con
   return hit.length===1 ? hit[0][0] : sw.replace(/\b\w+/g, w=>w[0].toUpperCase()+w.slice(1).toLowerCase()); }
 async function hwRead(p, files){ const st=hwState(p), busy=document.querySelector(`[data-hwcard="${CSS.escape(p.num)}"] [data-hwbusy]`);
   const crewList=[...new Set([...crew().map(c=>c[0])])], notes=[];
-  let i=0; for(const f of files){ i++; if(busy) busy.textContent=`Reading sheet ${i} of ${files.length}…`;
+  st.files=[...(st.files||[]), ...files];   // the original photos go with the job (Supabase + the client folder) when it's saved, read by AI or not
+  let i=0; for(const f of files){ i++; if(f.type==='application/pdf'){ notes.push(`${f.name||'PDF'}: attached (the AI reads photos; type this one's hours).`); continue; } if(busy) busy.textContent=`Reading sheet ${i} of ${files.length}…`;
     let r; try{ const img=await shrinkImage(f); r=await sb.functions.invoke('read-timesheet', {body:{image:await b64(img), mediaType:'image/jpeg', crew:crewList, hint:{days:st.days, job:jobNoOf(p)||'', client:p.client||'', address:p.siteAddress||p.property||''}}}); }
     catch(e){ r={error:e}; }
     if(r.error || !r.data || r.data.error){ const m=r.data?.error || r.error?.message || 'no answer';
@@ -2054,7 +2056,41 @@ async function hwRead(p, files){ const st=hwState(p), busy=document.querySelecto
       let ci=st.crew.findIndex(c=>c.name===n); if(ci<0){ st.crew.push({name:n, h:{}}); ci=st.crew.length-1; }
       st.crew[ci].h[d]=h; st.ai[ci+'|'+d]=row.sure===false?'unsure':'ai'; if(row.note) notes.push(`${n}, ${dayLbl(d)}: ${row.note}`); }
     st.sheets.push(f.name||('sheet '+i)); }
+  if(!st.sheets.length && st.files.length) notes.push(`${st.files.length} sheet photo${st.files.length===1?'':'s'} attached: they'll be filed with the job when you save.`);
   st.sheetNotes=notes; st.fin=st.days[st.days.length-1]; if(busy) busy.textContent=''; renderJobs(); }
+// the original sign-in sheet photos + an "Actual hours" PDF: kept with the job in Supabase and filed in the client's
+// SharePoint folder under Timesheets (Arturo 10/25). Internal only: never sent to the client. Failures never block the save.
+async function hwFile(p, v, files){ const saved=[], paths=[];
+  for(const [k,f] of files.entries()){ try{ const big=f.type==='application/pdf'?f:await shrinkImage(f, 2600), ext=f.type==='application/pdf'?'pdf':'jpg', path=`${p.num}/sheets/${v.date}-${Date.now()}-${k+1}.${ext}`;
+      const {error}=await sb.storage.from(PH_BUCKET).upload(path, big, {contentType:f.type==='application/pdf'?'application/pdf':'image/jpeg'}); if(!error) paths.push(path); }catch(_){} }
+  if(paths.length){ v.sheetFiles=[...(v.sheetFiles||[]), ...paths]; const r=await sb.from('proposals').update({actuals:p.actuals}).eq('num',p.num); if(r.error) toast('Sheet photos not kept: '+r.error.message); }
+  if(!spOn()) return;
+  try{ const folder=await spFolderFor(p); if(!folder){ await addActivity(p.num,'note','Sign-in sheets and actual hours not filed: no client folder yet (⋯ → 📁 Save all to client folder after picking one)'); return; }
+    saved.push(...await spFileHours(p, folder, v));
+    if(saved.length) await addActivity(p.num,'note',`Filed in the client folder: ${saved.join(', ')}`); }
+  catch(e){ await addActivity(p.num,'note',`Sign-in sheets / actual hours didn't save to SharePoint (${e.message}). 📁 Save all to client folder tries again.`); } }
+async function spFileHours(p, folder, v){ const out=[]; if(!v || !(v.crew||[]).length) return out;
+  const doc=hoursPdf(p, v); if(doc){ const n=docName(p,'Actual Hours',v.date); await spUpload(doc.output('blob'), n, folder, 'Timesheets'); out.push('Timesheets/'+n); }
+  for(const [k,path] of (v.sheetFiles||[]).entries()){ const {data}=await sb.storage.from(PH_BUCKET).download(path); if(!data) continue; const pdf=/\.pdf$/i.test(path);
+    const n=docName(p,`Sign-in Sheet ${k+1}`,(path.split('/').pop()||'').slice(0,10)||v.date, pdf?'pdf':'jpg'); await spUpload(new Blob([data],{type:pdf?'application/pdf':'image/jpeg'}), n, folder, 'Timesheets'); out.push('Timesheets/'+n); }
+  return out; }
+function hoursPdf(p, v){ if(!window.jspdf) return null; const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'pt',format:'letter',orientation:(v.days||[]).length>6?'landscape':'portrait'});
+  const W=doc.internal.pageSize.getWidth(), L0=48, R0=W-48, NAVY=[31,42,92]; let y=54; const jn=jobNoOf(p), days=v.days||[];
+  doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(...NAVY); doc.text('Actual hours', L0, y); doc.setFontSize(9); doc.setTextColor(179,38,30); doc.text('INTERNAL: not for the client', R0, y, {align:'right'}); y+=18;
+  doc.setTextColor(0); doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
+  for(const line of [`${jn?'Job #'+jn+' · ':''}${p.num} · ${p.client||''}${p.property?' · '+p.property:''}`, String(p.siteAddress||'').replace(/\n/g,', '), `${days.length} day${days.length===1?'':'s'}: ${days.map(fmtD).join(', ')} · finished ${fmtD(v.date)}`].filter(Boolean)){ doc.text(line, L0, y); y+=14; }
+  y+=6; const cw=Math.min(70,(R0-L0-170)/(days.length+1)), x0=L0+170;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.text('Employee', L0, y); days.forEach((d,i)=>doc.text(parse(d).toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric'}), x0+cw*(i+1), y, {align:'right'})); doc.text('Total', x0+cw*(days.length+1), y, {align:'right'});
+  y+=5; doc.setDrawColor(180); doc.line(L0, y, R0, y); y+=13; doc.setFont('helvetica','normal');
+  let tot=0; for(const c of v.crew){ const t=days.reduce((s,d)=>s+(num(c.h?.[d])||0),0); tot+=t; doc.text(c.name, L0, y); days.forEach((d,i)=>doc.text(c.h?.[d]?fmtH(num(c.h[d])):'—', x0+cw*(i+1), y, {align:'right'})); doc.setFont('helvetica','bold'); doc.text(fmtH(t), x0+cw*(days.length+1), y, {align:'right'}); doc.setFont('helvetica','normal'); y+=15; if(y>doc.internal.pageSize.getHeight()-80){ doc.addPage(); y=54; } }
+  doc.line(L0, y-9, R0, y-9); doc.setFont('helvetica','bold'); doc.text('All employees', L0, y+3); doc.text(fmtH(tot), x0+cw*(days.length+1), y+3, {align:'right'}); y+=24;
+  const est=estPerVisit(p), jc=jobCompare(p); doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  if(est&&est.hrs){ doc.text(`Estimated (Pricing): ${fmtH(est.hrs)} hrs · Actual: ${fmtH(tot)} hrs · ${tot>est.hrs?'+':''}${fmtH(tot-est.hrs)} hrs`, L0, y); y+=14; }
+  if(jc&&jc.rev){ doc.text(`Margin: ${jc.estGP!=null?pct(jc.estGP/jc.rev)+' planned → ':''}${pct(jc.actGP/jc.rev)} actual`, L0, y); y+=14; }
+  if(v.offRentNo){ doc.text(`Lift off-rent #: ${v.offRentNo}`, L0, y); y+=14; }
+  if(v.notes){ doc.text(doc.splitTextToSize(`From the crew: ${v.notes}`, R0-L0), L0, y); y+=28; }
+  doc.setFontSize(8.5); doc.setTextColor(110); doc.text(`From the daily sign-in sheets${v.from==='sheets+ai'?' (read by AI, checked by the office)':''}. Saved ${fmtD(iso(today()))}${me?.name?' by '+me.name:''}. Meal breaks per the sheet: 30 min unpaid over 5 h, another over 12 h.`, L0, y+6, {maxWidth:R0-L0});
+  return doc; }
 async function hwSave(p){ const st=hwState(p), tot=hwAll(st); if(!(tot>0)){ toast('Type the hours first (or 📷 fill them from the sign-in sheets).'); return; }
   const worked=st.crew.filter(c=>hwTot(st,c)>0), dd=st.days.filter(d=>worked.some(c=>num(c.h[d])>0));
   const v={date:st.fin||dd[dd.length-1]||iso(today()), start:dd[0]||st.fin, techs:String(worked.length), hpt:String(Math.round(tot/worked.length*100)/100), hrs:String(tot),
@@ -2070,6 +2106,7 @@ async function hwSave(p){ const st=hwState(p), tot=hwAll(st); if(!(tot>0)){ toas
   await addActivity(p.num,'note',`Actual hours from the sign-in sheets${v.from==='sheets+ai'?' (read by AI, checked)':''}: ${worked.map(c=>`${c.name} ${fmtH(hwTot(st,c))}`).join(', ')} = ${fmtH(tot)} hrs over ${dd.length} day${dd.length===1?'':'s'}${jc&&jc.rev?` · actual margin ${pct(jc.actGP/jc.rev)}`:''}${todo.length?` · ${todo.length} visit${todo.length===1?'':'s'} marked Done`:''}`);
   if(st.problems) await addActivity(p.num,'note',`From the crew (Back from the job): ${st.problems}`);
   if(todo.length) await autoDrafts(p, todo);
+  await hwFile(p, v, st.files||[]);
   delete HW[p.num]; toast(`${jobNoOf(p)?'#'+jobNoOf(p):p.num}: ${fmtH(tot)} hours saved`); renderJobs(); if(todo.length) loadSchedule(); }
 $('#jobsBody').addEventListener('click', async e=>{ const t=e.target;
   const tg=t.closest('[data-hwtoggle]'); if(tg && !t.closest('a,button')){ const p=P.find(x=>x.num===tg.dataset.hwtoggle); if(p){ const st=hwState(p); for(const k in HW) if(k!==p.num) HW[k].open=false; st.open=!st.open; renderJobs(); } return; }
@@ -3515,6 +3552,7 @@ async function spFileJob(p){ const saved=[];
   await makePdf(p, {spOnly:true, saved});
   const pairs=(p.items||[]).map((it,i)=>[it,it.estimate]).filter(x=>x[1]); if(pairs.length) await makeEstimatePdf(p, pairs, {spOnly:true, saved});
   saved.push(...await spFilePhotos(p, p.folderLink));
+  for(const v of (p.actuals||[]).filter(v=>(v.crew||[]).length)) saved.push(...await spFileHours(p, p.folderLink, v));
   const {data:invs}=await sb.from('invoices').select('*').eq('num',p.num);
   for(const v of (invs||[]).filter(v=>v.source!=='hcp' && ['Sent','Paid'].includes(v.status))){ const doc=await makeInvoicePdf(v,p); if(doc){ const n=invSpName(v,p); await spUpload(doc.output('blob'), n, p.folderLink); saved.push(n); } }
   const {data:reps}=await sb.from('service_reports').select('id,doc,status,approved_at').eq('num',p.num).eq('status','approved');
