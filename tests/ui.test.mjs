@@ -2079,6 +2079,38 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 72. A schedule visit with no CRM job (imported from TechSched): the card says so and offers Link to a job / Make it a job;
+//     either way the visit (and the site's other unlinked visits) gets the job, and the card then offers Invoice
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date(), D = n => loc(new Date(now.getFullYear(), now.getMonth(), n));
+  const jA = { num: 'PFBS-2001', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Levi Plaza Owner', property: "Levi's Plaza", site_address: '1105 Battery St, San Francisco', amount: 900, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10500', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 900 }] };
+  const vis = [{ id: 'u1', kind: 'job', status: 'Scheduled', visit_date: D(8), title: 'Bart Headquarters', address: '2150 Webster St, Oakland', client: 'BART', job_no: '10777', techs: ['Rigo Perez'], work: [], equipment: [] },
+               { id: 'u2', kind: 'job', status: 'Scheduled', visit_date: D(9), title: 'Bart Headquarters', address: '2150 Webster St, Oakland', client: 'BART', techs: ['Rigo Perez'], work: [], equipment: [] },
+               { id: 'u3', kind: 'job', status: 'Scheduled', visit_date: D(10), title: "Levi's Plaza", address: '1105 Battery St', techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t72 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; sessionStorage.clear(); try { localStorage.setItem('pfbs.schView', 'month'); } catch (_) {} }, [jA, vis]);
+  await pg.goto(BASE); await pg.waitForTimeout(900); await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('[data-vis="u1"]', T);
+  // link: the guess is on top
+  await pg.click('[data-vis="u3"]'); await pg.waitForSelector('.vpop [data-vp="link"]', T);
+  assert.match(await pg.textContent('.vpop'), /Not linked to a CRM job/);
+  await pg.click('.vpop [data-vp="link"]'); await pg.waitForSelector('dialog.ask [name="num"]', T);
+  assert.equal(await pg.$eval('dialog.ask optgroup[label="Looks like"] option', o => o.value), 'PFBS-2001', 'address match suggested');
+  await pg.selectOption('dialog.ask [name="num"]', 'PFBS-2001'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
+  assert.equal(await pg.evaluate(() => DBX.visits.find(x => x.id === 'u3').num), 'PFBS-2001');
+  await pg.waitForSelector('.vpop [data-vp="inv"]', T); await pg.keyboard.press('Escape');
+  // make it a job: both Bart visits get it
+  await pg.click('[data-vis="u1"]'); await pg.click('.vpop [data-vp="mkjob"]'); await pg.waitForSelector('dialog.ask [name="desc"]', T);
+  assert.equal(await pg.$eval('dialog.ask [name="jobno"]', e => e.value), '10777');
+  await pg.fill('dialog.ask [name="desc"]', 'Exterior window cleaning'); await pg.fill('dialog.ask [name="amount"]', '2400'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(900);
+  const made = await pg.evaluate(() => DBX.proposals.find(x => x.client === 'BART'));
+  assert.ok(made && made.status === 'Approved' && made.hcp_job === '10777' && made.amount === 2400, 'job made: ' + JSON.stringify(made && [made.status, made.hcp_job, made.amount]));
+  assert.deepEqual(await pg.evaluate(n => ['u1', 'u2'].map(id => DBX.visits.find(x => x.id === id).num === n), made.num), [true, true], 'the site\'s other unlinked visit too');
+  await pg.waitForSelector('.vpop [data-vp="inv"]', T); assert.match(await pg.textContent('.vpop'), /\$2,400/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
