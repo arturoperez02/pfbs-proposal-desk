@@ -312,7 +312,7 @@ td input,td select{padding:5px 8px}
     <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
   </nav>
   <div class="gbar" id="gbar" hidden>
-    <div class="gsearch"><input type="search" id="gq" placeholder="Search jobs, clients, invoices…  ( / )" autocomplete="off" aria-label="Search everything"><div class="gpop" id="gres" hidden></div></div>
+    <div class="gsearch"><input type="search" id="gq" placeholder="Job #, proposal #, address, client…  ( / )" autocomplete="off" aria-label="Search everything"><div class="gpop" id="gres" hidden></div></div>
     <div id="offBar" class="offbar" hidden role="status"></div><div class="gnew"><button type="button" class="btn small gnewbtn" id="gNew" aria-haspopup="true" aria-expanded="false">+ New</button><div class="gpop gmenu" id="gMenu" hidden></div></div>
   </div>
   <div class="who" id="who" hidden><span id="whoName"></span><a class="btn ghost small onbar" href="reports.html" id="rptLink" title="Service reports" hidden>Service reports</a><a class="btn ghost small onbar" href="hub.html" title="All PFBS apps">Apps</a><button class="btn ghost small onbar" id="fbBtn" title="Something confusing, broken or missing? Tell Arturo">Feedback</button><button class="btn ghost small onbar" id="mySign" title="Password and 6-digit code">My sign-in</button><button class="btn ghost small onbar" id="signOut">Sign out</button></div>
@@ -1628,22 +1628,56 @@ $('#gNew').addEventListener('click', e=>{ e.stopPropagation(); const m=$('#gMenu
 $('#gMenu').addEventListener('click', e=>{ const b=e.target.closest('[data-gnew]'); if(b) newThing(b.dataset.gnew); });
 document.addEventListener('click', e=>{ if(!e.target.closest('.gnew')){ $('#gMenu').hidden=true; $('#gNew').setAttribute('aria-expanded','false'); } if(!e.target.closest('.gsearch')) $('#gres').hidden=true; if(!e.target.closest('.dmore')){ const m=$('#dMenu'); if(m) m.hidden=true; } });
 let GHITS=[], GSEL=0;
-function gSearch(q){ q=norm(q); if(q.length<2) return [];
-  const has=(...xs)=>xs.some(x=>norm(x).includes(q)), out=[];
-  const won=p=>WON.includes(p.status);
-  if(role()!=='Accountant') for(const p of P){ if(out.filter(x=>x.k==='p').length>=8) break;
-    const jn=jobNoOf(p); if(has(p.num, p.client, p.property, p.siteAddress, p.contactName, p.contactEmail, jn, p.poNumber, ...(scopeLines(p)||[]).slice(0,2)))
-      out.push({k:'p', id:p.num, t:`${jn?'Job #'+jn+' · ':''}${p.client||''}${p.property?' · '+p.property:''}`, s:`${p.num} · ${p.status}${num(p.amount)?' · '+money(p.amount):''}${scopeLines(p)[0]?' · '+scopeLines(p)[0].slice(0,50):''}`, sec:won(p)?'Jobs':'Proposals & leads'}); }
-  for(const c of (typeof CL!=='undefined'?CL:[])){ if(out.filter(x=>x.k==='c').length>=6) break;
-    if(has(c.name, ...(c.aliases||[]), c.billing_email)) out.push({k:'c', id:c.id, t:c.name, s:c.kind||'Client', sec:'Customers'}); }
+// Search (Arturo 10/28: "find any project by the address, job # or proposal"): word by word, any order; "Street" = "St",
+// "PFBS-0814" = "pfbs0814" = "814"; every job # on the project (recurring visits too), its building's address; best match first;
+// a number with one digit off ("1045" for 10245) shows under "Did you mean".
+const GS_SUF={street:'st',avenue:'ave',av:'ave',boulevard:'blvd',drive:'dr',road:'rd',lane:'ln',court:'ct',place:'pl',parkway:'pkwy',highway:'hwy',suite:'ste',north:'n',south:'s',east:'e',west:'w',number:'no'};
+const gsWords = x => String(x||'').toLowerCase().replace(/#/g,' ').replace(/[^a-z0-9@.]+/g,' ').replace(/\.(?=\s|$)/g,' ').split(/\s+/).filter(Boolean).map(w=>GS_SUF[w]||w);
+const gsNums = x => [...new Set((String(x||'').match(/\d+/g)||[]).flatMap(d=>[d, d.replace(/^0+(?=\d)/,'')]))];
+function gsDist(a,b){ if(Math.abs(a.length-b.length)>1) return 9; const m=a.length, n=b.length, d=[...Array(m+1)].map((_,i)=>[i,...Array(n).fill(0)]); for(let j=1;j<=n;j++) d[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++){ d[i][j]=Math.min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+(a[i-1]===b[j-1]?0:1)); if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1]) d[i][j]=Math.min(d[i][j], d[i-2][j-2]+1); }
+  return d[m][n]; }
+const projJobNos = p => [...new Set([p.hcpJob, ...VIS.filter(v=>v.num===p.num && v.job_no).map(v=>v.job_no)].filter(Boolean).map(String))];
+const projAddr = p => { const pr=p.propertyId && typeof PROPS!=='undefined' && PROPS.find(x=>x.id===p.propertyId); return [p.siteAddress, p.property, pr&&pr.address, pr&&pr.name].filter(Boolean); };
+const addr1 = p => String(p.siteAddress||'').split('\n').map(t=>t.trim()).filter(Boolean).join(', ');
+function gSearch(q){ const Q=gsWords(q); if(norm(q).length<2 || !Q.length) return [];
+  const qd=String(q).replace(/\D/g,''), qn=qd.replace(/^0+(?=\d)/,''), isNum=/^\s*(#|job\s*#?|pfbs[\s-]*)?\s*[\d\s-]+\s*$/i.test(q), out=[];
+  const won=p=>WON.includes(p.status), hit=(words,nums)=>Q.every(w=>words.some(x=>x.includes(w)) || (/^\d+$/.test(w) && nums.some(n=>n.includes(w.replace(/^0+(?=\d)/,'')||'0'))));
+  const pItem=(p,sec)=>{ const jn=projJobNos(p), a=addr1(p); return {k:'p', id:p.num, t:`${jn[0]?'Job #'+jn[0]+' · ':''}${p.client||''}${p.property?' · '+p.property:''}`,
+    s:[p.num, p.status, num(p.amount)?money(p.amount):'', a, jn.length>1?'also Job #'+jn.slice(1,4).join(', #')+(jn.length>4?'…':''):'', scopeLines(p)[0]?scopeLines(p)[0].slice(0,40):''].filter(Boolean).join(' · '), sec:sec||'Jobs & proposals'}; };
+  if(role()!=='Accountant'){
+    const R=[];
+    for(const p of P){ const jn=projJobNos(p), pn=String(p.num||''), ad=projAddr(p);
+      const words=[...gsWords(pn), pn.toLowerCase().replace(/[^a-z0-9]/g,''), ...jn.flatMap(gsWords), ...gsWords(p.client), ...gsWords(p.property), ...ad.flatMap(gsWords),
+        ...gsWords(p.contactName), ...gsWords(p.contactEmail), ...gsWords(p.poNumber), ...(scopeLines(p)||[]).slice(0,2).flatMap(gsWords)];
+      const nums=[...gsNums(pn), ...jn.flatMap(gsNums), ...gsNums(p.poNumber)];
+      if(!hit(words, nums)) continue;
+      let sc=10;
+      if(qn && (jn.some(j=>j.replace(/^0+/,'')===qn) || gsNums(pn).includes(qn))) sc=100;                       // exact job # / proposal #
+      else if(qn && isNum && (jn.some(j=>j.startsWith(qd)) || gsNums(pn).some(n=>n.startsWith(qn)))) sc=70;
+      else if(Q.every(w=>ad.flatMap(gsWords).some(x=>x.includes(w)))) sc=50;                                       // the address
+      else if(Q.every(w=>[...gsWords(p.client),...gsWords(p.property)].some(x=>x.includes(w)))) sc=40;
+      R.push({p, sc}); }
+    R.sort((x,y)=>y.sc-x.sc || (won(y.p)?1:0)-(won(x.p)?1:0) || String(y.p.num).localeCompare(String(x.p.num)));
+    for(const r of R.slice(0,12)) out.push(pItem(r.p));
+    if(!R.some(r=>r.sc>=70) && isNum && qd.length>=3){   // no job # / proposal # starts with it: one digit off (missing, extra, wrong or swapped)
+      const C=[]; for(const p of P){ if(R.slice(0,12).some(r=>r.p===p)) continue; const cands=[...projJobNos(p).map(j=>j.replace(/\D/g,'')), String(p.num||'').replace(/\D/g,'').replace(/^0+(?=\d)/,'')];
+        if(cands.some(c=>c && gsDist(qn, c.replace(/^0+(?=\d)/,''))<=1)) C.push(p); }
+      C.sort((x,y)=>String(y.num).localeCompare(String(x.num))); for(const p of C.slice(0,6)) out.push(pItem(p, `Nothing with ${q.trim()} · did you mean`)); } }
+  for(const c of (typeof CL!=='undefined'?CL:[])){ if(out.filter(x=>x.k==='c').length>=6) break; if(c.active===false) continue;
+    const words=[...gsWords(c.name), ...(c.aliases||[]).flatMap(gsWords), ...gsWords(c.billing_email), ...(typeof propsOf==='function'?propsOf(c.id).flatMap(x=>[...gsWords(x.address),...gsWords(x.name)]):[])];
+    if(hit(words, [])) out.push({k:'c', id:c.id, t:c.name, s:[c.kind||'Client', typeof propsOf==='function'&&propsOf(c.id).length?propsOf(c.id).length+' address'+(propsOf(c.id).length===1?'':'es'):''].filter(Boolean).join(' · '), sec:'Customers'}); }
   if(canMoney()) for(const v of MINV){ if(out.filter(x=>x.k==='i').length>=6) break;
-    if(has(v.inv_no, invName(v), v.job_no, v.po_number, invWhat(v))) out.push({k:'i', id:v.id, t:`Invoice #${v.inv_no} · ${invName(v)}`, s:`${invLabel(v)[0]} · ${v.status==='Sent'?usd(invBal(v))+' due':usd(v.total)}${invWhat(v)?' · '+invWhat(v):''}`, sec:'Invoices'}); }
+    if(hit([...gsWords(v.inv_no), ...gsWords(invName(v)), ...gsWords(v.job_no), ...gsWords(v.po_number), ...gsWords(invWhat(v))], [...gsNums(v.inv_no), ...gsNums(v.job_no), ...gsNums(v.po_number)]))
+      out.push({k:'i', id:v.id, t:`Invoice #${v.inv_no} · ${invName(v)}`, s:`${invLabel(v)[0]} · ${v.status==='Sent'?usd(invBal(v))+' due':usd(v.total)}${invWhat(v)?' · '+invWhat(v):''}`, sec:'Invoices'}); }
+  // visits with no CRM job (e.g. imported from TechSched) — linked ones are found through their project above
   if(role()!=='Accountant') for(const v of VIS){ if(out.filter(x=>x.k==='v').length>=6) break;
-    if(v.kind==='job' && (has(v.job_no) || (v.kind==='event'&&has(v.title)))) out.push({k:'v', id:v.id, t:`Visit ${fmtD(v.visit_date)}${v.job_no?' · Job #'+v.job_no:''} · ${visLabel(v)}`, s:(v.techs||[]).join(', ')||'no crew yet', sec:'Schedule'}); }
+    if(v.kind==='job' && !P.some(p=>p.num===v.num) && hit([...gsWords(v.job_no), ...gsWords(v.address), ...gsWords(v.client), ...gsWords(v.title)], gsNums(v.job_no)))
+      out.push({k:'v', id:v.id, t:`Visit ${fmtD(v.visit_date)}${v.job_no?' · Job #'+v.job_no:''} · ${visLabel(v)}`, s:[String(v.address||'').split('\n')[0], (v.techs||[]).join(', ')||'no crew yet'].filter(Boolean).join(' · '), sec:'Schedule (no CRM job)'}); }
   return out; }
 function gRender(){ const box=$('#gres'), q=$('#gq').value; GHITS=gSearch(q); GSEL=0;
   if(norm(q).length<2){ box.hidden=true; return; }
-  let sec=''; box.innerHTML=GHITS.map((h,i)=>{ const head=h.sec!==sec?`<div class="gsec">${esc(h.sec)}</div>`:''; sec=h.sec; return head+`<button type="button" class="gitem ${i===0?'on':''}" data-gi="${i}">${esc(h.t)}<small>${esc(h.s)}</small></button>`; }).join('') || '<div class="note" style="margin:8px">Nothing found.</div>';
+  let sec=''; box.innerHTML=GHITS.map((h,i)=>{ const head=h.sec!==sec?`<div class="gsec">${esc(h.sec)}</div>`:''; sec=h.sec; return head+`<button type="button" class="gitem ${i===0?'on':''}" data-gi="${i}">${esc(h.t)}<small>${esc(h.s)}</small></button>`; }).join('') || '<div class="note" style="margin:8px">Nothing found. Try the job # (10245), proposal # (0814) or part of the street address (101 Mission).</div>';
   box.hidden=false; }
 async function gOpen(h){ if(!h) return; $('#gres').hidden=true; $('#gq').blur();
   if(h.k==='p') return openDrawer(h.id);

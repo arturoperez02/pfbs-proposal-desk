@@ -565,12 +565,24 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
 
 // 21. Top bar: search everything, and "+ New" → Job (approved, then the schedule opens)
 {
-  const sj = { num: 'PFBS-1003', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Searchable Towers', property: '9 Find St', amount: 700, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10420', items: [{ type: 'Service', qty: 1, description: 'Skylight cleaning', amount: 700 }] };
+  const sj = { num: 'PFBS-1003', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Searchable Towers', property: '9 Find St', site_address: '777 Findable St., Suite 130\nSan Francisco, CA 94105', amount: 700, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10420', items: [{ type: 'Service', qty: 1, description: 'Skylight cleaning', amount: 700 }] };
+  const sv = { id: 'v-srch2', num: 'PFBS-1003', visit_date: '2026-11-20', job_no: '10433', status: 'Scheduled', kind: 'job', techs: [] };
   const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('top bar: ' + e.message));
   await pg.route(/fonts\.googleapis|fonts\.gstatic/, r => r.abort());
-  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; sessionStorage.clear(); }, sj);
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = [v]; sessionStorage.clear(); }, [sj, sv]);
   await pg.goto(BASE); await pg.waitForTimeout(800);
   assert.ok(await pg.isVisible('#gq'), 'search box in the top bar');
+  // Arturo 10/28: any project by address, job # or proposal #
+  const find = async (q, re, why) => { await pg.fill('#gq', q); await pg.waitForTimeout(250); assert.match(await pg.textContent('#gres'), re, why + ' (' + q + ')'); };
+  await find('777 Findable Street', /Job #10420 · Searchable Towers/, 'address typed "Street" finds "St."');
+  await find('findable 777', /Searchable Towers/, 'words in any order');
+  await find('PFBS-1003', /Searchable Towers/, 'proposal #'); await find('pfbs1003', /Searchable Towers/, 'proposal # without the dash');
+  await find('1003', /Searchable Towers/, 'proposal # digits only');
+  await find('#10433', /Searchable Towers[\s\S]*also Job #10433/, 'a later recurring visit\'s job # finds the project');
+  await find('1042', /Searchable Towers/, 'start of a job #');
+  await find('10402', /did you mean[\s\S]*Job #10420 · Searchable Towers/i, 'one digit off → did you mean');
+  assert.equal((await pg.$$eval('#gres .gitem', L => L.map(x => x.textContent)))[0].includes('Searchable Towers'), true);
+  await pg.fill('#gq', ''); await pg.keyboard.press('Escape');
   assert.equal(await pg.$eval('#gq', e => getComputedStyle(e).color), 'rgb(26, 26, 26)', 'typed text is dark on the white box (was white on white)');
   await pg.keyboard.press('/'); await pg.keyboard.type('10420'); await pg.waitForSelector('#gres .gitem', T);
   assert.match(await pg.textContent('#gres'), /Job #10420 · Searchable Towers/, 'finds a job by its job #');
