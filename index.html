@@ -3612,7 +3612,7 @@ function renderClient(c){
         <div class="card listedit"><h3>Billing</h3>
           <label class="f">Client name<input id="cl-name" value="${esc(c.name)}"></label>
           <label class="f">Type<select id="cl-kind"><option ${!['Homeowner','Management company'].includes(c.kind)?'selected':''}>Business</option>${'managed_by' in c?`<option ${c.kind==='Management company'?'selected':''}>Management company</option>`:''}<option ${c.kind==='Homeowner'?'selected':''}>Homeowner</option></select></label>
-          ${'managed_by' in c ? `<label class="f">Managed by <span class="note" style="margin:0;font-weight:400">the property management company, if a third party runs it for this owner</span><select id="cl-mgr"><option value="">— Nobody (they manage it themselves) —</option>${CL.filter(x=>x.id!==c.id && x.active!==false && !x.managed_by).sort((a,b)=>(b.kind==='Management company')-(a.kind==='Management company')||String(a.name).localeCompare(String(b.name))).map(x=>`<option value="${esc(x.id)}" ${x.id===c.managed_by?'selected':''}>${esc(x.name)}${x.kind==='Management company'?' (management company)':''}</option>`).join('')}</select></label>` : `<div class="note" id="cl-mgr-off" style="border:1px dashed #c9a227;padding:6px 8px;border-radius:6px">Managed by (management company) and building CC lists turn on after database update <b>039</b> is run in Supabase (after 032–038).</div>`}
+          ${'managed_by' in c ? `<label class="f">Managed by <span class="note" style="margin:0;font-weight:400">the property management company, if a third party runs it for this owner</span><select id="cl-mgr"><option value="">— Nobody (they manage it themselves) —</option><option value="__new">+ Add a management company…</option>${CL.filter(x=>x.id!==c.id && x.active!==false && !x.managed_by).sort((a,b)=>(b.kind==='Management company')-(a.kind==='Management company')||String(a.name).localeCompare(String(b.name))).map(x=>`<option value="${esc(x.id)}" ${x.id===c.managed_by?'selected':''}>${esc(x.name)}${x.kind==='Management company'?' (management company)':''}</option>`).join('')}</select></label>` : `<div class="note" id="cl-mgr-off" style="border:1px dashed #c9a227;padding:6px 8px;border-radius:6px">Managed by (management company) and building CC lists turn on after database update <b>039</b> is run in Supabase (after 032–038).</div>`}
           <label class="f">Billing (AP) email for invoices<input id="cl-bemail" type="email" value="${esc(c.billing_email||'')}" placeholder="Leave blank to use the main contact"></label>
           <label class="f">Billing address<textarea id="cl-baddr" rows="2">${esc(c.billing_address||'')}</textarea></label>
           <div class="grid2"><label class="f">Requires a PO#<select id="cl-po"><option value="">No</option><option value="true" ${c.po_required?'selected':''}>Yes</option></select></label>
@@ -3677,7 +3677,7 @@ async function saveClient(c){
   const row={name:has('cl-name')?v('cl-name'):c.name, kind:has('cl-kind')?v('cl-kind'):c.kind, billing_email:has('cl-bemail')?(v('cl-bemail')||null):c.billing_email, po_required:has('cl-po')?v('cl-po')==='true':!!c.po_required,
     billing_address:has('cl-baddr')?(v('cl-baddr')||null):c.billing_address, terms_days:has('cl-terms')?num(v('cl-terms')):c.terms_days, notes:has('cl-notes')?(v('cl-notes')||null):c.notes,
     aliases:has('cl-alias')?[...new Set(v('cl-alias').split('\n').map(s=>s.trim()).filter(Boolean))]:(c.aliases||[])};
-  if(has('cl-mgr')) row.managed_by=v('cl-mgr')||null;   // only shown once update 039 is in
+  if(has('cl-mgr')) row.managed_by=(v('cl-mgr')==='__new'?'':v('cl-mgr'))||null;   // only shown once update 039 is in
   if(!row.name){ toast('The client needs a name.'); return; }
   const r=await sb.from('clients').update(row).eq('id',c.id); if(r.error){ toast(/unique|duplicate/i.test(r.error.message)?'Another client already has that name.':r.error.message); return; }
   for(const tr of box.querySelectorAll('#clK tr')){ const g=f=>tr.querySelector(`[data-cf="${f}"]`); const k={name:g('name').value.trim()||null, role:g('role').value.trim()||null, email:g('email').value.trim()||null, phone:g('phone').value.trim()||null, is_primary:g('is_primary').checked};
@@ -5747,6 +5747,20 @@ $('#clientsBody').addEventListener('click', async e=>{ const t=e.target, box=$('
     const {data,error}=await sb.from('clients').insert({name:r.name, kind:r.kind}).select().single(); if(error){ toast(invMissing(error)?'Run database update 019 in Supabase first.':error.message); return; }
     CL.push(data); CLSEL=data.id; renderClients(); }
 });
+// Arturo 10/28: add a management company right from the Managed by list (it's a client of its own, typed once)
+document.addEventListener('change', async e=>{ const s=e.target; if(s.id!=='cl-mgr' || s.value!=='__new') return;
+  const back=()=>{ s.value=s.dataset.was||''; };
+  const r=await formDialog('Add a management company', '<label class="f">Company name<input name="name" required placeholder="e.g. Action Property Management"></label><div class="note">It is saved as a client of its own (type Management company), so its contacts are typed once and offered on every building it runs.</div>', 'Add');
+  if(!r || !String(r.name||'').trim()) return back(); const name=String(r.name).trim();
+  let c=CL.find(x=>norm(x.name)===norm(name));
+  if(c){ const row={kind:'Management company'}; if(c.active===false) row.active=true;
+    const {error}=await sb.from('clients').update(row).eq('id',c.id); if(error){ toast(error.message); return back(); } Object.assign(c,row); }
+  else { const {data,error}=await sb.from('clients').insert({name, kind:'Management company'}).select().single(); if(error){ toast(error.message); return back(); } c=data; CL.push(c); }
+  if(c.managed_by){ toast(`${c.name} is itself managed by another company, so it can't be picked here.`); return back(); }
+  let o=[...s.options].find(x=>x.value===c.id); if(!o){ o=new Option(`${c.name} (management company)`, c.id); s.add(o, 2); } else o.textContent=`${c.name} (management company)`;
+  s.value=c.id; s.dataset.was=c.id; s.dispatchEvent(new Event('input',{bubbles:true}));
+  toast(`${c.name} added. Save the client to keep it as the manager.`); });
+document.addEventListener('focusin', e=>{ if(e.target.id==='cl-mgr') e.target.dataset.was=e.target.value; });
 { let DRAG=null; const sb_=$('#schedBody');
   sb_.addEventListener('dragstart', e=>{ const c=e.target.closest?.('[data-vis][draggable="true"]'); if(!c) return; visPopClose();
     DRAG={id:c.dataset.vis, from:c.closest('[data-day]')?.dataset.day}; c.classList.add('dragging'); try{ e.dataTransfer.setData('text/plain', c.dataset.vis); e.dataTransfer.effectAllowed='move'; }catch(_){} });

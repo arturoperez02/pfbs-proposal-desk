@@ -2179,6 +2179,25 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 75. Managed by → "+ Add a management company…" (Arturo 10/28: Action Property Management wasn't on the list): saved as its
+//     own client of type Management company, picked right away, kept on Save
+{
+  const MIRA = { id: 'c-mira', name: 'The Mira', kind: 'Business', aliases: [], active: true, managed_by: null, billing_address: '280 Spear St\nSan Francisco, CA 94105' };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t75 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(C => { window.MOCK_CLIENTS = C; try { sessionStorage.clear(); } catch (_) {} }, [MIRA]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="clients"]'); await pg.click('tr[data-cl="c-mira"]'); await pg.waitForSelector('#cl-mgr', T);
+  await pg.selectOption('#cl-mgr', '__new'); await pg.waitForSelector('dialog.ask [name="name"]', T);
+  await pg.fill('dialog.ask [name="name"]', 'Action Property Management'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(500);
+  const apm = await pg.evaluate(() => DBX.clients.find(x => x.name === 'Action Property Management'));
+  assert.ok(apm && apm.kind === 'Management company', 'saved as a management company');
+  assert.equal(await pg.$eval('#cl-mgr', e => e.value), apm.id, 'picked right away');
+  await pg.click('#clSave'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.clients.find(x => x.id === 'c-mira').managed_by), apm.id, 'kept on Save');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
