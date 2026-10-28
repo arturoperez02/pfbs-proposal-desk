@@ -1057,6 +1057,7 @@ function drawDrawer(){
     ${isNew?'<button class="btn ghost" id="cancelD">Cancel</button>':''}
     ${isNew?'':`<button class="btn ghost" id="estPdfD">Pricing PDF</button><button class="btn ghost" id="pdfD">Preview PDF</button><button class="btn ghost" id="emailD">Email client</button>`}
     <button class="btn" id="saveD" ${ed?'':'disabled'}>${isNew?'Create proposal':'Save now'}</button></div>`;
+  checkDup();   // also on open: a client name that looks like one already here
 }
 const incPct = () => S.priceIncrease ?? 0.05;
 function raiseItems(items, f){ return (items||[]).map(i=>({...i, amount: num(i.amount)!=null ? Math.round(num(i.amount)*(1+f)*100)/100 : i.amount})); }
@@ -1185,7 +1186,7 @@ async function save(after, o={}){
   if(!draft.client){ $('#dmsg').textContent='Add a client name before saving.'; return; }
   if(draft.status==='Lead' && !draft.sentBy){ $('#dmsg').textContent='Assign an estimator before saving the lead.'; return; }
   const btn=$('#saveD'); btn.disabled=true; $('#dmsg').textContent='Saving…';
-  await ensureClient(draft);
+  if(await ensureClient(draft, {ask:true})===false){ btn.disabled=false; $('#dmsg').textContent='Not saved: pick the client first.'; return; }
   syncFromItems(draft); draft.actualsSummary = actSummary(draft); draft.yearValue = isRecurring(draft) ? Math.round((annual(draft)||0)*100)/100 : null;
   const row=toRow(draft); if(isNew) delete row.num;
   if(!canPayComm()){ delete row.comm_paid_on; delete row.est_comm_paid_on; }
@@ -1581,7 +1582,7 @@ function newJobPage(recurring, o={}){
         siteAddress:site||(pr&&pr.address)||'', contactName:st.newClient?q('nc_contact').value.trim():(k.name||''), contactEmail:st.newClient?q('nc_email').value.trim():(k.email||''), contactPhone:st.newClient?q('nc_phone').value.trim():(k.phone||''),
         billAddress:st.client?.billing_address||'', billingEmail:st.client?.billing_email||'', poRequired:st.client?.po_required?'true':'', service:q('jtype').value||'', notes:q('pnotes').value.trim(), items};
       t.disabled=true;
-      await ensureClient(dd); syncFromItems(dd);
+      if(await ensureClient(dd, {ask:true})===false){ t.disabled=false; return; } syncFromItems(dd);
       const row=toRow(dd); delete row.num;
       const res=await sb.from('proposals').insert(row).select().single();
       if(res.error){ t.disabled=false; toast(res.error.message); return; }
@@ -2469,10 +2470,18 @@ function propsFor(client){ const c=norm(client), m=new Map(); for(const x of P){
 function latest(pred){ return P.filter(x=>x.num!==draft.num && pred(x)).sort((a,b)=>String(b.num).localeCompare(String(a.num))); }
 const CONTACT_KEYS=['contactName','contactPhone','contactEmail','billAddress','billingEmail','poRequired'];
 function fillEmpty(src, keys){ let n=0; for(const k of keys){ if(src && src[k] && !String(draft[k]||'').trim()){ draft[k]=src[k]; const el=document.getElementById('f-'+k); if(el) el.value=src[k]; n++; } } return n; }
-function checkDup(){ const box=$('#dupWarn'); if(!box || !draft) return; if(!isNew){ box.innerHTML=''; return; }
-  const c=norm(draft.client), pr=norm(draft.property); if(!c || !pr){ box.innerHTML=''; return; }
-  const hits=P.filter(x=>norm(x.client)===c && norm(x.property)===pr && ['Lead','Draft','Open','Budget'].includes(outcome(x)));
-  box.innerHTML = hits.length ? `<div class="lockline">Already open for ${esc(draft.client)} · ${esc(draft.property)}: ${hits.map(x=>`<a href="#" data-open="${esc(x.num)}">${esc(x.num)}</a> (${esc(x.status)}${x.sentBy?', '+esc(x.sentBy):''})`).join(', ')}. Open it instead, or keep going if this is separate work.</div>` : ''; }
+function checkDup(){ const box=$('#dupWarn'); if(!box || !draft) return; let h='';
+  const c=norm(draft.client), pr=norm(draft.property);
+  if(isNew && c && pr){ const hits=P.filter(x=>norm(x.client)===c && norm(x.property)===pr && ['Lead','Draft','Open','Budget'].includes(outcome(x)));
+    if(hits.length) h+=`<div class="lockline">Already open for ${esc(draft.client)} · ${esc(draft.property)}: ${hits.map(x=>`<a href="#" data-open="${esc(x.num)}">${esc(x.num)}</a> (${esc(x.status)}${x.sentBy?', '+esc(x.sentBy):''})`).join(', ')}. Open it instead, or keep going if this is separate work.</div>`; }
+  // a client name nobody has entered yet, but the building / name matches a client that is already here (Arturo 10/28)
+  if(c && CLOK && !draft.clientId && !clientOf(draft.client) && !(typeof isLocked==='function' && isLocked())){
+    const L=lookalikes({name:draft.client, addresses:[draft.siteAddress, draft.property], emails:[draft.contactEmail, draft.billingEmail]});
+    if(L.length) h+=`<div class="lockline" id="likeWarn">“${esc(draft.client)}” is a new client, but it looks like ${L.slice(0,3).map(w=>`<b>${esc(w.c.name)}</b> (${esc(whyText(w))}) <button type="button" class="btn ghost small" data-uselike="${esc(w.c.id)}">Use ${esc(w.c.name)}</button>`).join(' or ')}. Keep the new name only if a different company pays the invoice.</div>`; }
+  if(box.innerHTML!==h) box.innerHTML=h; }   // unchanged → left alone, so a click on its button isn't lost to the blur redraw
+document.addEventListener('click', e=>{ const b=e.target.closest && e.target.closest('[data-uselike]'); if(!b || !draft) return; e.preventDefault();
+  const c=CL.find(x=>x.id===b.dataset.uselike); if(!c) return; draft.client=c.name; const el=document.getElementById('f-client'); if(el) el.value=c.name;
+  const n=clientFill('client'); matchTypedSite(); drawDrawer(); toast(`Client set to ${c.name}${n?` · ${n} field${n===1?'':'s'} filled`:''}`); AUTO.last=Date.now(); });
 function autofill(k){
   const cf=clientFill(k); if(cf) toast(k==='client'?`Filled from the client record (${cf} field${cf===1?'':'s'})`:'Filled the site address from the property');
   if(k==='client'){
@@ -2493,7 +2502,7 @@ $('#drawer').addEventListener('change', e=>{ const o=e.target.dataset.opt; if(o=
   const groups=groupsOf(draft); let ch=chosenOptions(draft).filter(g=>g!==o); if(e.target.checked) ch.push(o); ch=groups.filter(g=>ch.includes(g));
   if(!ch.length){ e.target.checked=true; toast('At least one option has to count.'); return; }
   draft.pricingOption=ch.join('||'); rerenderItems(); }, true);
-$('#drawer').addEventListener('change', e=>{ if(!draft || e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property'){ autofill(k); checkDup(); } if(k==='siteAddress') matchTypedSite(); if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
+$('#drawer').addEventListener('change', e=>{ if(!draft || e.target.dataset.opt!=null) return; if(itemEvent(e,true)) return; const k=e.target.dataset.k; if(!k) return; draft[k]=e.target.value; if(k==='client'||k==='property'){ autofill(k); checkDup(); } if(k==='siteAddress') matchTypedSite(); if(k==='siteAddress'||k==='contactEmail') checkDup(); if(k==='pricingOption') rerenderItems(); else refreshCalcs(); if(k==='cancelledOn'||k==='termMonths'){ const c=$('#ctBox'); if(c) c.innerHTML=contractHTML(draft, canEditDraft()); } });
 $('#drawer').addEventListener('click', e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.id==='dMore'){ const m=$('#dMenu'); if(m) m.hidden=!m.hidden; return; }
@@ -3410,6 +3419,65 @@ const mgrOf = c => c && c.managed_by ? CL.find(x=>x.id===c.managed_by && x.activ
 const contactsFor = id => { const c=CL.find(x=>x.id===id), m=mgrOf(c); return [...contactsOf(id), ...(m?contactsOf(m.id):[])]; };
 const companyContact = c => (c && (contactsOf(c.id)[0] || (mgrOf(c) && contactsOf(mgrOf(c).id)[0]))) || null;
 const managedBy = id => CL.filter(x=>x.managed_by===id && x.active!==false).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+// ---------- the same client twice (Arturo 10/28: "101 Mission Street" and "CP Mission Owner, LLC") ----------
+// street without suite / unit / floor (same as the database's pfbs_street_key), so "101 Mission St., Suite 130" = "101 Mission Street"
+const bldgKey = a => { const k=akey(a); return k ? (k.replace(/ (SUITE|STE|UNIT|APT|FL|FLOOR|RM|ROOM|BLDG|BUILDING|NO) .*$| (SUITE|STE|UNIT|APT|FL|FLOOR|RM|ROOM)$/,'').trim()||null) : null; };
+const NOTDUP_K='pfbs.notDup', notDupPair=(a,b)=>[a,b].sort().join('|');
+const notDup = (a,b) => { try{ return (JSON.parse(localStorage.getItem(NOTDUP_K)||'[]')).includes(notDupPair(a,b)); }catch(_){ return false; } };
+function setNotDup(a,b){ try{ const L=JSON.parse(localStorage.getItem(NOTDUP_K)||'[]'); L.push(notDupPair(a,b)); localStorage.setItem(NOTDUP_K, JSON.stringify([...new Set(L)])); }catch(_){} }
+// existing clients that look like this one: same company name (ignoring LLC / Inc / c/o…) or one of its buildings at the same street.
+// A shared contact email only backs it up: a property manager often looks after several owners' buildings.
+function lookalikes({name, addresses=[], emails=[], exclude=null}={}){
+  const nk=name?coKey(name):'', sk=new Set(addresses.map(bldgKey).filter(Boolean)), em=new Set(emails.map(e=>String(e||'').trim().toLowerCase()).filter(Boolean)), out=[];
+  const ex=exclude && CL.find(x=>x.id===exclude);
+  for(const c of CL){ if(c.active===false || c.id===exclude) continue;
+    if(ex && (c.managed_by===ex.id || ex.managed_by===c.id || notDup(c.id, ex.id))) continue;   // a manager and its owner aren't duplicates
+    const why=[];
+    if(nk && [c.name,...(c.aliases||[])].some(n=>coKey(n)===nk)) why.push(norm(c.name)===norm(name)?'same name':'almost the same name');
+    const bl=propsOf(c.id).find(p=>sk.has(bldgKey(p.address)||bldgKey(p.name)));
+    if(bl) why.push('same building: '+String(bl.address||bl.name).split('\n')[0]);
+    if(!why.length) continue;
+    const k=contactsOf(c.id).find(x=>x.email && em.has(x.email.toLowerCase()));
+    if(k) why.push('same contact: '+(k.name||k.email));
+    else if(c.billing_email && em.has(c.billing_email.toLowerCase())) why.push('same AP email');
+    out.push({c, why}); }
+  return out.sort((a,b)=>b.why.length-a.why.length); }
+const lookalikesOf = c => lookalikes({name:c.name, addresses:propsOf(c.id).map(p=>p.address||p.name), emails:[c.billing_email, ...contactsOf(c.id).map(k=>k.email)], exclude:c.id});
+const whyText = w => w.why.join(' · ');
+// counts shown before a merge
+function clientCounts(c){ const pp=clientProposals(c); return {jobs:pp.length, props:propsOf(c.id).length, contacts:contactsOf(c.id).length, owners:managedBy(c.id).length}; }
+const countsText = n => [`${n.jobs} proposal${n.jobs===1?'':'s'} / job${n.jobs===1?'':'s'}`, `${n.props} building${n.props===1?'':'s'}`, `${n.contacts} contact${n.contacts===1?'':'s'}`, ...(n.owners?[`${n.owners} owner${n.owners===1?'':'s'} it manages`]:[])].join(', ');
+// Merge (Owner / Admin): everything moves into the one you keep, the other is archived (never deleted). The database does it in one step.
+async function mergeClients(c, otherId){
+  if(!['Owner','Admin'].includes(role())){ toast('Only the owner or admin can merge clients.'); return; }
+  const L=lookalikesOf(c), others=CL.filter(x=>x.active!==false && x.id!==c.id).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  if(!others.length){ toast('There is no other client to merge with.'); return; }
+  const pick=otherId || (L[0] && L[0].c.id) || '', po=CL.find(x=>x.id===pick);
+  const v=await formDialog('Merge two clients', `<div class="note" style="margin:0 0 8px">Use this when the same client was entered twice. Everything moves into the one you keep: proposals and jobs (with their invoices, visits and reports), buildings, contacts and the owners it manages. Same building or same contact email → combined into one. The other client is archived, and its name is kept as "also known as" so old HousecallPro invoices still find it.</div>
+    <label class="f">Merge <b>${esc(c.name)}</b> with<select name="other" id="mgOther" required><option value="">— Choose a client —</option>${L.length?`<optgroup label="Look like the same client">${L.map(w=>`<option value="${esc(w.c.id)}" ${w.c.id===pick?'selected':''}>${esc(w.c.name)} (${esc(whyText(w))})</option>`).join('')}</optgroup><optgroup label="All clients">`:''}${others.filter(x=>!L.some(w=>w.c.id===x.id)).map(x=>`<option value="${esc(x.id)}" ${x.id===pick?'selected':''}>${esc(x.name)}</option>`).join('')}${L.length?'</optgroup>':''}</select></label>
+    <div class="f" style="margin-top:8px"><b>Which one stays?</b> <span class="note" style="margin:0">Keep the one invoices are made out to (the owner LLC), not the building name.</span>
+      <label style="display:block;margin:6px 0"><input type="radio" name="keep" value="this" checked> <b>${esc(c.name)}</b> <span class="note" style="margin:0">${esc(countsText(clientCounts(c)))}</span></label>
+      <label style="display:block;margin:6px 0"><input type="radio" name="keep" value="other"> <b id="mgOtherName">${po?esc(po.name):'the other one'}</b> <span class="note" style="margin:0" id="mgOtherCounts">${po?esc(countsText(clientCounts(po))):''}</span></label></div>
+    <div class="note" style="margin:8px 0 0">This can't be undone with a button, but nothing is deleted: the archived client and the change are in Settings → Change log.</div>`, 'Merge');
+  if(!v || !v.other) return;
+  const o=CL.find(x=>x.id===v.other); if(!o) return;
+  const keep=v.keep==='other'?o:c, gone=v.keep==='other'?c:o;
+  if(!confirm(`Merge "${gone.name}" into "${keep.name}"?\n\n${gone.name} (${countsText(clientCounts(gone))}) moves into ${keep.name} and is archived.`)) return;
+  const {data,error}=await sb.rpc('merge_clients',{keep:keep.id, gone:gone.id});
+  if(error){ toast(/function|schema cache|not find/i.test(error.message||'')?'Run database update 042 in Supabase first.':error.message); return; }
+  const d=data||{}, comb=(d.properties_combined||0)+(d.contacts_combined||0);
+  toast(`${gone.name} merged into ${keep.name}: ${d.jobs||0} proposal${d.jobs===1?'':'s'} / jobs, ${(d.properties||0)+(d.properties_combined||0)} building${(d.properties||0)+(d.properties_combined||0)===1?'':'s'}, ${(d.contacts||0)+(d.contacts_combined||0)} contact${(d.contacts||0)+(d.contacts_combined||0)===1?'':'s'}${comb?` (${comb} combined)`:''}`);
+  CLSEL=keep.id; CLTAB='profile'; await loadClients(); if(typeof loadProposals==='function') await loadProposals();
+}
+document.addEventListener('change', e=>{ if(e.target.id!=='mgOther') return; const o=CL.find(x=>x.id===e.target.value), n=document.getElementById('mgOtherName'), k=document.getElementById('mgOtherCounts');
+  if(n) n.textContent=o?o.name:'the other one'; if(k) k.textContent=o?countsText(clientCounts(o)):''; });
+// creating a client that looks like one already here: use that one, or create it anyway
+async function askLookalike(name, L, verb='Create'){
+  const v=await formDialog('Is this client already here?', `<div class="note" style="margin:0 0 8px"><b>${esc(name)}</b> looks like ${L.length>1?'these clients':'a client'} already in the CRM:</div>
+    ${L.slice(0,5).map((w,i)=>`<label style="display:block;margin:6px 0"><input type="radio" name="use" value="${esc(w.c.id)}" ${i===0?'checked':''}> Use <b>${esc(w.c.name)}</b> <span class="note" style="margin:0">${esc(whyText(w))}</span></label>`).join('')}
+    <label style="display:block;margin:6px 0"><input type="radio" name="use" value="new"> No, ${verb.toLowerCase()} <b>${esc(name)}</b> as a separate client</label>
+    <div class="note" style="margin:8px 0 0">One client per whoever pays the invoice. A building's name is not a client: add it as an address of the owner.</div>`, 'Continue');
+  if(!v) return null; return v.use==='new' ? 'new' : (CL.find(x=>x.id===v.use) || null); }
 // a building's CC list (the main contact is the Contact pick): everyone ticked gets copied on proposal, follow-up and report emails
 const ccOf = pr => (pr && pr.cc_contact_ids || []).map(id=>CC.find(k=>k.id===id && k.active!==false)).filter(k=>k && k.email && k.id!==pr.contact_id);
 const ccEmailsFor = p => { const pr=p && p.propertyId && PROPS.find(x=>x.id===p.propertyId); const to=String(p?.contactEmail||'').toLowerCase(); return [...new Set(ccOf(pr).map(k=>k.email).filter(e=>e.toLowerCase()!==to))].join('; '); };
@@ -3419,10 +3487,15 @@ function composeUrl(kind, to, cc, subj, body){ const enc=encodeURIComponent;
     : `mailto:${enc(to)}?${cc?`cc=${enc(cc)}&`:''}subject=${enc(subj)}&body=${enc(body)}`; }
 function clientProposals(c){ const names=[c.name,...(c.aliases||[])].map(norm); return P.filter(p=>p.clientId===c.id || (!p.clientId && names.includes(norm(p.client)))); }
 // a proposal names a client or property nobody has entered yet: create it so it is typed once
-async function ensureClient(d){
-  if(!CLOK || !d.client || (COLS && !COLS.has('client_id'))) return;
+async function ensureClient(d, o={}){
+  if(!CLOK || !d.client || (COLS && !COLS.has('client_id'))) return true;
   try{
     let c=d.clientId ? CL.find(x=>x.id===d.clientId) : clientOf(d.client);
+    // looks like a client already here (same building / name): ask on Save; autosave never creates it (the drawer shows the warning)
+    if(!c){ const L=lookalikes({name:d.client, addresses:[d.siteAddress, d.property], emails:[d.contactEmail, d.billingEmail]});
+      if(L.length){ if(!o.ask) return true;
+        const a=await askLookalike(String(d.client).trim(), L); if(!a) return false;
+        if(a!=='new'){ c=a; d.client=c.name; d.clientId=c.id; for(const [f,val] of [['billAddress',c.billing_address],['billingEmail',c.billing_email],['poRequired',c.po_required?'true':'']]) if(val && !String(d[f]||'').trim()) d[f]=val; if(draft===d){ const el=document.getElementById('f-client'); if(el) el.value=c.name; } } } }
     if(!c){ const r=await sb.from('clients').insert({name:String(d.client).trim(), billing_address:d.billAddress||null, billing_email:d.billingEmail||null, po_required:d.poRequired===true||d.poRequired==='true'}).select().single();
       if(r.error) return; c=r.data; CL.push(c); }
     d.clientId=c.id;
@@ -3435,6 +3508,7 @@ async function ensureClient(d){
       if(pr) d.propertyId=pr.id;
     }
   }catch(_){}
+  return true;
 }
 // opening a proposal: anything left blank that the client record knows (billing address, AP email, PO#, contact) fills in. Typed values are never overwritten.
 function fillClientBlanks(){ if(!draft || !CLOK || !CL.length || isLocked?.()) return 0; const c=(draft.clientId && CL.find(x=>x.id===draft.clientId)) || clientOf(draft.client); if(!c) return 0;
@@ -3572,8 +3646,7 @@ function dataIssues(){ const C=CL.filter(c=>c.active!==false), G=[];
   add('Addresses that look wrong', 'Street and city run together, or the city / ZIP is missing. Fix them so maps, crew emails and invoices read right.', badA);
   const noK=[]; for(const c of C){ if(contactsOf(c.id).length<2) continue; for(const pr of propsOf(c.id)) if(!pr.contact_id) noK.push({c, what:`${propLabel(pr)}: no site contact picked`}); }
   add('Addresses with no site contact', 'The client has several contacts; pick who to call at each address so proposals and service reports go to the right person.', noK);
-  const byK=new Map(); for(const c of C){ const k=coKey(c.name); if(!k) continue; if(!byK.has(k)) byK.set(k,[]); byK.get(k).push(c); }
-  add('Possible duplicates', 'Same company under two names. Keep one: move contacts/addresses over, then Archive the other.', [...byK.values()].filter(L=>L.length>1).flatMap(L=>L.map(c=>({c, what:`same as ${L.filter(x=>x!==c).map(x=>x.name).join(', ')}`}))));
+  add('Possible duplicates', 'The same client entered twice (same company name, or the same building). Open one and Merge them (owner / admin), or click Not the same.', C.map(c=>({c, L:lookalikesOf(c)})).filter(x=>x.L.length).map(x=>({c:x.c, what:x.L.map(w=>`same as ${w.c.name} (${whyText(w)})`).join('; ')})));
   return G; }
 function dataCheckHTML(){ const G=dataIssues();
   return `<div class="card" style="margin-top:12px"><h3>Data check</h3>${G.length?`<div class="note" style="margin:0 0 8px">Click a row to open the client, fix it, Save changes and come back: the list updates.</div>${G.map(g=>`<h4 style="margin:12px 0 2px">${esc(g.title)} <span class="flag">${g.rows.length}</span></h4><div class="note" style="margin:0 0 6px">${esc(g.help)}</div>
@@ -3631,11 +3704,16 @@ function renderClient(c){
   box.innerHTML=`<div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><button class="btn ghost" id="clBack">‹ Clients</button></div>
     <div class="clhead"><div><div class="note" style="margin:0">Clients › ${esc(c.name)}</div><h2 style="margin:2px 0 0">${esc(c.name)}${c.kind==='Homeowner'?' <span class="flag">Homeowner</span>':''}${c.po_required?' <span class="flag warn">PO# required</span>':''}${owed>0.004&&canM?` <span class="flag bad">${usd(owed)} owed</span>`:''}</h2></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">${mgr?'<button class="btn ghost small" data-clnew="job">+ Job</button>':''}${canCreate()?'<button class="btn ghost small" id="clProp">+ Proposal</button>':''}${canLead()?'<button class="btn ghost small" data-clnew="lead">+ Lead</button>':''}${mgr?'<button class="btn ghost small" data-clnew="recurring">+ Recurring job</button>':''}
-        ${['Owner','Admin'].includes(role())?'<button class="btn ghost small" id="clArch">Archive</button>':''}<button class="btn small" id="clSave">Save changes</button></div></div>
+        ${['Owner','Admin'].includes(role())?'<button class="btn ghost small" id="clMerge" title="The same client entered twice: combine them into one">Merge…</button><button class="btn ghost small" id="clArch">Archive</button>':''}<button class="btn small" id="clSave">Save changes</button></div></div>
     <div class="dtabs cltabs" role="tablist">${tabs.map(([k,t])=>`<button type="button" role="tab" data-cltab="${k}" aria-selected="${k===CLTAB}">${t}</button>`).join('')}</div>
-    <div style="margin-top:12px">${body}</div>`;
+    ${CLTAB==='profile'?likeBannerHTML(c):''}<div style="margin-top:12px">${body}</div>`;
   box._kRow=kRow; box._pRow=pRow;
 }
+// client page: "looks like the same client as …" (Arturo 10/28), with Merge for the owner / admin
+function likeBannerHTML(c){ const L=lookalikesOf(c); if(!L.length) return ''; const can=['Owner','Admin'].includes(role());
+  return `<div class="lockline" id="likeBanner" style="margin-top:10px">${L.slice(0,3).map(w=>`<div style="margin:2px 0">Looks like the same client as <a href="#" data-clopen="${esc(w.c.id)}"><b>${esc(w.c.name)}</b></a> <span class="note" style="margin:0">(${esc(whyText(w))})</span>
+    ${can?`<button type="button" class="btn small" data-mergewith="${esc(w.c.id)}">Merge…</button>`:''} <button type="button" class="btn ghost small" data-notdup="${esc(w.c.id)}">Not the same</button></div>`).join('')}
+    ${can?'':'<div class="note" style="margin:4px 0 0">Ask the owner or admin to merge them.</div>'}</div>`; }
 // a building's Contact drop-down → "+ New contact…": saved to the company once, set as that building's manager, and put on
 // the building's open proposals / jobs that still show the company contact or no one (Arturo 10/20)
 async function newBuildingContact(sel){
@@ -5729,10 +5807,14 @@ $('#clientsBody').addEventListener('click', async e=>{ const t=e.target, box=$('
     newJobPage(k==='recurring', {client:cc}); return; }
   const c=CL.find(x=>x.id===CLSEL);
   if(t.id==='clSave' && c){ t.disabled=true; await saveClient(c); t.disabled=false; return; }
+  if(t.id==='clMerge' && c){ mergeClients(c); return; }
+  const mw=t.closest('[data-mergewith]'); if(mw && c){ mergeClients(c, mw.dataset.mergewith); return; }
+  const nd=t.closest('[data-notdup]'); if(nd && c){ setNotDup(c.id, nd.dataset.notdup); toast('OK, they stay separate (on this computer).'); renderClients(); return; }
   if(t.id==='clArch' && c){ if(!confirm(`Archive ${c.name}? It disappears from lists and pickers; its proposals and invoices stay.`)) return; const {error}=await sb.from('clients').update({active:false}).eq('id',c.id); if(error) toast(error.message); else { CLSEL=null; toast(`${c.name} archived`); loadClients(); } return; }
   if(t.id==='clProp' && c){ await openDrawer(null); draft.client=c.name; clientFill('client'); const pc=propsOf(c.id); if(pc.length===1){ draft.property=propLabel(pc[0]); clientFill('property'); } drawDrawer(); return; }
   if(t.id==='clNew'){ const r=await formDialog('New client', '<label class="f">Client (company, or the homeowner\'s name)<input name="name" required></label><label class="f">Type<select name="kind"><option>Business</option>'+(CL.some(x=>'managed_by' in x)?'<option>Management company</option>':'')+'<option>Homeowner</option></select></label>', 'Create');
     if(!r) return; if(clientOf(r.name)){ toast('That client already exists.'); CLSEL=clientOf(r.name).id; renderClients(); return; }
+    { const L=lookalikes({name:r.name}); if(L.length){ const a=await askLookalike(r.name, L); if(!a) return; if(a!=='new'){ CLSEL=a.id; CLTAB='profile'; renderClients(); toast(`Opened ${a.name}`); return; } } }
     const old=CL.find(x=>x.active===false && norm(x.name)===norm(r.name));   // archived clients keep their name (proposals / invoices point at it)
     if(old){ const nk=propsOf(old.id).length, nc=contactsOf(old.id).length;
       const a=await formDialog('Archived client', `<p class="note" style="margin:0 0 8px"><b>${esc(old.name)}</b> was archived, so the name is taken. Archived clients are kept (never deleted) because old proposals and invoices point at them.</p>
@@ -5753,6 +5835,7 @@ document.addEventListener('change', async e=>{ const s=e.target; if(s.id!=='cl-m
   const r=await formDialog('Add a management company', '<label class="f">Company name<input name="name" required placeholder="e.g. Action Property Management"></label><div class="note">It is saved as a client of its own (type Management company), so its contacts are typed once and offered on every building it runs.</div>', 'Add');
   if(!r || !String(r.name||'').trim()) return back(); const name=String(r.name).trim();
   let c=CL.find(x=>norm(x.name)===norm(name));
+  if(!c){ const L=lookalikes({name}).filter(w=>w.c.id!==CLSEL); if(L.length){ const a=await askLookalike(name, L, 'Add'); if(!a) return back(); if(a!=='new') c=a; } }
   if(c){ const row={kind:'Management company'}; if(c.active===false) row.active=true;
     const {error}=await sb.from('clients').update(row).eq('id',c.id); if(error){ toast(error.message); return back(); } Object.assign(c,row); }
   else { const {data,error}=await sb.from('clients').insert({name, kind:'Management company'}).select().single(); if(error){ toast(error.message); return back(); } c=data; CL.push(c); }

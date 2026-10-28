@@ -473,3 +473,54 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   assert.equal((await q1(`select client_schedule->'rows'->0->>'work' w from proposals where num = 'PFBS-7841'`)).w, 'Day 1 – A1 & A2 (roof)');
   console.log('db: client work schedule passed');
 }
+
+// 042: merge two clients (the same building entered twice)
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  const K = '00000000-0000-0000-0000-0000000c0421', G = '00000000-0000-0000-0000-0000000c0422', M = '00000000-0000-0000-0000-0000000c0423';
+  await db.exec(`reset role;
+    insert into clients(id, name, kind) values ('${M}', 'Mgmt Demo Co', 'Management company');
+    insert into clients(id, name, billing_address) values ('${K}', 'Demo Owner LLC', null);
+    insert into clients(id, name, billing_address, billing_email, managed_by, aliases) values ('${G}', '500 Demo Street', '500 Demo St., Suite 130\nSan Francisco, CA 94105', 'ap@demo.example', '${M}', '{"500 Demo"}');
+    insert into client_contacts(id, client_id, name, email, is_primary) values
+      ('00000000-0000-0000-0000-00000000ca01', '${K}', null, 'pm@demo.example', true),
+      ('00000000-0000-0000-0000-00000000ca02', '${G}', 'Pat Demo', 'PM@demo.example', true),
+      ('00000000-0000-0000-0000-00000000ca03', '${G}', 'Lee Demo', 'lee@demo.example', false);
+    insert into properties(id, client_id, name, address) values
+      ('00000000-0000-0000-0000-00000000cb01', '${K}', '500 Demo Street', '500 Demo Street\nSan Francisco, CA 94105'),
+      ('00000000-0000-0000-0000-00000000cb02', '${G}', null, '500 Demo St., Suite 130\nSan Francisco, CA 94105'),
+      ('00000000-0000-0000-0000-00000000cb03', '${G}', 'Annex', '9 Other Way\nSan Francisco, CA');
+    update properties set contact_id = '00000000-0000-0000-0000-00000000ca02', cc_contact_ids = '{00000000-0000-0000-0000-00000000ca03}' where id = '00000000-0000-0000-0000-00000000cb02';
+    insert into proposals(num, client, client_id, property_id, status, date_sent, sent_by) values
+      ('PFBS-7421', '500 Demo Street', '${G}', '00000000-0000-0000-0000-00000000cb02', 'Sent', '2026-10-26', 'Arturo'),
+      ('PFBS-7422', '500 Demo', null, null, 'Lead', null, 'Arturo');
+    insert into clients(name, managed_by) values ('Sub Owner Demo', '${G}');`);
+  assert.equal((await q1(`select pfbs_street_key('101 Mission St., Suite 130') a, pfbs_street_key('101 Mission Street\nSan Francisco') b`)).a, '101 MISSION ST', 'suite ignored');
+  await db.exec(`insert into team_members(email,name,role) values ('e@x.com','Test Est','Estimator') on conflict do nothing;
+    select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000002","email":"e@x.com"}',false); set role authenticated;`);
+  await assert.rejects(db.query(`select merge_clients('${K}','${G}')`), /owner or admin/, 'estimators cannot merge');
+  await db.exec(`reset role; select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  await assert.rejects(db.query(`select merge_clients('${K}','${K}')`), /two different/);
+  const r = (await q1(`select merge_clients('${K}','${G}') r`)).r;
+  assert.deepEqual([r.jobs, r.properties, r.properties_combined, r.contacts, r.contacts_combined, r.owners], [2, 1, 1, 1, 1, 1], JSON.stringify(r));
+  await db.exec('reset role');
+  const k = await q1(`select * from clients where id='${K}'`), g = await q1(`select * from clients where id='${G}'`);
+  assert.equal(k.billing_email, 'ap@demo.example', 'blanks filled'); assert.ok(k.billing_address.startsWith('500 Demo St'));
+  assert.equal(k.managed_by, M, 'manager carried over'); assert.deepEqual(k.aliases.sort(), ['500 Demo', '500 Demo Street'], 'old names kept');
+  assert.equal(g.active, false); assert.equal(g.merged_into, K); assert.match(g.notes, /^Merged into Demo Owner LLC/);
+  assert.equal((await q1(`select count(*)::int c from proposals where client_id='${K}'`)).c, 2, 'jobs moved, also the one only named');
+  assert.equal((await q1(`select property_id from proposals where num='PFBS-7421'`)).property_id, '00000000-0000-0000-0000-00000000cb01', 'job points at the combined building');
+  const b = await q1(`select contact_id, cc_contact_ids from properties where id='00000000-0000-0000-0000-00000000cb01'`);
+  assert.equal(b.contact_id, '00000000-0000-0000-0000-00000000ca01', 'same-email contact combined into keep\'s');
+  assert.deepEqual(b.cc_contact_ids, ['00000000-0000-0000-0000-00000000ca03'], 'CCs joined');
+  assert.equal((await q1(`select name from client_contacts where id='00000000-0000-0000-0000-00000000ca01'`)).name, 'Pat Demo', 'contact blanks filled');
+  assert.equal((await q1(`select count(*)::int c from client_contacts where client_id='${K}' and active and is_primary`)).c, 1, 'one company contact');
+  assert.equal((await q1(`select client_id from properties where id='00000000-0000-0000-0000-00000000cb03'`)).client_id, K, 'other building moved');
+  assert.equal((await q1(`select managed_by from clients where name='Sub Owner Demo'`)).managed_by, K, 'owners it managed move too');
+  assert.equal((await q1(`select count(*)::int c from proposal_activity where num='PFBS-7421' and note like 'Client merged:%'`)).c, 1);
+  assert.equal((await q1(`select count(*)::int c from admin_log where item like 'Merged 500 Demo Street%'`)).c, 1);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000001","email":"aperez@pfbuildingservices.com"}',false); set role authenticated;`);
+  await assert.rejects(db.query(`select merge_clients('${K}','${G}')`), /already merged/);
+  await db.exec('reset role');
+  console.log('db: merge clients passed');
+}

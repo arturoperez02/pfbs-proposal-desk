@@ -2198,6 +2198,62 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 76. The same client twice (Arturo 10/28: "101 Mission Street" and "CP Mission Owner, LLC"): the client page says so and merges
+//     them through merge_clients; + Client and a new proposal with that building warn before a third copy is made
+{
+  const CB = { id: 'c-cbre', name: 'CBRE Demo', kind: 'Management company', aliases: [], active: true, managed_by: null };
+  const C1 = { id: 'c-101', name: '101 Demo Street', kind: 'Business', aliases: [], active: true, managed_by: 'c-cbre', billing_address: '101 Demo St., Suite 130\nSan Francisco, CA 94105' };
+  const C2 = { id: 'c-cp', name: 'CP Demo Owner, LLC', kind: 'Business', aliases: [], active: true, managed_by: null, billing_address: '101 Demo St., Suite 130\nSan Francisco, CA 94105' };
+  const K = [{ id: 'k-mi', client_id: 'c-101', name: 'Michelle Demo', email: 'michelle@cbre.example', is_primary: true, active: true },
+             { id: 'k-mi2', client_id: 'c-cp', name: 'Michelle Demo', email: 'Michelle@cbre.example', is_primary: true, active: true }];
+  const PR = [{ id: 'p-101', client_id: 'c-101', name: null, address: '101 Demo Street\nSan Francisco, CA 94105', addr_key: '101 DEMO ST', contact_id: 'k-mi', cc_contact_ids: [], active: true },
+              { id: 'p-cp', client_id: 'c-cp', name: '101 Demo Street', address: '101 Demo Street\nSan Francisco, CA 94105', addr_key: '101 DEMO ST', contact_id: null, cc_contact_ids: [], active: true }];
+  const prop = { num: 'PFBS-1101', sent_by: 'Arturo', client: 'CP Demo Owner, LLC', client_id: 'c-cp', property_id: 'p-cp', property: '101 Demo Street', status: 'Sent', date_sent: '2026-10-28', items: [{ type: 'Base', qty: 1, description: 'Windows', amount: 900 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t76 ' + e.message)); pg.on('dialog', d => d.accept());
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(([C, K, PR, x]) => { window.MOCK_CLIENTS = C; window.MOCK_CONTACTS = K; window.MOCK_PROPS = PR; window.MOCK_EXTRA = [x];
+    window.MOCK_RPC = { ...(window.MOCK_RPC || {}), merge_clients: a => { window.__merge = a; return { data: { jobs: 1, properties: 0, properties_combined: 1, contacts: 0, contacts_combined: 1, owners: 0 }, error: null }; } };
+    try { if (window.name !== 't76') { sessionStorage.clear(); localStorage.removeItem('pfbs.notDup'); window.name = 't76'; } } catch (_) {} }, [[CB, C1, C2], K, PR, prop]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="clients"]');
+  assert.match(await pg.textContent('#clCheck'), /\d/, 'Data check counts them');
+  // a management company is not a duplicate of the owners it runs
+  await pg.click('tr[data-cl="c-cbre"]'); await pg.waitForSelector('#clSave', T); assert.equal(await pg.$('#likeBanner'), null, 'no banner on the manager');
+  await pg.click('#clBack'); await pg.click('tr[data-cl="c-cp"]'); await pg.waitForSelector('#likeBanner', T);
+  assert.match(await pg.textContent('#likeBanner'), /101 Demo Street[\s\S]*same building: 101 Demo Street[\s\S]*same contact: Michelle Demo/);
+  await pg.click('#likeBanner [data-mergewith="c-101"]'); await pg.waitForSelector('dialog.ask #mgOther', T);
+  assert.equal(await pg.$eval('#mgOther', e => e.value), 'c-101', 'the lookalike is picked');
+  assert.match(await pg.textContent('#mgOtherName'), /101 Demo Street/);
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
+  assert.deepEqual(await pg.evaluate(() => window.__merge), { keep: 'c-cp', gone: 'c-101' }, 'keeps the page you are on');
+  // Not the same → banner gone (per computer)
+  await pg.waitForSelector('#likeBanner', T); await pg.click('#likeBanner [data-notdup="c-101"]'); await pg.waitForTimeout(200);
+  assert.equal(await pg.$('#likeBanner'), null, 'Not the same hides it');
+  await pg.evaluate(() => localStorage.removeItem('pfbs.notDup'));
+  // + Client with almost the same name → offered the existing one
+  await pg.click('#clBack'); await pg.click('#clNew'); await pg.waitForSelector('dialog.ask [name="name"]', T);
+  await pg.fill('dialog.ask [name="name"]', 'CP Demo Owner LLC'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(300);
+  assert.match(await pg.textContent('dialog.ask'), /Is this client already here\?[\s\S]*CP Demo Owner, LLC/);
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(300);
+  assert.match(await pg.textContent('.clhead h2'), /CP Demo Owner, LLC/, 'opened the existing client instead');
+  assert.equal(await pg.evaluate(() => DBX.clients.filter(c => /CP Demo Owner/.test(c.name)).length), 1, 'no third copy');
+  // a new proposal naming a new client at that building (another suite): warning in the drawer, one click uses the existing client
+  await pg.click('#clProp'); await pg.waitForSelector('#f-client', T);
+  const typeIn = async (sel, v) => { await pg.fill(sel, v); await pg.$eval(sel, e => e.dispatchEvent(new Event('change', { bubbles: true }))); await pg.waitForTimeout(150); };
+  await typeIn('#f-client', 'Mission Demo Owner'); await typeIn('#f-siteAddress', '101 Demo St, Suite 9\nSan Francisco, CA');
+  await pg.waitForSelector('#likeWarn', T); assert.match(await pg.textContent('#likeWarn'), /looks like[\s\S]*same building/);
+  await pg.click('#likeWarn [data-uselike="c-cp"]'); await pg.waitForTimeout(300);
+  assert.equal(await pg.$eval('#f-client', e => e.value), 'CP Demo Owner, LLC');
+  assert.equal(await pg.$('#likeWarn'), null, 'warning goes away');
+  // Save with the new name still asks first; picking the existing one saves the proposal on it, no new client
+  await typeIn('#f-client', 'Mission Demo Owner'); const n0 = await pg.evaluate(() => DBX.clients.length);
+  await pg.click('#saveD'); await pg.waitForSelector('dialog.ask input[name="use"]', T);
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(700);
+  assert.equal(await pg.evaluate(() => DBX.clients.length), n0, 'no new client');
+  assert.ok(await pg.evaluate(() => DBX.proposals.some(p => p.num !== 'PFBS-1101' && ['c-cp', 'c-101'].includes(p.client_id) && p.client !== 'Mission Demo Owner')), 'saved on an existing client');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
