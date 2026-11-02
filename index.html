@@ -290,7 +290,7 @@ input.qa{width:78px;padding:6px 8px} input.qa.qd{width:132px} table.qatable td{v
 .actadd{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.actadd select{width:auto}.actadd input{flex:1 1 200px}
 .actlist{display:grid;gap:4px;font-size:13px;max-height:280px;overflow:auto}.actlist .when{color:var(--muted);font-variant-numeric:tabular-nums}.actlist .who{font-weight:600}.actlist .bad{color:var(--bad)}
 .estwrap.ro #estUse,.estwrap.ro #estSave,.estwrap.ro #estTarget,.estwrap.ro #calcApply,.estwrap.ro #calcAdd,.estwrap.ro #rentApply,.estwrap.ro #fuelApply,.estwrap.ro [data-eadd],.estwrap.ro [data-erm]{display:none}
-.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
+.toast[popover]{top:auto;right:auto;margin:0;border:0;overflow:visible;max-width:92vw} .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:600}
 td input,td select{padding:5px 8px}
 
 </style>
@@ -428,7 +428,7 @@ td input,td select{padding:5px 8px}
 
 <div class="scrim" id="scrim" hidden></div>
 <aside class="drawer" id="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="dTitle"></aside>
-<div class="toast" id="toast" role="status" hidden></div>
+<div class="toast" id="toast" role="status" popover="manual" hidden></div>
 <div class="estwrap" id="est" hidden role="dialog" aria-modal="true" aria-labelledby="estTitle"></div>
 <div class="estwrap" id="rep" hidden role="dialog" aria-modal="true" aria-label="Monthly report"></div>
 <div class="estwrap" id="pho" hidden role="dialog" aria-modal="true" aria-label="Photo"></div>
@@ -488,7 +488,9 @@ const iso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+
 const fmtD = s => { const d=parse(s); return d ? (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2) : '—'; };
 const days = (a,b) => Math.round((b-a)/864e5);
 function num(v){ if(v===''||v==null) return null; const n=Number(v); return isNaN(n)?null:n; }
-function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true, 3500); }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false;
+  try{ if(t.showPopover){ if(t.matches(':popover-open')) t.hidePopover(); t.showPopover(); } }catch(_){}   // popover = top layer, so it shows over an open dialog (it used to hide behind it)
+  clearTimeout(toast.t); toast.t=setTimeout(()=>{ t.hidden=true; try{ if(t.matches(':popover-open')) t.hidePopover(); }catch(_){} }, 3500); }
 const role = () => me?.role || '';
 const isManager = () => ['Owner','Admin','Senior Estimator'].includes(role());
 const canReview = () => ['Owner','Senior Estimator'].includes(role());
@@ -1568,7 +1570,7 @@ function newJobPage(recurring, o={}){
     if(a==='pbsvc'||a==='pbmat'){ const it=await pbPick(a==='pbsvc'?'svc':'mat'); if(!it) return; const kind=it.kind, empty=st.lines.findIndex(l=>l.kind===kind && !l.desc.trim());
       const ln={kind, desc:it.name, qty:1, price:it.price??''}; if(empty>=0) st.lines[empty]=ln; else st.lines.push(ln); drawLines(); return; }
     if(a==='addsvc'||a==='addmat'){ st.lines.push({kind:a==='addsvc'?'svc':'mat', desc:'', qty:1, price:''}); drawLines(); d.querySelectorAll(`.jp${a==='addsvc'?'svc':'mat'} [data-lf="desc"]`).forEach((x,i,L)=>{ if(i===L.length-1) x.focus(); }); return; }
-    if(a==='save'){
+    if(a==='save'){ try{
       const name=st.client?st.client.name:(st.newClient?q('nc_name').value.trim():''); if(!name){ toast('Pick the client, or add a new one.'); return; }
       const lines=st.lines.filter(l=>l.desc.trim()); if(!lines.length){ toast('Add at least one service with a description.'); return; }
       const site=q('site').value.trim(); if(!site && !st.prop){ toast('Add the job site address.'); return; }
@@ -1596,7 +1598,8 @@ function newJobPage(recurring, o={}){
         else { const r=await sb.from('visits').insert(vr); if(r.error) toast(r.error.message); }
       }
       close(); await loadProposals(); await loadSchedule(); loadClients();
-      const fresh=P.find(x=>x.num===job.num)||job; toast(fresh.hcpJob?`Job #${fresh.hcpJob} saved`:`Job saved (${job.num})`); openDrawer(job.num); }
+      const fresh=P.find(x=>x.num===job.num)||job; toast(fresh.hcpJob?`Job #${fresh.hcpJob} saved`:`Job saved (${job.num})`); openDrawer(job.num);
+      } catch(err){ t.disabled=false; console.error(err); toast('The job did not save: '+(err?.message||err)); } }   // Arturo 11/2: an error used to leave Save job doing nothing
   });
   d.showModal();
 }

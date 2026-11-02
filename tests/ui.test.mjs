@@ -592,6 +592,9 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('#closeD'); await pg.waitForTimeout(200);
   await pg.click('#gNew'); assert.deepEqual(await pg.$$eval('#gMenu [data-gnew]', L => L.map(x => x.dataset.gnew)), ['job', 'recurring', 'proposal', 'event', 'customer', 'lead', 'walk'], 'HCP-style New menu');
   await pg.click('[data-gnew="job"]'); await pg.waitForSelector('dialog.jobpage', T);
+  // Arturo 11/2 ("Save job does nothing"): its messages show OVER the open job page (they used to sit behind the dialog)
+  await pg.click('dialog.jobpage [data-a="save"]'); await pg.waitForTimeout(150);
+  assert.ok(await pg.evaluate(() => { const t = document.getElementById('toast'); return /Pick the client/.test(t.textContent) && !t.hidden && t.matches(':popover-open'); }), 'the message is in the top layer, over the job page');
   // new customer, address, a service and a material, a tech, then Save job
   await pg.click('dialog.jobpage [data-a="newcl"]'); await pg.fill('[name="nc_name"]', 'Walk-in Job Co'); await pg.fill('[name="nc_email"]', 'walk@in.example');
   await pg.fill('[name="site"]', '1 Quick St\nFremont, CA');
