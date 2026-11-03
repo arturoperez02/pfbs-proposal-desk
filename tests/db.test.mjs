@@ -541,3 +541,19 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec(`reset role;`);
   console.log('db: admin adds to the price book passed');
 }
+// 044: the Admin runs jobs like the Owner: no senior-estimator review needed, can change a sent / approved job's scope
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role; grant select, insert, update on public.proposals to authenticated; grant select, insert on all tables in schema public to authenticated; grant usage, select on all sequences in schema public to authenticated;
+    select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000003","email":"adm@x.com"}',false); set role authenticated;`);
+  await db.exec(`insert into proposals(num, client, status, sent_by, items) values ('PFBS-7441', 'Admin Job Co', 'Approved', 'Test Admin', '[{"type":"Service","qty":1,"description":"Windows","amount":500}]')`);
+  await db.exec(`update proposals set items = '[{"type":"Service","qty":1,"description":"Windows + lobby glass","amount":800}]', amount = 800 where num = 'PFBS-7441'`);
+  await db.exec(`insert into proposal_activity(num, kind, note) values ('PFBS-7441', 'review_approved', 'Looks good')`);
+  await db.exec(`reset role;`);
+  assert.equal((await q1(`select items->0->>'description' d from proposals where num='PFBS-7441'`)).d, 'Windows + lobby glass', 'admin changed the approved job');
+  await db.exec(`insert into proposals(num, client, status, sent_by) values ('PFBS-7442', 'Est Co', 'Estimating', 'Test Est');
+    select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000002","email":"e@x.com"}',false); set role authenticated;`);
+  await assert.rejects(db.query(`update proposals set status = 'Sent' where num = 'PFBS-7442'`), /must review this proposal/, 'estimators still need the review');
+  await db.exec(`reset role;`);
+  console.log('db: admin runs jobs passed');
+}

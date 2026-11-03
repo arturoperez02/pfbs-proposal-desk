@@ -493,7 +493,8 @@ function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false;
   clearTimeout(toast.t); toast.t=setTimeout(()=>{ t.hidden=true; try{ if(t.matches(':popover-open')) t.hidePopover(); }catch(_){} }, 3500); }
 const role = () => me?.role || '';
 const isManager = () => ['Owner','Admin','Senior Estimator'].includes(role());
-const canReview = () => ['Owner','Senior Estimator'].includes(role());
+const canReview = () => ['Owner','Admin','Senior Estimator'].includes(role());   // update 044: the Admin too
+const canOverride = () => ['Owner','Admin'].includes(role());   // owner + admin may change a sent / approved job without a revision (update 044)
 const canPayComm = () => ['Owner','Admin'].includes(role());
 const canCreate = () => isManager() || role()==='Estimator';
 const canLead = () => isManager() || role()==='BD Rep';
@@ -720,8 +721,8 @@ let draft=null, orig=null, isNew=false, hist=[];
 function opts(list,val){ return '<option value=""></option>'+list.map(v=>`<option ${v===val?'selected':''}>${esc(v)}</option>`).join(''); }
 function canEditDraft(){ if(isNew) return newLead ? canLead() : canCreate();
   return isManager() || (role()==='Estimator' && orig?.sentBy===me.name) || (role()==='BD Rep' && orig?.bdRep===me.name && orig?.status==='Lead'); }
-function isLocked(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && role()!=='Owner' && (draft?.rev||1)===(orig.rev||1); }
-function ownerOverride(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && role()==='Owner'; }
+function isLocked(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && !canOverride() && (draft?.rev||1)===(orig.rev||1); }
+function ownerOverride(){ return !isNew && !!orig && !PRELOCK.includes(orig.status) && canOverride(); }
 let DTAB='prop';
 // the usual next steps from each status; everything else allowed is under "More"
 const isBudgetDoc = p => p.status==='Budget' || (PRE.includes(p.status) && !!p.budgetYear);
@@ -1160,7 +1161,7 @@ function setStatus(st, o={}){
   if(draft.status===st) return;
   if(SEND_STEPS.includes(st) && PRELOCK.includes(draft.status)){ syncFromItems(draft); const m=missingForSend(draft);
     if(m.length){ const msg=`Before it goes ${st==='Needs Review'?'to review':'out'}, add: ${m.join(', ')}.`;
-      if(role()!=='Owner' || !confirm(msg+'\n\nYou are the owner: send it anyway?')){ $('#dmsg').textContent=msg; toast(msg); return; } } }
+      if(!canOverride() || !confirm(msg+`\n\nYou are the ${role().toLowerCase()}: send it anyway?`)){ $('#dmsg').textContent=msg; toast(msg); return; } } }
   draft.status=st;
   if((st==='Approved'||LOST.includes(st)) && !draft.dateResolved) draft.dateResolved=iso(today());
   if(st==='Budget'){ const y=today().getFullYear()+1; if(!draft.budgetYear) draft.budgetYear=y; if(!draft.budgetCheck) draft.budgetCheck=`${draft.budgetYear}-01-15`; if(!draft.dateSent) draft.dateSent=iso(today()); }

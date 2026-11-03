@@ -49,6 +49,7 @@ Hosting: GitHub Pages from `main` (custom domain via `CNAME`). Pushing to `main`
   `service_reports`, `private_settings`, `integration_keys`, `invoices`, `invoice_payments`, `clients`, `client_contacts`,
   `properties`, `visits`, `visit_series` (proposals have `client_id` / `property_id`; the text client/property fields stay for display and old data).
 - Security is row level security plus `security definer` functions. `is_manager()` = Owner, Admin, Senior Estimator.
+- Update 044 (Arturo 11/3): `proposals_guard` lets **Owner, Admin or Senior Estimator** move a proposal past Needs Review, and **Owner or Admin** change a sent / approved job's scope without a revision (page: `canReview()` includes Admin, `canOverride()` = Owner/Admin used by `isLocked` / `ownerOverride` / the price-below-pricing override).
 - Zapier calls `rpc/<function>` with the anon key + a `token` checked by `zap_check()`. Single-jsonb functions need the
   header `Prefer: params=single-object`.
 - **Every update file starts with a guard** that refuses to run if the previous updates are missing, and must be safe to
