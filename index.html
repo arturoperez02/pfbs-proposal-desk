@@ -1136,15 +1136,27 @@ function missingForSend(p){ const m=[];
   return m; }
 const SEND_STEPS=['Needs Review','Sent','Budget'];
 // approving: tick the add-ons the client signed for, so the job, invoice and commission include them (nothing to retype later)
-function confirmAddons(){ const A=(draft.items||[]).map((it,i)=>[it,i]).filter(([it])=>it.type==='Add-on'); if(!A.length) return Promise.resolve(true);
+// Approving asks what the client actually approved (Arturo 11/3): with more than one option, tick every option they approved
+// (at least one, or it doesn't go through; options left unticked stay off the job, the invoice, the crew's scope and
+// commission); and which add-ons they accepted.
+function confirmAddons(){ const A=(draft.items||[]).map((it,i)=>[it,i]).filter(([it])=>it.type==='Add-on'), G=groupsOf(draft);
+  if(!A.length && G.length<2) return Promise.resolve(true);
+  const picked=String(draft.pricingOption||'').split('||').filter(g=>G.includes(g)), optTot=g=>(draft.items||[]).filter(i=>i.type!=='Add-on' && i.group===g).reduce((s,i)=>s+(num(i.qty)||1)*(num(i.amount)||0),0);
   return new Promise(res=>{ const d=document.createElement('dialog'); d.className='ask';
-    d.innerHTML=`<h3>Which add-ons did the client accept?</h3><div class="note" style="margin:0 0 8px">Check their signed copy. Ticked add-ons go on the job, the invoice and commission.</div>
-      <div style="display:grid;gap:6px">${A.map(([it,i])=>`<label class="acc" style="margin:0"><input type="checkbox" data-ai="${i}" ${it.accepted?'checked':''}> ${esc(it.description||'Add-on')} <span class="note" style="margin:0">${money(num(it.amount))}${it.frequency?' · '+esc(it.frequency):''}</span></label>`).join('')}</div>
+    d.innerHTML=`<h3>What did the client approve?</h3><div class="note" style="margin:0 0 8px">Check their signed copy, PO or email. Only what's ticked goes on the job, the invoice, the crew's scope and commission.</div>
+      ${G.length>1?`<div class="optlab" style="margin:4px 0 6px"><b>Options</b> <span class="note" style="margin:0;font-weight:400">tick every option they approved (at least one)</span></div>
+      <div style="display:grid;gap:6px" id="caOpts">${G.map(g=>`<label class="acc" style="margin:0"><input type="checkbox" data-og="${esc(g)}" ${picked.includes(g)?'checked':''}> ${esc(g)} <span class="note" style="margin:0">${money(optTot(g))}</span></label>`).join('')}</div>`:''}
+      ${A.length?`<div class="optlab" style="margin:10px 0 6px"><b>Add-ons</b></div><div style="display:grid;gap:6px">${A.map(([it,i])=>`<label class="acc" style="margin:0"><input type="checkbox" data-ai="${i}" ${it.accepted?'checked':''}> ${esc(String(it.description||'Add-on').split('\n')[0])} <span class="note" style="margin:0">${money(num(it.amount))}${it.frequency?' · '+esc(it.frequency):''}</span></label>`).join('')}</div>`:''}
+      <div class="fdmiss" id="caMiss" hidden></div>
       <div class="toolbar"><span style="flex:1"></span><button type="button" class="btn ghost" data-a="x">Cancel</button><button type="button" class="btn" data-a="ok">Approve</button></div>`;
     document.body.appendChild(d); const done=v=>{ d.close(); d.remove(); res(v); };
     d.addEventListener('cancel', e=>{ e.preventDefault(); done(false); });
+    d.addEventListener('change', ()=>{ d.querySelector('#caMiss').hidden=true; });
     d.addEventListener('click', e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(a==='x') done(false);
-      if(a==='ok'){ for(const c of d.querySelectorAll('[data-ai]')) draft.items[+c.dataset.ai].accepted=c.checked; syncFromItems(draft); done(true); } });
+      if(a==='ok'){ const og=[...d.querySelectorAll('[data-og]')].filter(c=>c.checked).map(c=>c.dataset.og);
+        if(G.length>1 && !og.length){ const m=d.querySelector('#caMiss'); m.textContent='Tick the option(s) the client approved. Nothing is approved until at least one is ticked.'; m.hidden=false; return; }
+        if(G.length>1) draft.pricingOption=og.join('||');
+        for(const c of d.querySelectorAll('[data-ai]')) draft.items[+c.dataset.ai].accepted=c.checked; syncFromItems(draft); done(true); } });
     d.showModal(); }); }
 // proposal lines priced lower than their own pricing adds up to (the $6,685 vs $11,225 case)
 function priceMismatch(p){ const out=[];
@@ -1153,7 +1165,7 @@ function priceMismatch(p){ const out=[];
     if(la < c.total*0.99 - 1) out.push({desc:String(it.description||it.service||'A line').split('\n')[0].slice(0,60), la, total:c.total, m:marginAt(c, la)}); }
   return out; }
 function setStatus(st, o={}){
-  if(st==='Approved' && !o.addonsOk && draft && (draft.items||[]).some(it=>it.type==='Add-on')){ confirmAddons().then(ok=>{ if(ok) setStatus(st,{...o, addonsOk:true}); }); return; }
+  if(st==='Approved' && !o.addonsOk && draft && ((draft.items||[]).some(it=>it.type==='Add-on') || groupsOf(draft).length>1)){ confirmAddons().then(ok=>{ if(ok) setStatus(st,{...o, addonsOk:true}); }); return; }
   if(['Needs Review','Sent'].includes(st) && !o.pricedOk && PRELOCK.includes(draft?.status)){ const un=countedItems(draft).filter(i=>!i.estimate).map(i=>i.description||'a line');
     if(un.length && !confirm(`Not priced yet: ${un.join(', ')}.\n\nWithout pricing on every line, gross profit and commission stay blank. Price it first? (OK = go ahead anyway)`)) return; }
   if(['Needs Review','Sent'].includes(st) && !o.mismatchOk && PRELOCK.includes(draft?.status)){ const mm=priceMismatch(draft);

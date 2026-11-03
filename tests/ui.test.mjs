@@ -2341,6 +2341,31 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 78. Approving a proposal with options (Arturo 11/3): tick the options the client approved; none ticked → it doesn't go through;
+//     options left unticked stay off the job amount
+{
+  const pr = { num: 'PFBS-2501', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Options Co', status: 'Sent', items: [
+    { type: 'Base', qty: 1, group: 'Option A – exterior', description: 'Exterior windows', amount: 1000 },
+    { type: 'Base', qty: 1, group: 'Option B – exterior + interior', description: 'Exterior + interior windows', amount: 1800 },
+    { type: 'Add-on', qty: 1, description: 'Screens', amount: 200 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t78 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; try { sessionStorage.clear(); } catch (_) {} }, pr);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.click('tr[data-id="PFBS-2501"]'); await pg.waitForSelector('#convJob', T);
+  await pg.click('#convJob'); await pg.waitForSelector('dialog [data-og]', T);
+  assert.equal(await pg.$$eval('dialog [data-og]:checked', L => L.length), 0, 'no option is pre-ticked');
+  await pg.click('dialog [data-a="ok"]'); await pg.waitForSelector('#caMiss:not([hidden])', T);
+  assert.match(await pg.textContent('#caMiss'), /Nothing is approved until at least one is ticked/);
+  assert.equal(await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-2501').status), 'Sent', 'not approved with no option ticked');
+  await pg.check('dialog [data-og="Option B – exterior + interior"]'); await pg.check('dialog [data-ai="2"]'); await pg.click('dialog [data-a="ok"]');
+  await pg.waitForSelector('#askJob', T); await pg.fill('#askJob', '10261'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(1200);
+  const row = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-2501'));
+  assert.ok(['Approved', 'Scheduled'].includes(row.status), row.status); assert.equal(row.pricing_option, 'Option B – exterior + interior');
+  assert.equal(Number(row.amount), 2000, 'option B + the add-on, option A left out');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
