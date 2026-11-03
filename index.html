@@ -2367,14 +2367,17 @@ async function cwPdf(p, rows, days, done){ if(!window.jspdf){ toast('PDF tools d
   const head=()=>{ if(logo) doc.addImage(logo,'JPEG',L0,26,142,33); doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(...NAVY); doc.text('Work Schedule', R0, 44, {align:'right'});
     doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(90); doc.text(`Revised ${fmtD(iso(today()))}`, R0, 58, {align:'right'}); doc.setDrawColor(...NAVY); doc.setLineWidth(2); doc.line(L0, 68, R0, 68); };
   head(); let y=86; doc.setTextColor(0); doc.setFontSize(10);
-  const kv=(k,v,x)=>{ doc.setFont('helvetica','bold'); doc.text(k, x, y); doc.setFont('helvetica','normal'); doc.text(String(v||'—'), x+62, y, {maxWidth:190}); };
-  kv('Property', p.property||String(p.siteAddress||'').split('\n')[0], L0); kv('Job #', jobNoOf(p)||p.num, L0+270); y+=14;
-  kv('Client', p.client, L0); kv('Service', scopeLines(p)[0]||p.service||'', L0+270); y+=18;
+  // label + value; a long value wraps under itself and the next row moves down (Arturo 11/3: the service ran into the progress line)
+  const kv=(k,v,x)=>{ doc.setFont('helvetica','bold'); doc.text(k, x, y); doc.setFont('helvetica','normal'); const L=doc.splitTextToSize(String(v||'—'), 190); doc.text(L, x+62, y); return L.length; };
+  let n1=Math.max(kv('Property', p.property||String(p.siteAddress||'').split('\n')[0], L0), kv('Job #', jobNoOf(p)||p.num, L0+270)); y+=12*n1+2;
+  n1=Math.max(kv('Client', p.client, L0), kv('Service', scopeLines(p)[0]||p.service||'', L0+270)); y+=12*n1+10;
   const nd=done.length, nt=days.length; doc.setFont('helvetica','bold'); doc.text(`${Math.min(nd,nt)} of ${nt} day${nt===1?'':'s'} complete`, L0, y);
   doc.setFillColor(230,232,239); doc.roundedRect(L0+120, y-7, 260, 8, 3, 3, 'F'); if(nd) { doc.setFillColor(...GREEN); doc.roundedRect(L0+120, y-7, Math.max(6, 260*Math.min(1,nd/nt)), 8, 3, 3, 'F'); }
   doc.setFont('helvetica','normal'); doc.text(`Est. finish ${parse(days[nt-1]).toLocaleDateString('en-US',{weekday:'short', month:'numeric', day:'numeric'})}`, R0, y, {align:'right'}); y+=16;
   const C=[L0, L0+72, L0+330, L0+412], CW=[72, 258, 82, R0-(L0+412)];
-  const th=()=>{ doc.setFillColor(...NAVY); doc.rect(L0, y, W, 18, 'F'); doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(9); ['Scheduled date','Work','Actual date completed','Notes'].forEach((t,i)=>doc.text(t, C[i]+4, y+12)); y+=18; doc.setTextColor(0); };
+  // headings wrap inside their own column (Arturo 11/3: "Actual date completed" ran into "Notes")
+  const th=()=>{ doc.setFont('helvetica','bold'); doc.setFontSize(9); const H=['Scheduled date','Work','Actual date completed','Notes'].map((s,i)=>doc.splitTextToSize(s, CW[i]-8)), hh=Math.max(...H.map(l=>l.length))*10+8;
+    doc.setFillColor(...NAVY); doc.rect(L0, y, W, hh, 'F'); doc.setTextColor(255); H.forEach((l,i)=>doc.text(l, C[i]+4, y+12)); y+=hh; doc.setTextColor(0); };
   th(); let prev=null;
   rows.forEach((r,i)=>{ const ds=days[i], act=done[i]; doc.setFontSize(9.5); doc.setFont('helvetica','normal');
     const wl=doc.splitTextToSize(r.work||'', CW[1]-8), nl=doc.splitTextToSize(r.note||'', CW[3]-8), h=Math.max(16, 4+11*Math.max(wl.length, nl.length, 1));
