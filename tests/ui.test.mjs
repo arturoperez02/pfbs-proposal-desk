@@ -2124,6 +2124,10 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   // make it a job: both Bart visits get it
   await pg.click('[data-vis="u1"]'); await pg.click('.vpop [data-vp="mkjob"]'); await pg.waitForSelector('dialog.ask [name="desc"]', T);
   assert.equal(await pg.$eval('dialog.ask [name="jobno"]', e => e.value), '10777');
+  // Arturo 11/3: Work left empty → it used to jump to the Client box with no message; now it says which box and marks it
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForSelector('dialog.ask .fdmiss', T);
+  assert.match(await pg.textContent('dialog.ask .fdmiss'), /Fill in "Work \(as it should read on the invoice\)" first/);
+  assert.equal(await pg.evaluate(() => document.activeElement.name), 'desc', 'the empty box gets the focus');
   await pg.fill('dialog.ask [name="desc"]', 'Exterior window cleaning'); await pg.fill('dialog.ask [name="amount"]', '2400'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(900);
   const made = await pg.evaluate(() => DBX.proposals.find(x => x.client === 'BART'));
   assert.ok(made && made.status === 'Approved' && made.hcp_job === '10777' && made.amount === 2400, 'job made: ' + JSON.stringify(made && [made.status, made.hcp_job, made.amount]));
