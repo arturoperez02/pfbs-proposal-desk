@@ -1570,7 +1570,11 @@ function newJobPage(recurring, o={}){
     if(a==='pbsvc'||a==='pbmat'){ const it=await pbPick(a==='pbsvc'?'svc':'mat'); if(!it) return; const kind=it.kind, empty=st.lines.findIndex(l=>l.kind===kind && !l.desc.trim());
       const ln={kind, desc:it.name, qty:1, price:it.price??''}; if(empty>=0) st.lines[empty]=ln; else st.lines.push(ln); drawLines(); return; }
     if(a==='addsvc'||a==='addmat'){ st.lines.push({kind:a==='addsvc'?'svc':'mat', desc:'', qty:1, price:''}); drawLines(); d.querySelectorAll(`.jp${a==='addsvc'?'svc':'mat'} [data-lf="desc"]`).forEach((x,i,L)=>{ if(i===L.length-1) x.focus(); }); return; }
-    if(a==='save'){ try{
+    if(a==='save'){ let step='checking the form', savedNum=null;
+      // Arturo 11/2: Save job sat greyed out with no message (a database call that never answered). Every call now has a
+      // 20 s limit, and the message says which step stopped and whether the job was already saved (so it isn't made twice).
+      const W=(p, s)=>{ step=s; let tm; return Promise.race([p, new Promise((_,rej)=>{ tm=setTimeout(()=>rej(Object.assign(new Error('no answer'),{stuck:true})), window.SAVE_LIMIT||20000); })]).finally(()=>clearTimeout(tm)); };
+      try{
       const name=st.client?st.client.name:(st.newClient?q('nc_name').value.trim():''); if(!name){ toast('Pick the client, or add a new one.'); return; }
       const lines=st.lines.filter(l=>l.desc.trim()); if(!lines.length){ toast('Add at least one service with a description.'); return; }
       const site=q('site').value.trim(); if(!site && !st.prop){ toast('Add the job site address.'); return; }
@@ -1584,22 +1588,25 @@ function newJobPage(recurring, o={}){
         siteAddress:site||(pr&&pr.address)||'', contactName:st.newClient?q('nc_contact').value.trim():(k.name||''), contactEmail:st.newClient?q('nc_email').value.trim():(k.email||''), contactPhone:st.newClient?q('nc_phone').value.trim():(k.phone||''),
         billAddress:st.client?.billing_address||'', billingEmail:st.client?.billing_email||'', poRequired:st.client?.po_required?'true':'', service:q('jtype').value||'', notes:q('pnotes').value.trim(), items};
       t.disabled=true;
-      if(await ensureClient(dd, {ask:true})===false){ t.disabled=false; return; } syncFromItems(dd);
+      if(await W(ensureClient(dd, {ask:true}), 'checking the client')===false){ t.disabled=false; return; } syncFromItems(dd);
       const row=toRow(dd); delete row.num;
-      const res=await sb.from('proposals').insert(row).select().single();
+      const res=await W(sb.from('proposals').insert(row).select().single(), 'saving the job');
       if(res.error){ t.disabled=false; toast(res.error.message); return; }
-      const job=fromRow(res.data); await addActivity(job.num,'note','Created as a job from New job');
+      const job=fromRow(res.data); savedNum=job.num; await W(addActivity(job.num,'note','Created as a job from New job'), 'adding the activity note');
       if(q('pbsave').checked && ['Owner','Admin'].includes(role())){ const fresh=lines.filter(l=>l.kind==='svc' && !pbFind(l.desc,'svc')).map(l=>[l.desc.trim(), num(l.price)??'', '', '']);
         if(fresh.length){ const pb=[...(S.priceBook&&S.priceBook.length?S.priceBook:priceBook().filter(x=>x.kind==='svc').map(x=>[x.name, x.price??'', x.unit, x.desc])), ...fresh];
-          const r=await sb.from('settings').update({data:{...S, priceBook:pb}, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1); if(!r.error) S.priceBook=pb; } }
+          const r=await W(sb.from('settings').update({data:{...S, priceBook:pb}, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1), 'adding the service to the price book'); if(!r.error) S.priceBook=pb; } }
       if(!q('nosched').checked && q('d1').value){
         const vr={...row0(), num:job.num, techs:[...d.querySelectorAll('[name="techs"]:checked')].map(x=>x.value), equipment:equipFromJob(job), vehicle:null, notes:null, office_notes:null, status:'Scheduled', address:job.siteAddress||job.property||null, client:job.client, title:job.property, work:[]};
-        if(rep){ await newSeries(vr, {rule:presetRule(rep, vr.visit_date), ends:{type:'never'}}); }
-        else { const r=await sb.from('visits').insert(vr); if(r.error) toast(r.error.message); }
+        if(rep){ await W(newSeries(vr, {rule:presetRule(rep, vr.visit_date), ends:{type:'never'}}), 'putting the visits on the schedule'); }
+        else { const r=await W(sb.from('visits').insert(vr), 'putting the visit on the schedule'); if(r.error) toast(r.error.message); }
       }
       close(); await loadProposals(); await loadSchedule(); loadClients();
       const fresh=P.find(x=>x.num===job.num)||job; toast(fresh.hcpJob?`Job #${fresh.hcpJob} saved`:`Job saved (${job.num})`); openDrawer(job.num);
-      } catch(err){ t.disabled=false; console.error(err); toast('The job did not save: '+(err?.message||err)); } }   // Arturo 11/2: an error used to leave Save job doing nothing
+      } catch(err){ t.disabled=false; console.error('New job save stopped at', step, err);
+        const why=err?.stuck ? `The database did not answer for 20 seconds while <b>${esc(step)}</b>.` : `Error while <b>${esc(step)}</b>: ${esc(err?.message||String(err))}`;
+        await formDialog(savedNum?'Job saved, but not finished':'The job did not save', `<p style="margin:0 0 8px">${why}</p><p style="margin:0">${savedNum?`The job itself <b>was saved as ${esc(savedNum)}</b>, so don't save it again: refresh the page (Ctrl+F5), open ${esc(savedNum)} and check its Schedule.`:`Nothing was saved. Refresh the page (Ctrl+F5) and save it again. If it happens again, send Arturo a screenshot of this message.`}</p>`, 'OK');
+        if(savedNum){ close(); loadProposals(); } } }   // Arturo 11/2: an error used to leave Save job doing nothing
   });
   d.showModal();
 }

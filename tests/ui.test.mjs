@@ -602,6 +602,12 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('dialog.jobpage [data-a="addmat"]'); await pg.fill('.jpmat [data-lf="desc"]', 'Squeegee rubber'); await pg.fill('.jpmat [data-lf="price"]', '20');
   assert.match(await pg.textContent('.jptot'), /Total\s*\$32\d\.\d\d/, 'running total with tax on materials');
   const tech = await pg.$('.jpteam [name="techs"]'); if (tech) await tech.check();
+  // Arturo 11/2: a database call that never answers used to leave Save job greyed out with no message
+  await pg.evaluate(() => { window.SAVE_LIMIT = 400; window.MOCK_HANG = 'proposals'; });
+  await pg.click('dialog.jobpage [data-a="save"]'); await pg.waitForSelector('dialog.ask:has-text("The job did not save")', T);
+  assert.match(await pg.textContent('dialog.ask:has-text("The job did not save")'), /did not answer for 20 seconds while saving the job[\s\S]*Nothing was saved/);
+  await pg.click('dialog.ask [data-a="ok"]'); await pg.evaluate(() => { window.MOCK_HANG = ''; window.SAVE_LIMIT = 0; });
+  assert.equal(await pg.$eval('dialog.jobpage [data-a="save"]', e => e.disabled), false, 'Save job works again');
   await pg.click('dialog.jobpage [data-a="save"]'); await pg.waitForSelector('#drawer:not([hidden])', T); await pg.waitForTimeout(300);
   const made = await pg.evaluate(() => { const p = DBX.proposals.find(x => x.client === 'Walk-in Job Co'); return p && { st: p.status, items: (p.items || []).map(i => [i.description, i.amount]), v: DBX.visits.filter(v => v.num === p.num).length, cl: DBX.clients.some(c => c.name === 'Walk-in Job Co') }; });
   assert.equal(made.st, 'Scheduled', 'Save job → an official job, already Scheduled'); assert.equal(made.v, 1, 'and it is on the schedule'); assert.ok(made.cl, 'customer created once');
