@@ -195,7 +195,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
 .ibadge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--info);background:var(--info-bg);border-radius:999px;padding:2px 8px}
 .item.addon .ibadge{color:var(--warn);background:var(--warn-bg)}
 .acc{display:flex;gap:6px;align-items:center;font-size:13px;flex:1}
-.igrid{display:grid;grid-template-columns:.7fr 1fr 1fr;gap:8px}.igrid .full{grid-column:1/-1}
+.idesc{resize:vertical;min-height:38px;line-height:1.4} .igrid{display:grid;grid-template-columns:.7fr 1fr 1fr;gap:8px}.igrid .full{grid-column:1/-1}
 @media (max-width:720px){.igrid{grid-template-columns:1fr 1fr}.igrid label:nth-child(4){grid-column:1/-1}}
 .gpline{font-size:13px;color:var(--muted);margin-top:8px}.gpline b{color:var(--ink)}
 .itot{margin-top:10px;font-size:13px;color:var(--muted)}
@@ -908,7 +908,7 @@ function itemsHTML(p, ed, accEd=ed){
       ${it.type==='Add-on'?`<label class="acc"><input type="checkbox" data-it="accepted" ${it.accepted?'checked':''} ${adis}> Client accepted</label>`:`<input class="grp" data-it="group" value="${esc(it.group||'')}" placeholder="Option label (optional)" aria-label="Option label" ${dis}>`}
       ${ed?`<button type="button" class="btn ghost small" data-dup="${i}" title="Copy this line, pricing included">Duplicate</button>${it.type!=='Add-on'&&it.group?`<button type="button" class="btn ghost small" data-dupopt="${i}" title="Copy this line into a new option">Copy as new option</button>`:''}<button type="button" class="btn ghost small" data-del="${i}" aria-label="Remove line">Remove</button>`:''}</div>
     <div class="igrid">
-      <label class="f full">Description<input data-it="description" list="descList" value="${esc(it.description||'')}" placeholder="e.g. Perimeter exterior window &amp; screen washing" ${dis}></label>
+      <label class="f full"><span style="display:flex;justify-content:space-between;align-items:center">Description${ed?`<button type="button" class="btn ghost small" data-bul="${i}" title="Bullet points: put • in front of the lines you picked (or this line); press Enter for the next bullet">• Bullets</button>`:''}</span><textarea class="idesc" data-it="description" rows="${Math.min(10, Math.max(1, String(it.description||'').split('\n').length))}" placeholder="e.g. Perimeter exterior window &amp; screen washing" ${dis}>${esc(it.description||'')}</textarea></label>
       <label class="f">Qty / visits<input type="number" step="any" inputmode="decimal" data-it="qty" value="${esc(it.qty??1)}" ${dis}></label>
       <label class="f">Frequency<select data-it="frequency" ${dis}>${frqOpts(it.frequency)}</select></label>
       <label class="f">Amount per visit ($)<input type="number" step="any" inputmode="decimal" data-it="amount" value="${esc(it.amount??'')}" ${dis}></label>
@@ -1214,6 +1214,26 @@ async function save(after, o={}){
   clearTimeout(save.t); save.t=setTimeout(()=>{ highlight=null; document.querySelectorAll('tr.hl').forEach(r=>r.classList.remove('hl')); }, 6000);
 }
 function refreshCalcs(){ const a=$('#calc1'), b=$('#calc2'), c=$('#ctBox'); if(a) a.innerHTML=calc1(draft); if(b) b.innerHTML=calc2(draft); if(c && document.activeElement?.closest('#ctBox')==null) c.innerHTML=contractHTML(draft, canEditDraft()); }
+// Arturo 11/3: bullet points in a line's description, like in Word: • Bullets puts "• " in front of the lines picked; Enter on a
+// bullet line starts the next bullet, Enter on an empty bullet ends the list. The proposal PDF prints them with a hanging indent.
+const BUL=/^\s*[•\-*]\s+/;
+function bulGrow(ta){ ta.rows=Math.min(10, Math.max(1, ta.value.split('\n').length)); }
+function bulToggle(ta){ const v=ta.value, s=v.lastIndexOf('\n', ta.selectionStart-1)+1, e0=v.indexOf('\n', Math.max(ta.selectionEnd, ta.selectionStart)); const e=e0<0?v.length:e0;
+  const L=v.slice(s,e).split('\n'), blank=L.every(l=>!l.trim()), on=!blank && L.every(l=>!l.trim() || BUL.test(l)), out=blank?L.map(()=>'• ').join('\n'):L.map(l=>!l.trim()?l:(on?l.replace(BUL,''):'• '+l.trim())).join('\n');
+  ta.value=v.slice(0,s)+out+v.slice(e); ta.selectionStart=ta.selectionEnd=s+out.length; bulGrow(ta); ta.focus(); ta.dispatchEvent(new Event('input',{bubbles:true})); }
+document.addEventListener('click', e=>{ const b=e.target.closest('[data-bul]'); if(!b) return; const ta=b.closest('label')?.querySelector('textarea.idesc'); if(ta && !ta.disabled) bulToggle(ta); });
+document.addEventListener('keydown', e=>{ const ta=e.target; if(!ta.classList?.contains('idesc') || e.key!=='Enter' || e.shiftKey || e.ctrlKey || e.metaKey) return;
+  e.stopPropagation(); const v=ta.value, p=ta.selectionStart, s=v.lastIndexOf('\n', p-1)+1, line=v.slice(s, p);
+  if(!BUL.test(line)) { setTimeout(()=>bulGrow(ta)); return; }
+  e.preventDefault();
+  if(!line.replace(BUL,'').trim()){ ta.value=v.slice(0,s)+v.slice(p); ta.selectionStart=ta.selectionEnd=s; }   // empty bullet: end the list
+  else { ta.value=v.slice(0,p)+'\n• '+v.slice(ta.selectionEnd); ta.selectionStart=ta.selectionEnd=p+3; }
+  bulGrow(ta); ta.dispatchEvent(new Event('input',{bubbles:true})); }, true);
+document.addEventListener('input', e=>{ if(e.target.classList?.contains('idesc')) bulGrow(e.target); });
+// for PDFs: bullet lines wrap under their text (hanging indent), other lines as they are
+function pdfBullets(doc, text, width){ const out=[], bw=doc.getTextWidth('•  '), sp=Math.max(1, Math.round(bw/Math.max(0.1, doc.getTextWidth(' '))));
+  for(const raw of String(text||'').split('\n')){ if(BUL.test(raw)){ const w=doc.splitTextToSize(raw.replace(BUL,'').trim(), width-bw); w.forEach((x,i)=>out.push((i?' '.repeat(sp):'•  ')+x)); } else out.push(...(raw.trim()?doc.splitTextToSize(raw, width):[''])); }
+  while(out.length && !out[out.length-1].trim()) out.pop(); return out.join('\n'); }
 function itemEvent(e, final){
   const f=e.target.dataset.it; if(!f) return false; const i=+e.target.closest('[data-i]').dataset.i, it=draft.items[i];
   it[f] = e.target.type==='checkbox' ? e.target.checked : e.target.value;
@@ -3411,7 +3431,7 @@ function invDocHTML(v, p){ const lines=v.items||[], addr=a=>esc(String(a||'')).r
         <div class="ivk ivdue"><span>Amount due</span><b>${usd(invBal(v))}</b></div></div>
         ${v.service_address?`<div class="ivsvc"><span>Service address</span>${addr(v.service_address)}</div>`:''}</div></div>
     <table class="ivlines"><thead><tr><th>Services</th><th class="r">Amount</th></tr></thead><tbody>
-      ${lines.map(i=>`<tr><td><b>${esc(i.description||'')}</b>${i.po?` <span class="note" style="margin:0">PO ${esc(i.po)}</span>`:''}${i.notes?`<div class="note" style="margin:2px 0 0;white-space:pre-wrap">${esc(i.notes)}</div>`:''}</td><td class="r num">${usd(i.amount)}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">No lines</td></tr>'}</tbody>
+      ${lines.map(i=>`<tr><td><b style="white-space:pre-wrap">${esc(i.description||'')}</b>${i.po?` <span class="note" style="margin:0">PO ${esc(i.po)}</span>`:''}${i.notes?`<div class="note" style="margin:2px 0 0;white-space:pre-wrap">${esc(i.notes)}</div>`:''}</td><td class="r num">${usd(i.amount)}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">No lines</td></tr>'}</tbody>
       <tfoot><tr><td class="r">Total</td><td class="r num"><b>${usd(v.total)}</b></td></tr>${paid?`<tr><td class="r">Paid</td><td class="r num">− ${usd(paid)}</td></tr><tr><td class="r"><b>Amount due</b></td><td class="r num"><b>${usd(invBal(v))}</b></td></tr>`:''}</tfoot></table>
     ${v.message?`<div class="note" style="margin:10px 0 0;white-space:pre-wrap">${esc(v.message)}</div>`:''}</div>`; }
 const ivDate = d => { const x=parse(d); return x ? x.toLocaleDateString('en-US',{month:'short', day:'numeric', year:'numeric'}) : ''; };
@@ -4022,7 +4042,7 @@ async function makePdf(p, o={}){
     if(title){ doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(0); doc.text(title,L0,y); y+=8; }
     const body=[];
     for(const it of rows){
-      const desc=(it.description||it.service||'').toUpperCase();
+      doc.setFont('helvetica','bold'); doc.setFontSize(10.5); const desc=pdfBullets(doc, (it.description||it.service||'').toUpperCase(), W-226);
       if(it.note){ body.push([{content:String(num(it.qty)??1),rowSpan:2},{content:desc,styles:{fontStyle:'bold'}},{content:it.frequency||'',rowSpan:2,styles:{halign:'center'}},{content:usd(it.amount),rowSpan:2}]); body.push([{content:it.note,styles:{fontStyle:'italic',fontSize:9,textColor:[70,70,70]}}]); }
       else body.push([String(num(it.qty)??1),{content:desc,styles:{fontStyle:'bold'}},{content:it.frequency||'',styles:{halign:'center'}},usd(it.amount)]);
     }
@@ -5101,7 +5121,7 @@ const isWknd = ds => { const g=parse(ds).getDay(); return g===0||g===6; };
 const visOn = (v,ds) => v.visit_date<=ds && visEnd(v)>=ds && !(v.skip_weekends && isWknd(ds));
 function endFromWorkdays(start, n, skip){ n=Math.max(1,Math.round(Number(n)||1)); if(!skip) return addDays(start,n-1); let d=start, k=isWknd(start)?0:1; while(k<n){ d=addDays(d,1); if(!isWknd(d)) k++; } return d; }
 function workdaysBetween(a,b,skip){ if(!a) return 1; b=b&&b>a?b:a; let n=0; for(let d=a; d<=b; d=addDays(d,1)) if(!skip||!isWknd(d)) n++; return n; }
-const scopeLines = p => p ? countedItems(p).map(i=>String(i.description||i.service||'').split('\n')[0].trim()).filter(Boolean) : [];
+const scopeLines = p => p ? countedItems(p).flatMap(i=>String(i.description||i.service||'').split('\n').map(l=>l.replace(BUL,'').trim())).filter(Boolean) : [];   // every bullet is a line of the scope
 const jobLabel = p => `${p.client||''}${p.property?' · '+p.property:''}${scopeLines(p)[0]?' — '+scopeLines(p)[0].slice(0,60):''}${num(p.amount)?' · '+money(p.amount):''}${p.status==='Approved'?' · not scheduled':''} · ${p.num}`;
 const visJob = v => v.num ? P.find(p=>p.num===v.num) : null;
 const visLabel = v => { const p=visJob(v); return v.kind==='event' ? (v.title||'Event') : [p?.client||v.client, p?.property||v.title].filter(Boolean).join(' · ') || v.num || 'Job'; };

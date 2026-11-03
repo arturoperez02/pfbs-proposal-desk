@@ -2279,6 +2279,28 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 76. Bullet points in a line's description (Arturo 11/3, like Word): • Bullets, Enter continues the list, the PDF prints
+//     them with the wrapped text under the text (not under the bullet), and every bullet is a line of the crew's scope
+{
+  const pr = { num: 'PFBS-2301', sent_by: 'Arturo', client: 'Lobby Co', property: '1 Lobby Plaza', status: 'Estimating', items: [{ type: 'Base', qty: 1, frequency: 'As Needed', description: '', amount: 9340 }], amount: 9340 };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t76 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; try { sessionStorage.clear(); } catch (_) {} }, pr);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-2301"]'); await pg.waitForSelector('textarea.idesc', T);
+  await pg.click('[data-bul="0"]'); await pg.keyboard.type('Clean the HVAC grilles in the lobby.'); await pg.keyboard.press('Enter');
+  await pg.keyboard.type('Replace all existing ceiling lights with LED fixtures, including the ones over the long hallway to the elevators.'); await pg.keyboard.press('Enter');
+  await pg.keyboard.press('Enter'); await pg.keyboard.type('Price includes special lift rental.');
+  assert.equal(await pg.$eval('textarea.idesc', e => e.value), '• Clean the HVAC grilles in the lobby.\n• Replace all existing ceiling lights with LED fixtures, including the ones over the long hallway to the elevators.\nPrice includes special lift rental.', 'Enter continues the bullet; Enter on an empty bullet ends the list');
+  await pg.click('#pdfD'); await pg.waitForSelector('dialog.pdfprev iframe', T);
+  const txt = await pg.evaluate(async () => { const raw = await (await fetch(document.querySelector('dialog.pdfprev iframe').src)).text();   // jsPDF writes each line as (text) Tj
+    return [...raw.matchAll(/\(((?:[^()\\]|\\.)*)\) Tj/g)].map(m => m[1].replace(/\\(.)/g, '$1')).join('\n'); });
+  assert.match(txt, /[•\uFFFD]  CLEAN THE HVAC GRILLES IN THE LOBBY\./); assert.match(txt, /[•\uFFFD]  REPLACE ALL EXISTING CEILING LIGHTS[^\n]*\n {2,}\S/, 'the wrapped part of a bullet is indented under its text');
+  assert.match(txt, /\nPRICE INCLUDES SPECIAL LIFT RENTAL\./);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
