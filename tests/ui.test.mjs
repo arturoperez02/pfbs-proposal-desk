@@ -2366,6 +2366,28 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 79. A change order saves itself as you type, and is priced with Pricing like a proposal line (Arturo 11/3)
+{
+  const j = { num: 'PFBS-2601', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'CO Price Co', property: '2 Price Way', contact_email: 'pm@price.example', amount: 3000, status: 'Scheduled', date_resolved: '2026-10-10', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 3000 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t79 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; try { sessionStorage.clear(); } catch (_) {} }, j);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-2601"]'); await pg.waitForSelector('#drawer:not([hidden])', T);
+  await pg.evaluate(() => document.querySelector('#drawer [data-dtab="job"]')?.click()); await pg.waitForSelector('#coAdd', { state: 'attached', timeout: 8000 });
+  await pg.evaluate(() => document.getElementById('coAdd').click()); await pg.waitForSelector('#coBox textarea[data-co="0.description"]', T);
+  await pg.fill('#coBox [data-co="0.description"]', 'Pressure wash the loading dock'); await pg.waitForTimeout(1500);
+  assert.equal(await pg.evaluate(() => (DBX.proposals.find(x => x.num === 'PFBS-2601').change_orders || [])[0]?.description), 'Pressure wash the loading dock', 'saved by itself');
+  await pg.click('#coBox [data-coest="0"]'); await pg.waitForSelector('#estUse', T);
+  await pg.evaluate(() => { const r = document.querySelector('#est [data-e^="labor."][data-e$=".hours"]'); if (r) { r.value = '8'; r.dispatchEvent(new Event('input', { bubbles: true })); } });
+  await pg.waitForTimeout(200); await pg.click('#estUse'); await pg.waitForTimeout(800);
+  const co = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-2601').change_orders[0]);
+  assert.ok(co.estimate && Number(co.amount) > 0 && Number(co.cost) > 0, 'Pricing fills the price and your cost: ' + JSON.stringify([co.amount, co.cost, !!co.estimate]));
+  assert.equal(await pg.$eval('#coBox [data-co="0.amount"]', e => e.value), String(co.amount));
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

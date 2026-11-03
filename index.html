@@ -2676,6 +2676,7 @@ function coHTML(p, ed){
         <label class="f">Price to client ($)<input type="number" step="any" data-co="${i}.amount" value="${esc(c.amount??'')}" ${dis}></label>
         <label class="f">Your cost ($) <span class="note" style="margin:0;font-weight:400">labor, lift, materials</span><input type="number" step="any" data-co="${i}.cost" value="${esc(c.cost??'')}" ${dis}></label>
         <label class="f">Date<input type="date" data-co="${i}.date" value="${esc(c.date||'')}" ${dis}></label>
+        <div class="full estrow">${c.estimate?estSummary(c):'<span class="note" style="margin:0">Not priced yet: Price it fills the price and your cost</span>'}${(ed||c.estimate)?`<button type="button" class="btn ghost small" data-coest="${i}">${c.estimate?(ed?'Open pricing':'View pricing'):'Price it'}</button>`:''}</div>
       </div>
       ${ed?`<div class="toolbar" style="margin:6px 0 0;flex-wrap:wrap;gap:6px">${st==='Draft'||st==='Sent'?`<button type="button" class="btn small" data-cosend="${i}">✉ ${st==='Sent'?'Send again':'Send to client'}</button><button type="button" class="btn small" data-coapp="${i}">✓ Client approved…</button><button type="button" class="btn ghost small" data-codec="${i}">Declined</button>`:''}
         ${st==='Approved'?`${inv}<button type="button" class="btn ghost small" data-cosch="${i}">📅 Schedule the extra work</button>`:''}</div>`:''}
@@ -2687,9 +2688,10 @@ function coHTML(p, ed){
 function coTotHTML(p){ const pend=(p.changeOrders||[]).filter(c=>['Draft','Sent'].includes(coStage(c))).reduce((s,c)=>s+(num(c.amount)||0),0);
   return `<div class="itot">Approved: <b>${money(coRevenue(p))}</b> added to the job · GP <b>${money(coGP(p))}</b>${pend?` · waiting on the client: ${money(pend)}`:''}. Approved change orders count toward commission.</div>`; }
 // saves the change orders straight away (status steps, send, approve), so nothing waits on autosave
-async function coSave(note){ const C=structuredClone(draft.changeOrders||[]); const r=await sb.from('proposals').update({change_orders:C}).eq('num',draft.num);
+async function coSave(note, opt={}){ clearTimeout(CO_T); if(!draft || isNew) return false; const C=structuredClone(draft.changeOrders||[]); const r=await sb.from('proposals').update({change_orders:C}).eq('num',draft.num);
   if(r.error){ toast('Change order not saved: '+r.error.message); return false; }
   if(orig && orig.num===draft.num) orig.changeOrders=structuredClone(C); const o=P.find(x=>x.num===draft.num); if(o) o.changeOrders=structuredClone(C);
+  if(opt.quiet){ const m=$('#dmsg'); if(m) m.textContent='Change order saved · '+new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}); return true; }
   if(note) await addActivity(draft.num,'note',note); loadActivity(draft.num); coRedraw(); return true; }
 function coRedraw(){ const b=$('#coBox'); if(b) b.innerHTML=coHTML(draft, canEditDraft()); refreshCalcs(); }
 async function coSend(i){ const c=draft.changeOrders[i], p=draft; if(!String(c.description||'').trim() || num(c.amount)==null) return toast('Write what changes and its price first.');
@@ -2717,12 +2719,15 @@ function coInvoice(i){ const c=draft.changeOrders[i], p=draft; if(!INVOK) return
   const parts=String(c.description||'').split('\n').map(s=>s.replace(BUL,'').trim()).filter(Boolean);
   const v={...invBlank(p), items:[{description:`Change order ${coId(p,c)}: ${parts[0]||''}`, notes:parts.slice(1).join('\n'), amount:num(c.amount)}], po_number:c.po||p.poNumber||''};
   invEdit(p, v); }
-$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; const t=$('#coBox .itot'); if(t && f==='amount') t.outerHTML=coTotHTML(draft); }, true);
-$('#drawer').addEventListener('change', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; refreshCalcs(); }, true);
+// change orders save themselves ~1 s after typing stops (Arturo 11/3), not only when the job autosaves
+let CO_T=null; const coAuto=()=>{ clearTimeout(CO_T); const n=draft&&draft.num; CO_T=setTimeout(()=>{ if(draft && draft.num===n && !isNew) coSave('', {quiet:true}); }, 900); };
+$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; const t=$('#coBox .itot'); if(t && f==='amount') t.outerHTML=coTotHTML(draft); coAuto(); }, true);
+$('#drawer').addEventListener('change', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; refreshCalcs(); coAuto(); }, true);
 $('#drawer').addEventListener('click', async e=>{
   const t=e.target.closest('button'); if(!t || !draft) return; const d=t.dataset;
-  if(t.id==='coAdd'){ const C=draft.changeOrders||[]; const no=C.reduce((m,c)=>Math.max(m,c.no||0),0)+1; draft.changeOrders=[...C,{no,date:iso(today()),description:'',amount:'',cost:'',status:'Draft'}]; coRedraw(); document.querySelector(`#coBox [data-co="${draft.changeOrders.length-1}.description"]`)?.focus(); return; }
+  if(t.id==='coAdd'){ const C=draft.changeOrders||[]; const no=C.reduce((m,c)=>Math.max(m,c.no||0),0)+1; draft.changeOrders=[...C,{no,date:iso(today()),description:'',amount:'',cost:'',status:'Draft'}]; coRedraw(); coSave('', {quiet:true}); document.querySelector(`#coBox [data-co="${draft.changeOrders.length-1}.description"]`)?.focus(); return; }
   if(d.codel!=null){ const c=draft.changeOrders[+d.codel]; if(c.sentAt && !confirm(`${coId(draft,c)} was already sent to the client. Remove it anyway?`)) return; draft.changeOrders.splice(+d.codel,1); await coSave(c.sentAt?`Change order ${coId(draft,c)} removed`:''); return; }
+  if(d.coest!=null) return openEst(null, +d.coest);
   if(d.copdf!=null) return makeCoPdf(draft, draft.changeOrders[+d.copdf]);
   if(d.cosend!=null) return coSend(+d.cosend);
   if(d.coapp!=null) return coApprove(+d.coapp);
@@ -2855,8 +2860,10 @@ $('#drawer').addEventListener('click', e=>{
 // ---------- estimate editor ----------
 let EI=null, E=null, CALC={type:'swing'};
 let EST_RO=false, EST_BD=false;
-function openEst(i){ SEC_OPEN={}; MAT_OPEN=new Set(); EI=i; const it=draft.items[i]; EST_RO = isLocked() || !canEditDraft(); E=structuredClone(it.estimate || newEstimate(sheetFor(it.description))); E.sheet=E.sheet||'WC'; CALC={type:(SHEET_CALCS[E.sheet]||[]).includes(CALC.type)?CALC.type:calcFor(E.sheet), gd:E.gdTasks?structuredClone(E.gdTasks):undefined, rent:CALC.rent, fuel:CALC.fuel, dep:CALC.dep, mix:CALC.mix, open:['PW','GD'].includes(E.sheet)}; renderEst(); const sc=$('#est .estbody'); if(sc) sc.scrollTop=0; $('#est').hidden=false; }
-function closeEst(){ $('#est').hidden=true; EI=null; E=null; }
+let EST_CO=null;   // Arturo 11/3: a change order is priced with the same Pricing as a proposal line
+const estItem = () => EST_CO!=null ? draft.changeOrders[EST_CO] : draft.items[EI];
+function openEst(i, co){ SEC_OPEN={}; MAT_OPEN=new Set(); EST_CO=co??null; EI=co!=null?-1:i; const it=estItem(); EST_RO = (co==null && isLocked()) || !canEditDraft(); E=structuredClone(it.estimate || newEstimate(sheetFor(it.description))); E.sheet=E.sheet||'WC'; CALC={type:(SHEET_CALCS[E.sheet]||[]).includes(CALC.type)?CALC.type:calcFor(E.sheet), gd:E.gdTasks?structuredClone(E.gdTasks):undefined, rent:CALC.rent, fuel:CALC.fuel, dep:CALC.dep, mix:CALC.mix, open:['PW','GD'].includes(E.sheet)}; renderEst(); const sc=$('#est .estbody'); if(sc) sc.scrollTop=0; $('#est').hidden=false; }
+function closeEst(){ $('#est').hidden=true; EI=null; E=null; EST_CO=null; }
 // a lift typed under PFBS equipment is almost always a rental: say so, with a one-click move (Arturo 10/16, PFBS-0801)
 const LIFT_RE=/\b(lift|boom|scissor|swing ?stage|bucket truck|man ?lift)\b/i;
 function eqLiftWarn(){ const L=(E?.equipment||[]).map((r,i)=>[r,i]).filter(([r])=>LIFT_RE.test(r.desc||''));
@@ -2890,7 +2897,7 @@ function renderEst(){ // keep the scroll position when the estimate redraws
   if(af){ const el=document.querySelector(`#est [data-e="${af}"]`); if(el) el.focus({preventScroll:true}); }
 }
 function renderEstInner(){
-  const it=draft.items[EI], roles=S.est.labor.map(r=>r[0]);
+  const it=estItem(), roles=S.est.labor.map(r=>r[0]);
   $('#est').innerHTML = `
   <div class="esthead"><div><b id="estTitle">Pricing</b><div class="sub">${esc(it.description||'Line '+(EI+1))} · per visit</div></div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="f inline" style="margin:0">Bid sheet<select id="estSheet" aria-label="Bid sheet">${Object.entries(SHEETS).map(([k,v])=>`<option value="${k}" ${k===E.sheet?'selected':''}>${v.label}</option>`).join('')}</select></label>
@@ -2983,7 +2990,7 @@ function updateEstTotals(){
       <dt>Profit</dt><dd style="color:${(marginAt(c,c.total)??1)<floor?'var(--bad)':'inherit'}">${usd(profit)}</dd>
     </dl>
     <div class="note" style="margin:-4px 0 10px">Profit from: labor ${usd(c.laborPrice-c.laborCost)}${c.matP?` · materials markup ${usd(c.matP-c.mat)}`:''}${c.rentP?` · rentals/subs markup ${usd(c.rentP-c.rent)}`:''}${c.eqP?` · equipment ${usd(c.eqP-c.eq)}`:''}${c.miscP?` · misc ${usd(c.miscP-c.misc)}`:''}. Margin = profit ÷ (price − pass-through)${c.passCost?` = ${usd(profit)} ÷ ${usd(c.base)}`:''}.</div>
-    ${(()=>{ const la=num(draft?.items?.[EI]?.amount); if(la==null || Math.abs(la-c.total)<0.005) return ''; const lm=marginAt(c, la); return `<div class="lockline" style="margin:0 0 10px">On the proposal this line is <b>${usd(la)}</b> (rounded or typed): profit ${usd(la-c.cost)}, margin <b>${lm==null?'—':pct(lm)}</b>. The Pricing PDF uses this line price.</div>`; })()}
+    ${(()=>{ const la=num(draft && EI!=null ? estItem()?.amount : null); if(la==null || Math.abs(la-c.total)<0.005) return ''; const lm=marginAt(c, la); return `<div class="lockline" style="margin:0 0 10px">On the proposal this line is <b>${usd(la)}</b> (rounded or typed): profit ${usd(la-c.cost)}, margin <b>${lm==null?'—':pct(lm)}</b>. The Pricing PDF uses this line price.</div>`; })()}
     ${c.crew.techs ? `<div class="crewbox">${crewText(c)}</div>` : ''}
     ${SHEETS[E.sheet]?.monthly ? `<h4>Monthly billing (quarterly service)</h4><dl class="tots"><dt>Basic (× 1.5 ÷ 3)</dt><dd>${usd(c.total*1.5/3)}</dd><dt>Standard (× 2 ÷ 3)</dt><dd>${usd(c.total*2/3)}</dd><dt>Premium (× 2.25 ÷ 3)</dt><dd>${usd(c.total*2.25/3)}</dd></dl>` : ''}
     <details class="breakdown" ${EST_BD?'open':''}><summary>Full breakdown</summary>
@@ -3176,11 +3183,12 @@ $('#est').addEventListener('click', e=>{
     E.labor=[...keep,...lines]; CALC.open=true; renderEst(); toast(add?`Added ${fmtH(hrs)} hrs to ${o.techs} tech line${o.techs===1?'':'s'}`:`Set ${o.techs} tech line${o.techs===1?'':'s'} to ${fmtH(hrs)} hrs`); return; }
   if(t.id==='rentApply'){ const tot=rentTotal(); if(!tot){ toast('Fill in the rental first.'); return; } E.rentals.push({desc:CALC.rent.desc||'Rental',unit:Math.round(tot*100)/100,qty:1,markup:S.est.rentMarkup}); renderEst(); toast('Rental line added'); return; }
   if(t.id==='fuelApply'){ const rt=Math.round(fuelRT()*100)/100; let f=E.misc.find(r=>/fuel|gas/i.test(r.desc)); if(!f){ f={desc:'Fuel',unit:0,qty:0,markup:0}; E.misc.push(f); } f.unit=rt; f.qty=num(CALC.fuel.trips)||1; renderEst(); toast('Fuel cost set'); return; }
-  if(t.id==='estPdf'){ const it=draft.items[EI]; makeEstimatePdf(draft, [[it, E]]); return; }
-  if(t.id==='estTarget'){ const it=draft.items[EI]; it.estimate=structuredClone(E); it.amount=+t.dataset.price; closeEst(); rerenderItems(); toast(`Line price set to ${money(it.amount)} for target margin. Save the proposal to keep it.`); return; }
+  if(t.id==='estPdf'){ const it=estItem(); makeEstimatePdf(draft, [[it, E]]); return; }
+  if(t.id==='estTarget'){ const it=estItem(); it.estimate=structuredClone(E); it.amount=+t.dataset.price; if(EST_CO!=null){ it.cost=Math.round(estCalc(E).cost*100)/100; closeEst(); coRedraw(); coSave(''); toast(`Change order price set to ${money(it.amount)} for target margin`); return; } closeEst(); rerenderItems(); toast(`Line price set to ${money(it.amount)} for target margin. Save the proposal to keep it.`); return; }
   if(t.id==='estUse' || t.id==='estSave'){
-    const it=draft.items[EI]; it.estimate=structuredClone(E);
+    const it=estItem(); it.estimate=structuredClone(E);
     if(t.id==='estUse') it.amount=Math.floor(estCalc(E).total);
+    if(EST_CO!=null){ it.cost=Math.round(estCalc(E).cost*100)/100; const used=t.id==='estUse'; closeEst(); coRedraw(); coSave(''); toast(used?`Change order price set to ${money(it.amount)} (your cost ${money(it.cost)})`:'Pricing kept on the change order'); return; }
     closeEst(); rerenderItems(); toast(t.id==='estUse'?`Line price set to ${money(it.amount)}. Save the proposal to keep it.`:'Pricing kept. Save the proposal to keep it.'); }
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('#est').hidden){ e.stopImmediatePropagation(); closeEst(); } }, true);
