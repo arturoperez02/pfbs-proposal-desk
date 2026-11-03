@@ -1017,6 +1017,7 @@ function drawDrawer(){
     </div>
     <div class="dpane" data-pane="job" ${tab==='job'?'':'hidden'}>
     ${won && !isNew ? `<fieldset><legend>Client requests</legend><div id="rqBox">${reqHTML(p, ed)}</div></fieldset>` : ''}
+    ${won && !isNew ? `<fieldset id="coSet"><legend>Change orders</legend><div id="coBox">${coHTML(p, ed)}</div></fieldset>` : ''}
     ${won && !isNew ? `<fieldset><legend>Site map &amp; scope for the crew</legend><div class="note" style="margin:0 0 6px">Add a site map or photo, draw red boxes on the work area and describe the scope. It prints on its own page of the job packet. Photos added here don't go on the client's proposal PDF.</div><div id="phBoxJ" data-phbox="job">${photosHTML(p, ed, 'job')}</div></fieldset>` : ''}
     ${won && !isNew ? `<fieldset><legend>Client work schedule</legend><div id="cwBox">${cwBoxHTML(p)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' && !isNew ? `<fieldset><legend>Invoices</legend>
@@ -1040,7 +1041,6 @@ function drawDrawer(){
     ${isRecurring(p) ? `<fieldset><legend>Contract</legend><div id="ctBox">${contractHTML(p, ed)}</div></fieldset>` : ''}
     ${outcome(p)==='Won' ? `<fieldset><legend>Parts to order</legend><div id="ptBox">${partsHTML(p, ed)}</div></fieldset>
     <fieldset><legend>Lift &amp; equipment rentals</legend><div id="rtBox">${rentalsTrackHTML(p, ed)}</div></fieldset>` : ''}
-    ${outcome(p)==='Won' ? `<fieldset><legend>Change orders</legend><div id="coBox">${coHTML(p, ed)}</div></fieldset>` : ''}
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Job actuals</legend>
       <div id="actBox">${actualsHTML(p, ed)}</div></fieldset>` : ''}
     ${['Scheduled','Invoiced','Paid'].includes(p.status) ? `<fieldset><legend>Service report</legend>
@@ -2640,31 +2640,90 @@ $('#leadBtn').addEventListener('click', ()=>openDrawer(null,{lead:true}));
 
 
 
-// ---------- change orders ----------
+// ---------- change orders (Arturo 11/3: "add a change order to the project and make the system flow properly") ----------
+// One card per change order on the JOB tab, HCP-style icon steps 📝 Draft → 📨 Sent → ✓ Approved (or ✕ Declined), never a dropdown.
+// Sent = PDF filed in the client folder + Outlook email to the job contact (CC the building's CCs). Approved (signed / PO / by email,
+// signed copy filed) → the price, margin and commission include it, its lines join the crew's scope (packet, emails), and it goes
+// on the job's invoice, or on its own invoice when the job was already invoiced; "Schedule the extra work" opens the visit editor.
+const coId = (p,c) => `${p.num}-CO${c.no}`;
+const coStage = c => c.status==='Approved'?'Approved':c.status==='Declined'?'Declined':(c.sentAt||c.status==='Sent')?'Sent':'Draft';
+const coInvoiced = (p,c) => (INV[p.num]||[]).some(v=>v.status!=='Void' && (v.items||[]).some(i=>String(i.description||'').includes(coId(p,c)+':') || String(i.description||'').endsWith(coId(p,c))));
+const jobBilled = p => (INV[p.num]||[]).some(v=>v.status!=='Void' && v.status!=='Draft');
 function coHTML(p, ed){
   const C=p.changeOrders||[], dis=ed?'':'disabled';
-  const cards=C.map((c,i)=>`<div class="item ${c.status==='Approved'?'':'addon'}"><div class="itop"><span class="ibadge">${esc(p.num)}-CO${c.no}</span>
-      <select data-co="${i}.status" ${dis} aria-label="Change order status">${['Pending','Approved','Declined'].map(x=>`<option ${x===c.status?'selected':''}>${x}</option>`).join('')}</select><span style="flex:1"></span>
-      <button type="button" class="btn ghost small" data-copdf="${i}">PDF</button>${ed?`<button type="button" class="btn ghost small" data-codel="${i}">Remove</button>`:''}</div>
-    <div class="vgrid">
-      <label class="f">Date<input type="date" data-co="${i}.date" value="${esc(c.date||'')}" ${dis}></label>
-      <label class="f">Amount to client ($)<input type="number" step="any" data-co="${i}.amount" value="${esc(c.amount??'')}" ${dis}></label>
-      <label class="f">Your cost ($)<input type="number" step="any" data-co="${i}.cost" value="${esc(c.cost??'')}" ${dis} placeholder="labor, lift, materials"></label>
-      <div class="full"><label class="f">Description<input data-co="${i}.description" value="${esc(c.description||'')}" ${dis} placeholder="e.g. Add interior lobby glass, 40 panes"></label></div>
-    </div></div>`).join('');
+  const cards=C.map((c,i)=>{ const st=coStage(c), steps=[['Draft','📝','Written'],['Sent','📨','Sent'],['Approved','✓','Approved']], at=st==='Declined'?-1:steps.findIndex(s=>s[0]===st);
+    const det={Draft:c.date?fmtD(c.date):'', Sent:c.sentAt?fmtD(c.sentAt):'', Approved:c.approvedOn?fmtD(c.approvedOn)+(c.how?' · '+c.how:''):''};
+    const flow=`<div class="jflow2 rflow">${steps.map(([k,ic,l],j)=>`<div class="jfw"><button type="button" class="jfs ${j<=at?'ok':j===at+1&&st!=='Declined'?'now':''}" data-cost="${i}.${k}" ${dis}><span class="jfi">${ic}</span><b>${l}</b><small>${esc(det[k]||'')}</small></button></div>`).join('<span class="jfline"></span>')}${st==='Declined'?`<span class="flag bad" style="align-self:center;margin-left:8px">✕ Declined${c.declinedOn?' '+esc(fmtD(c.declinedOn)):''}</span>`:''}</div>`;
+    const inv=st==='Approved' && num(c.amount) ? (coInvoiced(p,c)?'<span class="flag ok">On an invoice</span>':(jobBilled(p)||isRecurring(p))?`<button type="button" class="btn small" data-coinv="${i}">Invoice this change order</button>`:'<span class="note" style="margin:0">Goes on the job\'s invoice</span>') : '';
+    return `<div class="item cocard ${st==='Approved'?'':'addon'}" data-coi="${i}"><div class="itop"><span class="ibadge">${esc(coId(p,c))}</span><b style="margin-left:6px">${num(c.amount)!=null?usd(c.amount):''}</b><span style="flex:1"></span>
+        <button type="button" class="btn ghost small" data-copdf="${i}">Preview PDF</button>${ed && st!=='Approved'?`<button type="button" class="btn ghost small" data-codel="${i}">Remove</button>`:''}</div>
+      ${flow}
+      <div class="vgrid">
+        <label class="f full"><span style="display:flex;justify-content:space-between;align-items:center">What changes (the client sees this)${ed?`<button type="button" class="btn ghost small" data-bul="co${i}">• Bullets</button>`:''}</span><textarea class="idesc" data-co="${i}.description" rows="${Math.min(10,Math.max(2,String(c.description||'').split('\n').length))}" ${dis} placeholder="e.g. Add interior lobby glass, 40 panes">${esc(c.description||'')}</textarea></label>
+        <label class="f">Price to client ($)<input type="number" step="any" data-co="${i}.amount" value="${esc(c.amount??'')}" ${dis}></label>
+        <label class="f">Your cost ($) <span class="note" style="margin:0;font-weight:400">labor, lift, materials</span><input type="number" step="any" data-co="${i}.cost" value="${esc(c.cost??'')}" ${dis}></label>
+        <label class="f">Date<input type="date" data-co="${i}.date" value="${esc(c.date||'')}" ${dis}></label>
+      </div>
+      ${ed?`<div class="toolbar" style="margin:6px 0 0;flex-wrap:wrap;gap:6px">${st==='Draft'||st==='Sent'?`<button type="button" class="btn small" data-cosend="${i}">✉ ${st==='Sent'?'Send again':'Send to client'}</button><button type="button" class="btn small" data-coapp="${i}">✓ Client approved…</button><button type="button" class="btn ghost small" data-codec="${i}">Declined</button>`:''}
+        ${st==='Approved'?`${inv}<button type="button" class="btn ghost small" data-cosch="${i}">📅 Schedule the extra work</button>`:''}</div>`:''}
+    </div>`; }).join('');
   return `<div class="items">${cards}</div>
-    ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn ghost small" id="coAdd">+ Change order</button></div>`:''}
-    ${C.length?coTotHTML(p):'<div class="note" style="margin:0">Scope added after approval goes here, so the job price, margin and commission stay right.</div>'}`;
+    ${ed?`<div class="toolbar" style="margin-top:8px"><button type="button" class="btn small" id="coAdd">+ Change order</button></div>`:''}
+    ${C.length?coTotHTML(p):'<div class="note" style="margin:0">Extra work the client asks for after approval: write it, send it, record the approval. The job price, margin, commission, the crew\'s scope and the invoice follow.</div>'}`;
 }
-function coTotHTML(p){ return `<div class="itot">Approved: <b>${money(coRevenue(p))}</b> added to the job · GP <b>${money(coGP(p))}</b>. Approved change orders count toward commission.</div>`; }
-$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; }, true);
-$('#drawer').addEventListener('change', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; if(e.target.tagName==='SELECT') $('#coBox').innerHTML=coHTML(draft, canEditDraft()); else { const t=$('#coBox .itot'); if(t) t.outerHTML=coTotHTML(draft); } refreshCalcs(); }, true);
+function coTotHTML(p){ const pend=(p.changeOrders||[]).filter(c=>['Draft','Sent'].includes(coStage(c))).reduce((s,c)=>s+(num(c.amount)||0),0);
+  return `<div class="itot">Approved: <b>${money(coRevenue(p))}</b> added to the job · GP <b>${money(coGP(p))}</b>${pend?` · waiting on the client: ${money(pend)}`:''}. Approved change orders count toward commission.</div>`; }
+// saves the change orders straight away (status steps, send, approve), so nothing waits on autosave
+async function coSave(note){ const C=structuredClone(draft.changeOrders||[]); const r=await sb.from('proposals').update({change_orders:C}).eq('num',draft.num);
+  if(r.error){ toast('Change order not saved: '+r.error.message); return false; }
+  if(orig && orig.num===draft.num) orig.changeOrders=structuredClone(C); const o=P.find(x=>x.num===draft.num); if(o) o.changeOrders=structuredClone(C);
+  if(note) await addActivity(draft.num,'note',note); loadActivity(draft.num); coRedraw(); return true; }
+function coRedraw(){ const b=$('#coBox'); if(b) b.innerHTML=coHTML(draft, canEditDraft()); refreshCalcs(); }
+async function coSend(i){ const c=draft.changeOrders[i], p=draft; if(!String(c.description||'').trim() || num(c.amount)==null) return toast('Write what changes and its price first.');
+  const to=String(p.contactEmail||'').trim(); if(!to) return toast('This job has no contact email: add it on the Proposal tab first.');
+  await makeCoPdf(p, c, {});   // downloads it and files it in the client folder
+  const place=p.property||String(p.siteAddress||'').split('\n')[0]||p.client||'', first=String(p.contactName||'').trim().split(/\s+/)[0];
+  window.open(composeUrl('owa', to, ccEmailsFor(p), `Change order ${coId(p,c)} – ${place}`, `${first?`Hi ${first},`:'Hello,'}\n\nAttached is change order ${coId(p,c)} for ${place}. Please let me know if you have any questions.`), '_blank', 'noopener');
+  c.sentAt=new Date().toISOString(); c.sentTo=to; if(c.status!=='Approved') c.status='Sent';
+  if(await coSave(`Change order ${coId(p,c)} (${usd(c.amount)}) sent to ${to}`)) toast('Attach the downloaded change order PDF to the email that opened'); }
+async function coApprove(i){ const c=draft.changeOrders[i], p=draft; if(!String(c.description||'').trim() || num(c.amount)==null) return toast('Write what changes and its price first.');
+  const r=await formDialog(`Client approved ${esc(coId(p,c))}`, `<div class="note" style="margin:0 0 8px">${esc(String(c.description).split('\n')[0])} · <b>${usd(c.amount)}</b></div>
+    <label class="f"><input type="radio" name="how" value="Signed" checked> Signed change order</label>
+    <label class="f"><input type="radio" name="how" value="PO"> PO received</label>
+    <label class="f"><input type="radio" name="how" value="By email"> Approved by email</label>
+    <div class="grid2"><label class="f">Date<input type="date" name="on" value="${iso(today())}" required></label><label class="f">PO # <span class="note" style="margin:0;font-weight:400">if any</span><input name="po" value="${esc(c.po||'')}"></label></div>
+    <label class="f">Signed copy / PO / email <span class="note" style="margin:0;font-weight:400">optional, filed in the client folder</span><input type="file" name="file" accept="application/pdf,image/*,.msg,.eml"></label>`, 'Approved');
+  if(!r) return; c.status='Approved'; c.approvedOn=r.on; c.how=r.how; if(r.po) c.po=r.po; c.approvedBy=me?.name||'';
+  if(r.file && spOn()){ try{ const folder=await spFolderFor(p); if(folder){ const ext=(r.file.name.match(/\.[a-z0-9]+$/i)||['.pdf'])[0].slice(1); const nm=docName({...p, rev:1}, `Change Order ${c.no} ${r.how==='PO'?'PO '+(r.po||''):r.how==='Signed'?'Signed':'Approval'}`.trim(), r.on, ext); await spUpload(r.file, nm, folder); c.file=nm; } }catch(err){ toast('Not filed in SharePoint: '+err.message); } }
+  if(!(await coSave(`Change order ${coId(p,c)} approved (${r.how}${r.po?' · PO '+r.po:''}): ${usd(c.amount)} added to the job — ${String(c.description).split('\n')[0]}`))) return;
+  const billed=jobBilled(p)||isRecurring(p);
+  const next=await formDialog('Change order approved', `<p style="margin:0 0 8px"><b>${usd(c.amount)}</b> is added to the job. Its work now shows in the crew's scope (job packet, crew and supervisor emails).</p>
+    <p style="margin:0">${billed?'The job was already invoiced, so this change order gets <b>its own invoice</b>.':'It will be on the job\'s invoice with the rest of the work.'} Does the extra work need its own day on the schedule?</p>`, billed?'Invoice it now':'OK');
+  if(next && billed) coInvoice(i); }
+function coInvoice(i){ const c=draft.changeOrders[i], p=draft; if(!INVOK) return toast('Run database update 018 in Supabase first.');
+  const parts=String(c.description||'').split('\n').map(s=>s.replace(BUL,'').trim()).filter(Boolean);
+  const v={...invBlank(p), items:[{description:`Change order ${coId(p,c)}: ${parts[0]||''}`, notes:parts.slice(1).join('\n'), amount:num(c.amount)}], po_number:c.po||p.poNumber||''};
+  invEdit(p, v); }
+$('#drawer').addEventListener('input', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; const t=$('#coBox .itot'); if(t && f==='amount') t.outerHTML=coTotHTML(draft); }, true);
+$('#drawer').addEventListener('change', e=>{ const k=e.target.dataset.co; if(!k) return; const [i,f]=k.split('.'); draft.changeOrders[+i][f]=e.target.value; refreshCalcs(); }, true);
+$('#drawer').addEventListener('click', async e=>{
+  const t=e.target.closest('button'); if(!t || !draft) return; const d=t.dataset;
+  if(t.id==='coAdd'){ const C=draft.changeOrders||[]; const no=C.reduce((m,c)=>Math.max(m,c.no||0),0)+1; draft.changeOrders=[...C,{no,date:iso(today()),description:'',amount:'',cost:'',status:'Draft'}]; coRedraw(); document.querySelector(`#coBox [data-co="${draft.changeOrders.length-1}.description"]`)?.focus(); return; }
+  if(d.codel!=null){ const c=draft.changeOrders[+d.codel]; if(c.sentAt && !confirm(`${coId(draft,c)} was already sent to the client. Remove it anyway?`)) return; draft.changeOrders.splice(+d.codel,1); await coSave(c.sentAt?`Change order ${coId(draft,c)} removed`:''); return; }
+  if(d.copdf!=null) return makeCoPdf(draft, draft.changeOrders[+d.copdf]);
+  if(d.cosend!=null) return coSend(+d.cosend);
+  if(d.coapp!=null) return coApprove(+d.coapp);
+  if(d.codec!=null){ const c=draft.changeOrders[+d.codec]; c.status='Declined'; c.declinedOn=iso(today()); return coSave(`Change order ${coId(draft,c)} declined by the client`); }
+  if(d.coinv!=null) return coInvoice(+d.coinv);
+  if(d.cosch!=null){ if(!VISOK) return toast('Run the schedule update first.'); const v=visitDraft(draft, iso(today())); return visEdit(v); }
+  if(d.cost){ const [i,k]=d.cost.split('.'), c=draft.changeOrders[+i], st=coStage(c);
+    if(k==='Approved') return st==='Approved' ? (confirm(`Take back the approval of ${coId(draft,c)}? Its price comes off the job.`) && (c.status='Sent', delete c.approvedOn, coSave(`Change order ${coId(draft,c)} approval taken back`))) : coApprove(+i);
+    if(k==='Sent') return st==='Draft' ? coSend(+i) : st==='Declined' ? (c.status='Sent', delete c.declinedOn, coSave(`Change order ${coId(draft,c)} back to sent`)) : null;
+    if(k==='Draft' && st==='Sent' && confirm('Mark it as not sent?')){ c.status='Draft'; delete c.sentAt; return coSave(''); } }
+});
 $('#drawer').addEventListener('click', async e=>{
   const a=e.target.closest('[data-open]'); if(a){ e.preventDefault(); openDrawer(a.dataset.open); return; }
   const t=e.target.closest('button'); if(!t) return;
-  if(t.id==='coAdd'){ const C=draft.changeOrders||[]; const no=C.reduce((m,c)=>Math.max(m,c.no||0),0)+1; draft.changeOrders=[...C,{no,date:iso(today()),description:'',amount:'',cost:'',status:'Pending'}]; $('#coBox').innerHTML=coHTML(draft, canEditDraft()); }
-  if(t.dataset.codel!=null){ draft.changeOrders.splice(+t.dataset.codel,1); $('#coBox').innerHTML=coHTML(draft, canEditDraft()); refreshCalcs(); }
-  if(t.dataset.copdf!=null){ makeCoPdf(draft, draft.changeOrders[+t.dataset.copdf]); }
   if(t.id==='revBtn'){
     if(!draft._revArmed){ draft._revArmed=true; drawDrawer(); return; }
     delete draft._revArmed;
@@ -3134,7 +3193,7 @@ async function loadInvoices(n){
   if(error){ if(invMissing(error)) INVOK=false; INV[n]=[]; }
   else { INVOK=true; const L=data||[]; const ids=L.map(v=>v.id); const pays=ids.length ? ((await sb.from('invoice_payments').select('*').in('invoice_id',ids).order('id')).data||[]) : [];
     for(const v of L) v.payments=pays.filter(x=>x.invoice_id===v.id); INV[n]=L; }
-  if(draft && draft.num===n){ const b=$('#invBox'); if(b) b.innerHTML=invoicesHTML(draft); const j=$('#jfBox'); if(j) j.innerHTML=jobFlowHTML(draft); }
+  if(draft && draft.num===n){ const b=$('#invBox'); if(b) b.innerHTML=invoicesHTML(draft); const j=$('#jfBox'); if(j) j.innerHTML=jobFlowHTML(draft); const cb=$('#coBox'); if(cb && !cb.contains(document.activeElement)) cb.innerHTML=coHTML(draft, canEditDraft()); }
 }
 async function loadOpenInvoices(){
   const {data,error}=await sb.from('invoices').select('*').eq('status','Sent').order('inv_no');
@@ -3157,7 +3216,7 @@ function invLinesFrom(p){
     const amt=rec ? num(i.amount) : (num(i.qty)||1)*num(i.amount);
     return {description:(rec&&i.frequency?`(${i.frequency}) `:'')+parts[0].trim(), notes:parts.slice(1).map(s=>s.trim()).filter(Boolean).join('\n'), amount:Math.round(amt*100)/100}; });
   if(!lines.length && num(p.amount)) lines.push({description:p.service||'Services', notes:'', amount:num(p.amount)});
-  if(!isRecurring(p)) for(const c of (p.changeOrders||[])) if(c.status==='Approved' && num(c.amount)) lines.push({description:`Change order ${p.num}-CO${c.no}${c.description?': '+String(c.description).split('\n')[0]:''}`, notes:'', amount:num(c.amount)});
+  if(!isRecurring(p)) for(const c of (p.changeOrders||[])) if(c.status==='Approved' && num(c.amount) && !coInvoiced(p,c)){ const pt=String(c.description||'').split('\n').map(s=>s.replace(BUL,'').trim()).filter(Boolean); lines.push({description:`Change order ${coId(p,c)}${pt[0]?': '+pt[0]:''}`, notes:pt.slice(1).join('\n'), amount:num(c.amount)}); }
   return lines;
 }
 // ---- recurring contracts (Arturo 10/25): a visit marked Done gets its invoice draft made automatically; someone reviews and sends it ----
@@ -4194,7 +4253,7 @@ async function makeCoPdf(p, co, o={preview:true}){
   const site=(p.siteAddress?String(p.siteAddress).split('\n'):[p.property]).map(x=>(x||'').trim()).filter(Boolean);
   bill.forEach((t,i)=>doc.text(t,51,188+i*13)); site.forEach((t,i)=>doc.text(doc.splitTextToSize(t,230)[0],320,188+i*13));
   let y=188+Math.max(bill.length,site.length)*13+18;
-  doc.autoTable({startY:y, margin:{left:L0,right:612-R0}, head:[['DESCRIPTION OF CHANGE','AMOUNT']], body:[[{content:String(co.description).toUpperCase(),styles:{fontStyle:'bold'}}, usd(co.amount)]],
+  doc.autoTable({startY:y, margin:{left:L0,right:612-R0}, head:[['DESCRIPTION OF CHANGE','AMOUNT']], body:[[{content:(doc.setFont('helvetica','bold'), doc.setFontSize(8.5), pdfBullets(doc, String(co.description).toUpperCase(), W-110)),styles:{fontStyle:'bold'}}, usd(co.amount)]],
     theme:'grid', styles:{font:'helvetica',fontSize:8.5,cellPadding:6,lineColor:[200,200,200],lineWidth:0.5,textColor:20}, headStyles:{fillColor:NAVY,textColor:255,fontStyle:'bold',fontSize:7.5},
     columnStyles:{1:{cellWidth:90,halign:'right'}}, didParseCell:d=>{ if(d.section==='head'&&d.column.index===1) d.cell.styles.halign='right'; } });
   y=doc.lastAutoTable.finalY+22;
@@ -5121,7 +5180,7 @@ const isWknd = ds => { const g=parse(ds).getDay(); return g===0||g===6; };
 const visOn = (v,ds) => v.visit_date<=ds && visEnd(v)>=ds && !(v.skip_weekends && isWknd(ds));
 function endFromWorkdays(start, n, skip){ n=Math.max(1,Math.round(Number(n)||1)); if(!skip) return addDays(start,n-1); let d=start, k=isWknd(start)?0:1; while(k<n){ d=addDays(d,1); if(!isWknd(d)) k++; } return d; }
 function workdaysBetween(a,b,skip){ if(!a) return 1; b=b&&b>a?b:a; let n=0; for(let d=a; d<=b; d=addDays(d,1)) if(!skip||!isWknd(d)) n++; return n; }
-const scopeLines = p => p ? countedItems(p).flatMap(i=>String(i.description||i.service||'').split('\n').map(l=>l.replace(BUL,'').trim())).filter(Boolean) : [];   // every bullet is a line of the scope
+const scopeLines = p => p ? [...countedItems(p), ...approvedCOs(p)].flatMap(i=>String(i.description||i.service||'').split('\n').map(l=>l.replace(BUL,'').trim())).filter(Boolean) : [];   // every bullet is a line of the scope
 const jobLabel = p => `${p.client||''}${p.property?' · '+p.property:''}${scopeLines(p)[0]?' — '+scopeLines(p)[0].slice(0,60):''}${num(p.amount)?' · '+money(p.amount):''}${p.status==='Approved'?' · not scheduled':''} · ${p.num}`;
 const visJob = v => v.num ? P.find(p=>p.num===v.num) : null;
 const visLabel = v => { const p=visJob(v); return v.kind==='event' ? (v.title||'Event') : [p?.client||v.client, p?.property||v.title].filter(Boolean).join(' · ') || v.num || 'Job'; };

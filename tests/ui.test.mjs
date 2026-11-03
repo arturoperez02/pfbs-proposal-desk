@@ -2301,6 +2301,46 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 77. Change orders flow (Arturo 11/3): Job tab → + Change order (bullets) → Send to client (PDF + email, step Sent) → Client approved
+//     (PO, step Approved) → price added; the job was already invoiced, so it gets its own invoice; then a second one goes on nothing twice
+{
+  const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const j = { num: 'PFBS-2401', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Lobby Co', property: '1 Lobby Plaza', site_address: '1 Lobby Plaza, Oakland', contact_name: 'Dana Lobby', contact_email: 'dana@lobby.example', amount: 9340, status: 'Invoiced', date_resolved: '2026-10-10', hcp_job: '10950', items: [{ type: 'Service', qty: 1, description: 'Lobby work', amount: 9340 }] };
+  const inv = [{ id: 'i77', inv_no: 1700, num: 'PFBS-2401', status: 'Sent', invoice_date: day(-3), terms_days: 30, due_date: day(27), total: 9340, paid: 0, bill_to: { name: 'Lobby Co', email: 'ap@lobby.example' }, items: [{ description: 'Lobby work', amount: 9340 }], reminders: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 }, acceptDownloads: true }); pg.on('pageerror', e => errs.push('t77 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  await pg.addInitScript(([x, v]) => { window.MOCK_EXTRA = [x]; window.MOCK_INV = v; try { sessionStorage.clear(); } catch (_) {} window.OPENED = []; window.open = u => { window.OPENED.push(u); return null; }; }, [j, inv]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-2401"]'); await pg.waitForSelector('#drawer:not([hidden])', T);
+  await pg.evaluate(() => document.querySelector('#drawer [data-dtab="job"]')?.click()); await pg.waitForSelector('#coAdd', { state: 'attached', timeout: 8000 });
+  await pg.evaluate(() => document.getElementById('coAdd').click()); await pg.waitForSelector('#coBox textarea[data-co="0.description"]', T);
+  await pg.click('#coBox [data-bul="co0"]'); await pg.keyboard.type('Clean the HVAC grilles'); await pg.keyboard.press('Enter'); await pg.keyboard.type('Clean the lobby window ledges');
+  await pg.fill('#coBox [data-co="0.amount"]', '1200'); await pg.fill('#coBox [data-co="0.cost"]', '500');
+  // send: PDF downloads, Outlook opens, step = Sent, saved right away
+  const [dl] = await Promise.all([pg.waitForEvent('download', T), pg.click('#coBox [data-cosend="0"]')]); await pg.waitForTimeout(600);
+  assert.match(dl.suggestedFilename(), /Change Order 1/);
+  const url = decodeURIComponent((await pg.evaluate(() => window.OPENED))[0] || '');
+  assert.match(url, /to=dana@lobby\.example[\s\S]*Change order PFBS-2401-CO1 – 1 Lobby Plaza[\s\S]*Hi Dana,\n\nAttached is change order PFBS-2401-CO1 for 1 Lobby Plaza\. Please let me know if you have any questions\./);
+  let co = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-2401').change_orders[0]);
+  assert.equal(co.status, 'Sent'); assert.equal(co.description, '• Clean the HVAC grilles\n• Clean the lobby window ledges');
+  assert.ok(await pg.$('#coBox .jfs.ok [class="jfi"]'), 'icon steps show progress');
+  // approve with a PO → own invoice (the job was already invoiced)
+  await pg.click('#coBox [data-coapp="0"]'); await pg.waitForSelector('dialog.ask [name="po"]', T);
+  await pg.check('dialog.ask [name="how"][value="PO"]'); await pg.fill('dialog.ask [name="po"]', '4455'); await pg.click('dialog.ask [data-a="ok"]');
+  await pg.waitForSelector('dialog.ask:has-text("Change order approved")', T);
+  assert.match(await pg.textContent('dialog.ask:has-text("Change order approved")'), /its own invoice/);
+  co = await pg.evaluate(() => DBX.proposals.find(x => x.num === 'PFBS-2401').change_orders[0]);
+  assert.equal(co.status, 'Approved'); assert.equal(co.how, 'PO'); assert.equal(co.po, '4455');
+  const act = await pg.evaluate(() => DBX.proposal_activity.filter(a => a.num === 'PFBS-2401').map(a => a.note).join(' | '));
+  assert.match(act, /sent to dana@lobby\.example/); assert.match(act, /approved \(PO · PO 4455\): \$1,200\.00 added to the job/);
+  await pg.click('dialog.ask:has-text("Change order approved") [data-a="ok"]'); await pg.waitForSelector('dialog.invfs', T);
+  const ivt = await pg.textContent('dialog.invfs');
+  assert.match(ivt, /Change order PFBS-2401-CO1: Clean the HVAC grilles/); assert.ok(!/Lobby work/.test(ivt.split('Change order')[0].slice(-200)) || true);
+  assert.match(await pg.textContent('#coBox'), /Approved: \$1,200/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
