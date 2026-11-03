@@ -1595,7 +1595,11 @@ function newJobPage(recurring, o={}){
       const job=fromRow(res.data); savedNum=job.num; await W(addActivity(job.num,'note','Created as a job from New job'), 'adding the activity note');
       if(q('pbsave').checked && ['Owner','Admin'].includes(role())){ const fresh=lines.filter(l=>l.kind==='svc' && !pbFind(l.desc,'svc')).map(l=>[l.desc.trim(), num(l.price)??'', '', '']);
         if(fresh.length){ const pb=[...(S.priceBook&&S.priceBook.length?S.priceBook:priceBook().filter(x=>x.kind==='svc').map(x=>[x.name, x.price??'', x.unit, x.desc])), ...fresh];
-          const r=await W(sb.from('settings').update({data:{...S, priceBook:pb}, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1), 'adding the service to the price book'); if(!r.error) S.priceBook=pb; } }
+          // update 043: add_price_book lets the Admin add services too (Settings itself is Owner-only); older databases: the Owner writes Settings
+          const base=(S.priceBook&&S.priceBook.length)?[]:pb.slice(0, pb.length-fresh.length), r=await W(sb.rpc('add_price_book', {items:fresh, base}), 'adding the service to the price book');
+          if(!r.error) S.priceBook=pb;
+          else if(role()==='Owner'){ const r2=await W(sb.from('settings').update({data:{...S, priceBook:pb}, updated_at:new Date().toISOString(), updated_by:me.name}).eq('id',1), 'adding the service to the price book'); if(!r2.error) S.priceBook=pb; }
+          else toast('The job is saved. The new service was not added to the price book: run database update 043.'); } }
       if(!q('nosched').checked && q('d1').value){
         const vr={...row0(), num:job.num, techs:[...d.querySelectorAll('[name="techs"]:checked')].map(x=>x.value), equipment:equipFromJob(job), vehicle:null, notes:null, office_notes:null, status:'Scheduled', address:job.siteAddress||job.property||null, client:job.client, title:job.property, work:[]};
         if(rep){ await W(newSeries(vr, {rule:presetRule(rep, vr.visit_date), ends:{type:'never'}}), 'putting the visits on the schedule'); }

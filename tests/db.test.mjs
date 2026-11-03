@@ -524,3 +524,20 @@ console.log(`db: all ${files.length} updates ran twice; service report checks pa
   await db.exec('reset role');
   console.log('db: merge clients passed');
 }
+// 043: the Admin can add new services to the price book (Settings itself stays Owner-only)
+{
+  const q1 = async s => (await db.query(s)).rows[0];
+  await db.exec(`reset role; insert into team_members(email,name,role) values ('adm@x.com','Test Admin','Admin') on conflict (email) do update set role='Admin';
+    update settings set data = jsonb_set(data, '{priceBook}', '[["Window cleaning", 300, "visit", ""]]') where id = 1;
+    select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000003","email":"adm@x.com"}',false); set role authenticated;`);
+  const n = (await q1(`select add_price_book('[["Pressure washing - sidewalks", 3145, "", ""], ["window CLEANING", 1, "", ""]]'::jsonb) n`)).n;
+  assert.equal(n, 1, 'new one added, same name skipped');
+  await db.exec(`reset role;`);
+  const pb = (await q1(`select data->'priceBook' pb from settings where id = 1`)).pb;
+  assert.deepEqual(pb.map(r => r[0]), ['Window cleaning', 'Pressure washing - sidewalks']);
+  assert.equal((await q1(`select count(*)::int c from admin_log where item like 'Price book: added 1 service%'`)).c, 1);
+  await db.exec(`select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-000000000002","email":"e@x.com"}',false); set role authenticated;`);
+  await assert.rejects(db.query(`select add_price_book('[["X", 1, "", ""]]'::jsonb)`), /owner or admin/, 'estimators cannot');
+  await db.exec(`reset role;`);
+  console.log('db: admin adds to the price book passed');
+}

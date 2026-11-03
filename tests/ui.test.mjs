@@ -1944,7 +1944,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.match(act, /Actual hours from the sign-in sheets \(read by AI, checked\): Rigo Perez 14\.5, Israel Hernandez 12, Baldemar Cervantes 5\.5 = 32 hrs over 2 days/); assert.match(act, /skylight/);
   assert.equal(await pg.$('[data-hwcard="PFBS-1501"]'), null, 'leaves the list once saved');
   // payroll week
-  if (!(await pg.$eval('#payBox', e => /Harbor|Rigo Perez/.test(e.textContent)))) { await pg.click('#payBox [data-payw="-1"]'); }
+  if (!(await pg.$eval('#payBox', e => /Baldemar/.test(e.textContent)))) { await pg.click('#payBox [data-payw="-1"]'); await pg.waitForTimeout(200); }   // the week holding d1 (Baldemar only worked d1)
   const pay = await pg.textContent('#payBox'); assert.match(pay, /Rigo Perez/); assert.match(pay, /🦺 Baldemar Cervantes/);
   const [dl] = await Promise.all([pg.waitForEvent('download'), pg.click('#payBox [data-paycsv]')]);
   const csv = fs.readFileSync(await dl.path(), 'utf8'); assert.match(csv, /^Employee,Date,Hours,Jobs/); assert.match(csv, new RegExp(`"Rigo Perez",${d1},8,"#10612"`));
