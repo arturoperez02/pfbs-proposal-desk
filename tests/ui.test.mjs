@@ -2437,6 +2437,25 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 82. Proposal PDF total = qty × amount per line, per year when a line repeats (Arturo 11/4: 12 × $545 monthly added as $545)
+{
+  const pr = { num: 'PFBS-2801', sent_by: 'Arturo', client: 'Total Co', property: '3975 Total Cir', status: 'Estimating', items: [
+    { type: 'Base', qty: 1, frequency: 'Annual', description: 'High-rise exterior window washing', amount: 11059 },
+    { type: 'Base', qty: 12, frequency: 'Monthly', description: 'Monthly window washing', amount: 545 },
+    { type: 'Base', qty: 4, frequency: 'Quarterly', description: 'Quarterly window washing', amount: 487.5 }] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t82 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_EXTRA = [x]; try { sessionStorage.clear(); } catch (_) {} }, pr);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-2801"]'); await pg.waitForSelector('#pdfD', T);
+  await pg.click('#pdfD'); await pg.waitForSelector('dialog.pdfprev iframe', T);
+  const txt = await pg.evaluate(async () => { const raw = await (await fetch(document.querySelector('dialog.pdfprev iframe').src)).text();
+    return [...raw.matchAll(/\(((?:[^()\\]|\\.)*)\) Tj/g)].map(m => m[1].replace(/\\(.)/g, '$1')).join('\n'); });
+  assert.match(txt, /TOTAL PER YEAR[\s\S]*\$19,549\.00/, '11,059 + 12 × 545 + 4 × 487.50');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

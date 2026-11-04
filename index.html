@@ -4145,7 +4145,10 @@ async function makePdf(p, o={}){
       if(it.note){ body.push([{content:String(num(it.qty)??1),rowSpan:2},{content:desc,styles:{fontStyle:'bold'}},{content:it.frequency||'',rowSpan:2,styles:{halign:'center'}},{content:usd(it.amount),rowSpan:2}]); body.push([{content:it.note,styles:{fontStyle:'italic',fontSize:9,textColor:[70,70,70]}}]); }
       else body.push([String(num(it.qty)??1),{content:desc,styles:{fontStyle:'bold'}},{content:it.frequency||'',styles:{halign:'center'}},usd(it.amount)]);
     }
-    const foot = rows.length>1 && g!=='__addon' ? [[ '', {content:'TOTAL',styles:{fontStyle:'bold'}}, {content:[...new Set(rows.map(r=>r.frequency))].length===1?(rows[0].frequency||''):'',styles:{halign:'center'}}, {content:usd(rows.reduce((s,r)=>s+(num(r.amount)||0),0)),styles:{fontStyle:'bold'}} ]] : undefined;
+    // Arturo 11/4: the total is qty × amount for every line (12 × $545 monthly is $6,540 a year, not $545); with any recurring
+    // line it's the total per year
+    const yearly=rows.some(r=>visitsOf(r.frequency||'')>1), tot=rows.reduce((s,r)=>s+(num(r.amount)||0)*lineVisits(r),0);
+    const foot = rows.length>1 && g!=='__addon' ? [[ '', {content:yearly?'TOTAL PER YEAR':'TOTAL',styles:{fontStyle:'bold'}}, {content:[...new Set(rows.map(r=>r.frequency))].length===1?(rows[0].frequency||''):'',styles:{halign:'center'}}, {content:usd(Math.round(tot*100)/100),styles:{fontStyle:'bold'}} ]] : undefined;
     doc.autoTable({startY:y, margin:{left:L0,right:612-R0}, head:[['QTY','DESCRIPTION','FREQUENCY','AMOUNT']], body, foot, showFoot:'lastPage',
       theme:'grid', styles:{font:'helvetica',fontSize:10.5,cellPadding:6,lineColor:[200,200,200],lineWidth:0.5,textColor:20,valign:'middle'},
       headStyles:{fillColor:NAVY,textColor:255,fontStyle:'bold',fontSize:9}, footStyles:{fillColor:[245,246,249],textColor:20},
