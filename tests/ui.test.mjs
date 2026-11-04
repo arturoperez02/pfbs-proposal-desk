@@ -2388,6 +2388,34 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 80. Company holidays (Arturo 11/4, Thanksgiving + the day after): a multi-day weekday job skips them, the work schedule says
+//     so and "Add 2 days at the end" moves the end date out so the job keeps its work days; the Schedule shows Closed
+{
+  const loc = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const wd = n => { const d = new Date(); d.setDate(d.getDate() + n); while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1); return loc(d); };
+  const start = wd(3); const addW = (ds, n) => { const d = new Date(ds + 'T12:00'); let k = 0; while (k < n) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) k++; } return loc(d); };
+  const h1 = addW(start, 3), h2 = addW(start, 4), end = addW(start, 9);   // 10 weekdays, two of them closed
+  const j = { num: 'PFBS-2701', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Holiday Co', property: '3 Holiday Way', amount: 5000, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '10970', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 5000 }] };
+  const vis = [{ id: 'hv1', num: 'PFBS-2701', kind: 'job', status: 'Scheduled', visit_date: start, end_date: end, skip_weekends: true, techs: ['Rigo Perez'], work: [], equipment: [] }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t80 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|open-meteo/, r => r.abort());
+  await pg.addInitScript(([x, v, s]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; window.MOCK_SETTINGS = s; try { sessionStorage.clear(); localStorage.setItem('pfbs.schView', 'month'); } catch (_) {} }, [j, vis, { holidays: [[h1, 'Test Holiday'], [h2, 'Day after']] }]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="pipeline"]'); await pg.waitForTimeout(200); await pg.evaluate(() => [...document.querySelectorAll('[data-f], [data-filter]')].find(x => /^All/.test(x.textContent.trim()))?.click()); await pg.waitForTimeout(200);
+  await pg.click('tr[data-id="PFBS-2701"]'); await pg.waitForSelector('#drawer:not([hidden])', T);
+  await pg.evaluate(() => document.querySelector('#drawer [data-dtab="job"]')?.click()); await pg.waitForSelector('#cwBox', { state: 'attached', timeout: 8000 });
+  const box = await pg.textContent('#cwBox');
+  assert.match(box, /Test Holiday & Day after[\s\S]*2 work days are lost/); assert.match(box, /8 work days/, 'the closed days are not work days');
+  await pg.evaluate(() => document.querySelector('#cwBox [data-holfix]').click()); await pg.waitForTimeout(800);
+  const v = await pg.evaluate(() => DBX.visits.find(x => x.id === 'hv1'));
+  assert.equal(v.end_date, addW(end, 2), 'end moved 2 work days out'); assert.match(v.office_notes, /closed \(Test Holiday & Day after\): 2 days added at the end/);
+  assert.match(await pg.textContent('#cwBox'), /10 work days/); assert.ok(!/days are lost/.test(await pg.textContent('#cwBox')), 'asked only once');
+  await pg.click('#closeD'); await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForTimeout(300);
+  const cal = await pg.evaluate(dd => [...document.querySelectorAll('.scell')].find(c => c.dataset.day === dd)?.textContent || '', h1);
+  assert.ok(cal === '' || /Closed · Test Holiday/.test(cal), 'the Schedule shows the closed day: ' + cal);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
