@@ -2416,6 +2416,27 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 81. Renaming "JLL" to "Mission Towers" and adding JLL as its manager (Arturo 11/4: clients_not_own_manager): the open client is
+//     renamed first (back to Business), JLL is made as its own management company and picked
+{
+  const C = { id: 'c-jll', name: 'JLL', kind: 'Business', aliases: [], active: true, managed_by: null };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t81 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(x => { window.MOCK_CLIENTS = x; try { sessionStorage.clear(); } catch (_) {} }, [C]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="clients"]'); await pg.click('tr[data-cl="c-jll"]'); await pg.waitForSelector('#cl-mgr', T);
+  await pg.fill('#cl-name', 'Mission Towers');
+  await pg.selectOption('#cl-mgr', '__new'); await pg.waitForSelector('dialog.ask [name="name"]', T);
+  await pg.fill('dialog.ask [name="name"]', 'JLL'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForTimeout(600);
+  const all = await pg.evaluate(() => DBX.clients.map(c => [c.id, c.name, c.kind]));
+  const jll = all.find(c => c[1] === 'JLL');
+  assert.ok(jll && jll[0] !== 'c-jll' && jll[2] === 'Management company', 'JLL is a new management company: ' + JSON.stringify(all));
+  assert.deepEqual(all.find(c => c[0] === 'c-jll').slice(1), ['Mission Towers', 'Business'], 'the open client was renamed first');
+  await pg.click('#clSave'); await pg.waitForTimeout(500);
+  assert.equal(await pg.evaluate(() => DBX.clients.find(x => x.id === 'c-jll').managed_by), jll[0], 'managed by the new JLL');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

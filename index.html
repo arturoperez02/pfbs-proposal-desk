@@ -6017,10 +6017,20 @@ document.addEventListener('change', async e=>{ const s=e.target; if(s.id!=='cl-m
   const r=await formDialog('Add a management company', '<label class="f">Company name<input name="name" required placeholder="e.g. Action Property Management"></label><div class="note">It is saved as a client of its own (type Management company), so its contacts are typed once and offered on every building it runs.</div>', 'Add');
   if(!r || !String(r.name||'').trim()) return back(); const name=String(r.name).trim();
   let c=CL.find(x=>norm(x.name)===norm(name));
+  // Arturo 11/4: renaming "JLL" to "Mission Towers" and adding JLL as its manager matched the open client itself (same name),
+  // made it its own manager and failed with clients_not_own_manager. The open client is renamed first, then JLL is made new.
+  if(c && c.id===CLSEL){ const nn=String(document.getElementById('cl-name')?.value||'').trim();
+    if(!nn || norm(nn)===norm(c.name)){ toast(`That's this client. Change this client's name first (e.g. the building or owner's name), then add ${name} as its manager.`); return back(); }
+    if(CL.some(x=>x.id!==c.id && norm(x.name)===norm(nn))){ toast(`There is already a client named ${nn}.`); return back(); }
+    const al=[...new Set([...(c.aliases||[])].filter(a=>norm(a)!==norm(name)))];
+    const row={name:nn, aliases:al}; if(c.kind==='Management company') row.kind='Business';   // it's the owner now; the manager is the new client
+    const u=await sb.from('clients').update(row).eq('id',c.id); if(u.error){ toast(u.error.message); return back(); }
+    Object.assign(c,row); const ks=document.getElementById('cl-kind'); if(ks && row.kind) ks.value=row.kind; c=null; }
   if(!c){ const L=lookalikes({name}).filter(w=>w.c.id!==CLSEL); if(L.length){ const a=await askLookalike(name, L, 'Add'); if(!a) return back(); if(a!=='new') c=a; } }
   if(c){ const row={kind:'Management company'}; if(c.active===false) row.active=true;
     const {error}=await sb.from('clients').update(row).eq('id',c.id); if(error){ toast(error.message); return back(); } Object.assign(c,row); }
   else { const {data,error}=await sb.from('clients').insert({name, kind:'Management company'}).select().single(); if(error){ toast(error.message); return back(); } c=data; CL.push(c); }
+  if(c.id===CLSEL){ toast(`A client can't be its own management company.`); return back(); }
   if(c.managed_by){ toast(`${c.name} is itself managed by another company, so it can't be picked here.`); return back(); }
   let o=[...s.options].find(x=>x.value===c.id); if(!o){ o=new Option(`${c.name} (management company)`, c.id); s.add(o, 2); } else o.textContent=`${c.name} (management company)`;
   s.value=c.id; s.dataset.was=c.id; s.dispatchEvent(new Event('input',{bubbles:true}));
