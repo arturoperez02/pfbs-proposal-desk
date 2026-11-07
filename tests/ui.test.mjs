@@ -2456,6 +2456,26 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 83. Two "Pacific Place"s (Arturo 11/6): search shows each with its address and its management company; sections have colors
+{
+  const C = [{ id: 'c-cw', name: 'Cushman & Wakefield', kind: 'Management company', aliases: [], active: true, managed_by: null },
+             { id: 'c-jll', name: 'JLL', kind: 'Management company', aliases: [], active: true, managed_by: null },
+             { id: 'c-pp1', name: 'Pacific Place', kind: 'Business', aliases: [], active: true, managed_by: 'c-cw' },
+             { id: 'c-pp2', name: 'PP Owner LLC', kind: 'Business', aliases: [], active: true, managed_by: 'c-jll' }];
+  const PR = [{ id: 'p1', client_id: 'c-pp1', name: 'Pacific Place', address: '22 4th Street\nSan Francisco, CA', active: true },
+              { id: 'p2', client_id: 'c-pp2', name: 'Pacific Place', address: '600 Main Street\nOakland, CA', active: true }];
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t83 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(([c, p]) => { window.MOCK_CLIENTS = c; window.MOCK_PROPS = p; try { sessionStorage.clear(); } catch (_) {} }, [C, PR]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.fill('#gq', 'pacific place'); await pg.waitForSelector('#gres .gitem', T);
+  const items = await pg.$$eval('#gres .gitem', L => L.map(x => x.textContent));
+  assert.ok(items.some(x => /Pacific Place — 22 4th Street, San Francisco, CA[\s\S]*managed by Cushman & Wakefield/.test(x)), items.join(' | '));
+  assert.ok(items.some(x => /Pacific Place — 600 Main Street, Oakland, CA[\s\S]*Building of PP Owner LLC[\s\S]*managed by JLL/.test(x)), items.join(' | '));
+  assert.ok(await pg.$('#gres .gsec.gs-cust'), 'the Customers heading has its own color');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
