@@ -358,7 +358,7 @@ td input,td select{padding:5px 8px}
   <section id="view-leads" hidden>
     <div class="toolbar" style="justify-content:space-between">
       <div><h2>Leads</h2><div class="sub" id="leadsSub">New requests waiting for a proposal, and the prospects BD is working on.</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="cardBtn" hidden>📇 Scan cards</button><button class="btn ghost" id="evBtn" hidden>✉️ Event follow-up</button><button class="btn ghost" id="prospBtn" hidden>+ Prospect</button><button class="btn" id="leadBtn2" hidden>+ New lead</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="cardBtn" hidden>📇 Scan cards</button><button class="btn ghost" id="listBtn" hidden>📋 Paste a list</button><button class="btn ghost" id="evBtn" hidden>✉️ Group email</button><button class="btn ghost" id="prospBtn" hidden>+ Prospect</button><button class="btn" id="leadBtn2" hidden>+ New lead</button></div>
     </div>
     <div id="leadsBody"></div>
   </section>
@@ -534,7 +534,10 @@ function countedItems(p){
 }
 const GD_CLAR = [['Gates & Doors', 'Gate & Door Hardware: Pricing reflects direct replacement of the specified components listed; unforeseen frame damage, corrosion, or non-standard mounting conditions discovered during removal may require a change order.'], ['Gates & Doors', 'Client/building management is responsible for providing safe, unobstructed access to the door/gate location, including any lift, ladder staging area, or door lockout needed during installation.']];
 const SVC_WORDS = [['Solar Panel Cleaning',/solar|panel/i],['Pressure Wash',/pressure|power wash|steam/i],['Janitorial',/janitor|custodial|porter/i],['Gutter Cleaning',/gutter/i],['Graffiti Removal',/graffiti/i],['Gates & Doors',/\bgates?\b|\bdoors?\b|closer|electric strike|\bstrikes?\b|roll-?up|garage|panic (bar|device)|exit device|hinge|mag ?lock|card reader/i],['Lights - Decor',/\blights?\b|lighting|decor/i],['Window Cleaning',/window|glass|screen|fa[cç]ade|skylight/i]];
-function guessService(d){ for(const [svc,re] of SVC_WORDS) if(re.test(d||'')) return svc; return 'Other'; }
+// Arturo 11/10 (PFBS-0869): "Window Washing of Lobby, entry/exit doors" printed the Gates & Doors clarifications.
+// Plain "door(s)" / "gate(s)" on a line that mentions windows is window cleaning; door hardware words still mean G&D.
+const GD_HARD=/closer|electric strike|\bstrikes?\b|roll-?up|garage|panic (bar|device)|exit device|hinge|mag ?lock|card reader/i;
+function guessService(d){ d=d||''; for(const [svc,re] of SVC_WORDS) if(re.test(d)){ if(svc==='Gates & Doors' && /window/i.test(d) && !GD_HARD.test(d)) return 'Window Cleaning'; return svc; } return 'Other'; }
 // ---------- estimate (replaces the Excel bid sheets) ----------
 // Bid sheets: numbers copied from the Excel workbooks (WC, SP, PW, G&D). Shared numbers (tax, markups) come from Settings.
 const SHEETS = {
@@ -4503,7 +4506,7 @@ const STAGES=['New','Contacted','Meeting set','Walkthrough','Converted','Not now
 async function loadProspects(){ if(!canProspect()) return; const {data,error}=await sb.from('prospects').select('*').order('next_touch',{ascending:true}); prosOK=!error; PROS=data||[]; if(current()==='leads') renderLeads(); }
 const touchDue = x => !['Converted','Not now'].includes(x.stage) && (!x.next_touch || parse(x.next_touch)<=today());
 function renderLeads(){
-  $('#leadBtn2').hidden=!canLead(); $('#prospBtn').hidden=!canProspect(); $('#cardBtn').hidden=!canProspect(); $('#evBtn').hidden=!canProspect() || !PROS.some(x=>evOf(x));
+  $('#leadBtn2').hidden=!canLead(); $('#prospBtn').hidden=!canProspect(); $('#cardBtn').hidden=!canProspect(); $('#listBtn').hidden=!canProspect(); $('#evBtn').hidden=!canProspect() || !PROS.some(x=>grpOf(x));
   const leads=P.filter(p=>p.status==='Lead').sort((a,b)=>String(a.leadAt||a.createdAt).localeCompare(String(b.leadAt||b.createdAt)));
   const wait=p=>days(parse(p.leadAt||p.createdAt), today());
   const leadRows = leads.length ? leads.map(p=>`<tr data-id="${esc(p.num)}" tabindex="0" class="${p.num===highlight?'hl':''}"><td class="pnum num">${esc(p.num)}</td><td>${esc(p.client)}</td><td class="hide-sm wrap">${esc(p.property)}</td><td class="hide-sm wrap">${esc((p.leadInfo?.services||[]).join(', '))}</td><td class="hide-sm num">${p.leadInfo?.walkthrough?fmtD(p.leadInfo.walkthrough):''}</td><td class="hide-sm">${esc(p.bdRep)}</td><td>${p.sentBy?esc(p.sentBy):'<span class="flag warn">Not assigned</span>'}</td><td class="r num"><span class="${wait(p)>3?'flag bad':''}">${wait(p)}</span></td></tr>`).join('')
@@ -4517,7 +4520,7 @@ function renderLeads(){
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="prosChips">${Object.keys(F).map(k=>`<button class="chip" data-pf="${k}" aria-pressed="${k===prosFilter}">${k} <span class="c">${PROS.filter(F[k]).length}</span></button>`).join('')}</div>
       ${!prosOK?'<div class="note" style="color:var(--warn)">Run database update 007 to turn on prospects.</div>':''}
       <div class="tablewrap"><table><thead><tr><th>Company</th><th class="hide-sm">Property</th><th class="hide-sm">Contact</th><th>Stage</th><th class="hide-sm">Last touch</th><th>Next touch</th>${isManager()?'<th class="hide-sm">BD rep</th>':''}<th></th></tr></thead><tbody id="prosRows">
-      ${list.length?list.map(x=>`<tr data-pid="${x.id}" tabindex="0"><td><b>${esc(x.company)}</b></td><td class="hide-sm wrap">${esc(x.property)}</td><td class="hide-sm">${esc(x.contact_name)}${x.contact_title?` <span class="note" style="margin:0">· ${esc(x.contact_title)}</span>`:''}</td><td><span class="pill ${x.stage==='Converted'?'p-won':x.stage==='Not now'?'p-neutral':x.stage==='New'?'p-lead':'p-review'}">${esc(x.stage)}</span>${x.converted_num?` <span class="note" style="margin:0">${esc(x.converted_num)}</span>`:''}</td><td class="hide-sm num">${fmtD(x.last_touch)}</td><td class="num">${x.next_touch?`<span class="${touchDue(x)?'flag warn':''}">${fmtD(x.next_touch)}${touchDue(x)?' · due':''}</span>`:(touchDue(x)?'<span class="flag warn">Set a date</span>':'—')}</td>${isManager()?`<td class="hide-sm">${esc(x.bd_rep)}</td>`:''}<td class="r">${x.stage!=='Converted'&&canLead()?`<button type="button" class="btn ghost small" data-conv="${x.id}">Convert to lead</button>`:''}</td></tr>`).join('')
+      ${list.length?list.map(x=>`<tr data-pid="${x.id}" tabindex="0"><td><b>${esc(x.company)}</b></td><td class="hide-sm wrap">${esc(x.property)}</td><td class="hide-sm">${esc(x.contact_name)}${x.contact_title?` <span class="note" style="margin:0">· ${esc(x.contact_title)}</span>`:''}</td><td><span class="pill ${x.stage==='Converted'?'p-won':x.stage==='Not now'?'p-neutral':x.stage==='New'?'p-lead':'p-review'}">${esc(x.stage)}</span>${x.converted_num?` <span class="note" style="margin:0">${esc(x.converted_num)}</span>`:''}</td><td class="hide-sm num">${fmtD(x.last_touch)}</td><td class="num">${x.next_touch?`<span class="${touchDue(x)?'flag warn':''}">${fmtD(x.next_touch)}${touchDue(x)?' · due':''}</span>`:(touchDue(x)?'<span class="flag warn">Set a date</span>':'—')}</td>${isManager()?`<td class="hide-sm">${x.bd_rep?esc(x.bd_rep):'<span class="note" style="margin:0">House</span>'}</td>`:''}<td class="r">${x.stage!=='Converted'&&canLead()?`<button type="button" class="btn ghost small" data-conv="${x.id}">Convert to lead</button>`:''}</td></tr>`).join('')
         : `<tr><td colspan="8" class="empty">${prosFilter==='To contact'?'Nobody to contact today.':'No prospects here yet.'} Add one with + Prospect.</td></tr>`}
       </tbody></table></div></div>`;
   }
@@ -4547,7 +4550,7 @@ function drawProspect(){
     <fieldset><legend>Where it stands</legend><div class="grid2">
       <label class="f">Stage<select data-pk="stage" ${dis}>${STAGES.map(v=>`<option ${v===x.stage?'selected':''}>${v}</option>`).join('')}</select></label>
       ${inp('Next touch','next_touch','date')}
-      ${isManager()?`<label class="f">BD rep<select data-pk="bd_rep" ${dis}>${opts(bds,x.bd_rep)}</select></label>`:''}
+      ${isManager()?`<label class="f">BD rep<select data-pk="bd_rep" ${dis}><option value="">No BD rep (house account)</option>${bds.concat(x.bd_rep&&!bds.includes(x.bd_rep)?[x.bd_rep]:[]).map(v=>`<option ${v===x.bd_rep?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`:''}
     </div>
     <label class="f">Notes<textarea data-pk="notes" rows="3" ${dis} placeholder="e.g. Manages 4 buildings in Oakland; current vendor contract ends in March">${esc(x.notes??'')}</textarea></label></fieldset>
     ${!isN?`<fieldset><legend>Touches</legend>
@@ -4586,7 +4589,6 @@ async function pemSend(kind){ const to=$('#pemTo').value.trim(), subj=$('#pemSub
 $('#drawer').addEventListener('change', e=>{ if(e.target.id==='pemTpl') pemOpen(+e.target.value); });
 async function saveProspect(close=true){
   if(!PR.company.trim()){ $('#dmsg').textContent='Add the company name.'; return false; }
-  if(isManager() && !PR.bd_rep){ $('#dmsg').textContent='Pick the BD rep.'; return false; }
   const keys=['company','property','contact_name','contact_title','phone','email','address','stage','next_touch','last_touch','touches','bd_rep','notes'];
   const row={}; for(const k of keys){ let v=PR[k]; if(v==='') v=null; row[k]=v; } if(!row.touches) row.touches=[];
   const res = PR.id ? await sb.from('prospects').update(row).eq('id',PR.id).select().single() : await sb.from('prospects').insert(row).select().single();
@@ -4621,25 +4623,31 @@ $('#leadBtn2').addEventListener('click', ()=>openDrawer(null,{lead:true}));
 $('#prospBtn').addEventListener('click', ()=>openProspect(null));
 $('#cardBtn').addEventListener('click', ()=>scanCards());
 $('#evBtn').addEventListener('click', ()=>eventFollowUp());
+$('#listBtn').addEventListener('click', ()=>pasteList());
 // ---- Trade show follow-up (Arturo 10/18): one "great meeting you at <event>" email per person met there, written once, opened one by one in Outlook;
 // each one sent logs an Email touch, moves the prospect to Contacted and sets the next follow-up a week out
 const evOf = x => (String(x.notes||'').match(/Met at (.+?)\.(\s|$)/)||[])[1] || '';
-const evSent = x => (x.touches||[]).some(t=>t.kind==='Email' && /^Trade show/.test(t.note||''));
+const evSent = x => (x.touches||[]).some(t=>t.kind==='Email' && /^(Trade show|Group email)/.test(t.note||''));
+// Arturo 11/10: a pasted list (📋 Paste a list) is a group too, marked "From list: <name>." in notes; it starts on the Introduction email
+const listOf = x => (String(x.notes||'').match(/From list: (.+?)\.(\s|$)/)||[])[1] || '';
+const grpOf = x => evOf(x) ? 'Event: '+evOf(x) : listOf(x) ? 'List: '+listOf(x) : '';
 function eventFollowUp(ev){
-  const evs=[...new Set(PROS.map(evOf).filter(Boolean))]; if(!evs.length) return toast('No prospects from an event yet. Use 📇 Scan cards first.');
-  ev = ev && evs.includes(ev) ? ev : evs[evs.length-1];
-  const T=(S.bdTemplates||[]).find(t=>t[0]==='Trade show') || DEFAULTS.bdTemplates.find(t=>t[0]==='Trade show');
+  const evs=[...new Set(PROS.map(grpOf).filter(Boolean))]; if(!evs.length) return toast('No prospects from an event or a list yet. Use 📇 Scan cards or 📋 Paste a list first.');
+  ev = ev && evs.includes(ev) ? ev : ev && evs.includes('Event: '+ev) ? 'Event: '+ev : evs[evs.length-1];
+  const TL=S.bdTemplates?.length?S.bdTemplates:DEFAULTS.bdTemplates, tplFor=g=>{ const n=/^List: /.test(g)?'Introduction':'Trade show'; return Math.max(0, TL.findIndex(t=>t[0]===n)); };
+  let T=TL[tplFor(ev)];
   const d=document.createElement('dialog'); d.className='ask cardscan';
-  d.innerHTML=`<div class="toolbar" style="justify-content:space-between;margin:0 0 6px"><h3 style="margin:0">✉️ Event follow-up</h3><button type="button" class="btn ghost small" data-a="x">Close</button></div>
+  d.innerHTML=`<div class="toolbar" style="justify-content:space-between;margin:0 0 6px"><h3 style="margin:0">✉️ Group email</h3><button type="button" class="btn ghost small" data-a="x">Close</button></div>
     <div class="note" style="margin:0 0 8px">Write it once. Each email opens addressed to one person with their first name filled in; check it and send. Outlook adds your signature.</div>
-    <label class="f">Event<select id="efEv">${evs.map(e=>`<option ${e===ev?'selected':''}>${esc(e)}</option>`).join('')}</select></label>
+    <div class="grid2"><label class="f">Group<select id="efEv">${evs.map(e=>`<option value="${esc(e)}" ${e===ev?'selected':''}>${esc(e)}</option>`).join('')}</select></label>
+    <label class="f">Template<select id="efTpl">${TL.map((t,j)=>`<option value="${j}" ${t===T?'selected':''}>${esc(t[0])}</option>`).join('')}</select></label></div>
     <label class="f">Subject<input id="efSubj" value="${esc(T[1])}"></label>
     <label class="f">Message <span class="note" style="margin:0;font-weight:400">{first} {company} {event} fill in for each person</span><textarea id="efBody" rows="8">${esc(T[2])}</textarea></label>
     <div id="efList" class="eflist"></div>
     <div class="toolbar" style="justify-content:space-between;margin-top:8px;flex-wrap:wrap"><span class="note" id="efMsg" style="margin:0"></span><span style="display:flex;gap:8px"><button type="button" class="btn ghost" data-a="mail">Next in Mail app</button><button type="button" class="btn" data-a="next">Open next in Outlook</button></span></div>`;
   document.body.appendChild(d);
-  const who=()=>PROS.filter(x=>evOf(x)===$('#efEv').value);
-  const fill=x=>{ const t=['', $('#efSubj').value, $('#efBody').value].map(v=>v.replace(/\{event\}/g, $('#efEv').value)); return pemFill(t, x); };
+  const who=()=>PROS.filter(x=>grpOf(x)===$('#efEv').value), gName=()=>$('#efEv').value.replace(/^(Event|List): /,'');
+  const fill=x=>{ const t=['', $('#efSubj').value, $('#efBody').value].map(v=>v.replace(/\{event\}/g, gName())); return pemFill(t, x); };
   const draw=()=>{ const L=who(), left=L.filter(x=>x.email&&!evSent(x));
     $('#efList').innerHTML=L.map(x=>`<div class="efrow ${evSent(x)?'done':''}"><span><b>${esc(x.contact_name||x.company)}</b> ${x.contact_name?'· '+esc(x.company):''}<br><small>${x.email?esc(x.email):'no email on the card'}</small></span>
       <span>${evSent(x)?'✓ sent':x.email?`<button type="button" class="btn ghost small" data-one="${x.id}">Open</button>`:''}</span></div>`).join('');
@@ -4648,14 +4656,55 @@ function eventFollowUp(ev){
   const send=async(x, how)=>{ const e=fill(x), enc=encodeURIComponent;
     if(how==='mail') location.href=`mailto:${enc(x.email)}?subject=${enc(e.subject)}&body=${enc(e.body)}`;
     else window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(x.email)}&subject=${enc(e.subject)}&body=${enc(e.body)}`,'_blank','noopener');
-    const td=iso(today()), touches=[...(x.touches||[]), {date:td, kind:'Email', note:`Trade show follow-up: ${e.subject}`, by:me.name}], row={touches, last_touch:td, stage:x.stage==='New'?'Contacted':x.stage, next_touch:addDays(td,7)};
+    const td=iso(today()), touches=[...(x.touches||[]), {date:td, kind:'Email', note:`${/^Event: /.test($('#efEv').value)?'Trade show follow-up':'Group email ('+gName()+')'}: ${e.subject}`, by:me.name}], row={touches, last_touch:td, stage:x.stage==='New'?'Contacted':x.stage, next_touch:addDays(td,7)};
     const {error}=await sb.from('prospects').update(row).eq('id',x.id); if(error){ toast(error.message); return; } Object.assign(x,row); draw(); };
-  d.addEventListener('change', e=>{ if(e.target.id==='efEv'){ $('#efSubj').value=T[1]; draw(); } });
+  const useTpl=i=>{ T=TL[i]||TL[0]; $('#efTpl').value=String(i); $('#efSubj').value=T[1]; $('#efBody').value=T[2]; };
+  d.addEventListener('change', e=>{ if(e.target.id==='efEv'){ useTpl(tplFor(e.target.value)); draw(); } if(e.target.id==='efTpl') useTpl(+e.target.value); });
   d.addEventListener('click', async e=>{ const one=e.target.closest('[data-one]'); if(one){ const x=PROS.find(p=>String(p.id)===one.dataset.one); if(x) await send(x,'owa'); return; }
     const a=e.target.closest('[data-a]')?.dataset.a; if(!a) return; if(a==='x'){ d.close(); d.remove(); if(current()==='leads') renderLeads(); return; }
     const x=who().find(p=>p.email&&!evSent(p)); if(x) await send(x, a==='mail'?'mail':'owa'); });
   d.addEventListener('cancel', e=>{ e.preventDefault(); d.close(); d.remove(); });
   draw(); d.showModal(); }
+// ---- Paste a list → prospects (Arturo 11/10: a client's staff list, "Name – email" per line), then the Group email
+function parseList(txt){ const out=[];
+  for(const raw of String(txt||'').split(/\n/)){ const m=raw.match(/[\w.+'-]+@[\w-]+(\.[\w-]+)+/); if(!m) continue;
+    const name=raw.replace(m[0],'').replace(/\(no name[^)]*\)|[<>()]|mailto:/gi,' ').replace(/[–—,;:\t|-]+\s*$|^\s*[–—,;:\t|-]+/g,'').replace(/\s+[–—|-]\s*$/,'').replace(/\s+/g,' ').trim();
+    out.push({contact_name:name||null, email:m[0].toLowerCase()}); }
+  return out; }
+function pasteList(){
+  const d=document.createElement('dialog'); d.className='ask cardscan'; const mgr=isManager(), reps=TEAM.filter(t=>t.active&&t.role==='BD Rep').map(t=>t.name);
+  d.innerHTML=`<div class="toolbar" style="justify-content:space-between;margin:0 0 6px"><h3 style="margin:0">📋 Paste a list</h3><button type="button" class="btn ghost small" data-a="x">Close</button></div>
+    <div class="note" style="margin:0 0 8px">One person per line, e.g. <b>Jane Doe – jdoe@company.com</b>. Lines with only an email are fine. Everyone is saved as a prospect (stage New), then you can email them one by one.</div>
+    <div class="grid2"><label class="f">Company<input id="plCo" list="clientList" placeholder="e.g. Acme Realty"></label>
+    <label class="f">List name <span class="note" style="margin:0;font-weight:400">to find them later</span><input id="plName" placeholder="e.g. Acme staff 11/2026"></label>
+    <label class="f">BD rep<select id="plRep">${(mgr?['',...reps]:[me.name]).map(n=>`<option value="${esc(n)}" ${n===(role()==='BD Rep'?me.name:'')?'selected':''}>${n?esc(n):'No BD rep (house account)'}</option>`).join('')}</select></label>
+    <label class="f">First follow-up<input type="date" id="plNext" value="${addDays(iso(today()),7)}"></label></div>
+    <label class="f">The list<textarea id="plTxt" rows="9" placeholder="Jane Doe – jdoe@company.com"></textarea></label>
+    <div id="plList" class="eflist" hidden></div>
+    <div class="toolbar" style="justify-content:flex-end;margin-top:8px"><span class="note" id="plMsg" style="margin:0;flex:1"></span><button type="button" class="btn" data-a="save" disabled>Save</button></div>`;
+  document.body.appendChild(d);
+  const have=new Set(PROS.map(x=>String(x.email||'').toLowerCase()).filter(Boolean));
+  let L=[];
+  const draw=()=>{ L=parseList($('#plTxt').value); const dup=L.filter(x=>have.has(x.email)), seen=new Set(), twice=L.filter(x=>seen.has(x.email)||!seen.add(x.email)).length, add=L.length-dup.length-twice;
+    if(!$('#plCo').value.trim() && L[0]){ const dom=L[0].email.split('@')[1].split('.')[0]; $('#plCo').placeholder=dom; }
+    $('#plList').hidden=!L.length;
+    $('#plList').innerHTML=L.map(x=>`<div class="efrow ${have.has(x.email)?'done':''}"><span><b>${x.contact_name?esc(x.contact_name):'<i>no name</i>'}</b><br><small>${esc(x.email)}</small></span><span>${have.has(x.email)?'already a prospect':''}</span></div>`).join('');
+    $('#plMsg').textContent=L.length?`${add} to add${dup.length?` · ${dup.length} already prospects (skipped)`:''}${twice?` · ${twice} listed twice`:''}`:'';
+    const b=d.querySelector('[data-a="save"]'); b.disabled=!add; b.textContent=add?`Save ${add} as prospects`:'Save'; };
+  const close=()=>{ d.close(); d.remove(); if(current()==='leads') renderLeads(); };
+  d.addEventListener('input', e=>{ if(['plTxt','plCo'].includes(e.target.id)) draw(); });
+  d.addEventListener('cancel', e=>{ e.preventDefault(); close(); });
+  d.addEventListener('click', async e=>{ const a=e.target.closest('[data-a]')?.dataset.a; if(!a) return;
+    if(a==='x'){ if(!L.length || confirm('Close without saving this list?')) close(); return; }
+    const co=$('#plCo').value.trim(); if(!co){ toast('Type the company name.'); $('#plCo').focus(); return; }
+    const ln=($('#plName').value.trim()||`${co} ${fmtD(iso(today()))}`).replace(/\./g,''), rep=$('#plRep').value||null, next=$('#plNext').value||null, td=iso(today()), done=new Set();
+    e.target.disabled=true; let n=0;
+    for(const x of L){ if(have.has(x.email)||done.has(x.email)) continue; done.add(x.email);
+      const row={company:co, contact_name:x.contact_name, email:x.email, stage:'New', next_touch:next, last_touch:null, bd_rep:rep, notes:`From list: ${ln}.`, touches:[]};
+      const {error}=await sb.from('prospects').insert(row); if(error){ toast(error.message); break; } n++; have.add(x.email); }
+    await loadProspects(); toast(`${n} prospect${n===1?'':'s'} saved`);
+    close(); if(n && confirm(`Email them now? Each email opens in Outlook one at a time.`)) eventFollowUp('List: '+ln); });
+  d.showModal(); $('#plTxt').focus(); }
 // ---- Business cards → prospects (Arturo 10/18, trade shows): photos are read on the device (cards.js, free), checked by a person, saved in one go
 function scanCards(){
   const d=document.createElement('dialog'); d.className='ask cardscan'; const C=[], mgr=isManager(), reps=TEAM.filter(t=>t.active&&['BD Rep','Owner','Admin','Senior Estimator'].includes(t.role)).map(t=>t.name);
@@ -4663,7 +4712,7 @@ function scanCards(){
   d.innerHTML=`<div class="toolbar" style="justify-content:space-between;margin:0 0 6px"><h3 style="margin:0">📇 Scan business cards</h3><button type="button" class="btn ghost small" data-a="x">Close</button></div>
     <div class="note" style="margin:0 0 8px">One card per photo works best: flat, filling the picture, good light. Take them one after another, or pick photos you already took. Check each card, then save them all.</div>
     <div class="grid2"><label class="f">Where you met them<input id="csEvent" placeholder="e.g. BOMA Oakland Expo 10/2026"></label>
-    <label class="f">BD rep<select id="csRep">${(mgr?['',...reps]:[me.name]).map(n=>`<option ${n===(role()==='BD Rep'?me.name:'')?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
+    <label class="f">BD rep<select id="csRep">${(mgr?['',...reps]:[me.name]).map(n=>`<option value="${esc(n)}" ${n===(role()==='BD Rep'?me.name:'')?'selected':''}>${n?esc(n):'No BD rep (house account)'}</option>`).join('')}</select></label>
     <label class="f">First follow-up<input type="date" id="csNext" value="${nt}"></label>
     <label class="f">Add cards<input type="file" id="csFiles" accept="image/*" multiple></label></div>
     <div id="csList" class="cslist"></div>
@@ -4695,7 +4744,6 @@ function scanCards(){
     if(a==='x'){ if(!C.length || confirm('Close without saving these cards?')) close(); return; }
     if(a!=='save') return;
     const ev=$('#csEvent').value.trim(), rep=$('#csRep').value||null, next=$('#csNext').value||null, L=C.filter(c=>!c.skip);
-    if(mgr && !rep){ toast('Pick the BD rep.'); $('#csRep').focus(); return; }
     const bad=L.find(c=>!(c.f.company||'').trim() && !(c.f.contact_name||'').trim()); if(bad){ toast('Each card needs at least a company or a name.'); return; }
     e.target.disabled=true; let n=0;
     for(const c of L){ const x=c.f, note=[ev?`Met at ${ev}.`:'', x.website?`Website: ${x.website}`:''].filter(Boolean).join(' ');
@@ -5784,6 +5832,7 @@ document.addEventListener('click', e=>{ const th=e.target.closest && e.target.cl
   TSORT[sig]=[col,dir]; sortTable(t,col,dir); });
 new MutationObserver(()=>{ cancelAnimationFrame(TSORT._raf); TSORT._raf=requestAnimationFrame(()=>{ for(const t of document.querySelectorAll('table')){ const s0=TSORT[tSig(t)]; if(s0 && t.tBodies[0] && t.tBodies[0].dataset.sorted!==s0.join(':')) sortTable(t,s0[0],s0[1]); } }); }).observe(document.body,{childList:true, subtree:true});
 window.pfbsToEs=toEs;   // used by the tests
+window.pfbsGuess=guessService;   // used by the tests
 // ---- crew emails (same wording as TechSched) ----
 const crewOf = n => crew().find(c=>c[0]===crewName(n)) || [crewName(n),'','es'];
 function visMailText(v, tech, lang){ const t=I18[lang], dts=dLong(v.visit_date,lang)+(v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang)+(v.skip_weekends?` (${t.weekdays})`:''):'');

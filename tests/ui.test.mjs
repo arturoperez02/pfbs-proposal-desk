@@ -2476,6 +2476,52 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 84. Arturo 11/10: a window line that mentions "entry/exit doors" is window cleaning (no Gates & Doors clarifications);
+//     a prospect can be added with no BD rep (house account)
+{
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t84 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(() => { try { sessionStorage.clear(); } catch (_) {} });
+  pg.on('dialog', d => d.accept());
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  const g = await pg.evaluate(() => [pfbsGuess('Ground Floor interior & Exterior Window Washing of Lobby, entry/exit doors, and management office'),
+    pfbsGuess('Replace door closer on lobby doors'), pfbsGuess('Replace roll-up door next to the dock window'), pfbsGuess('Monthly Pressure Washing of Building Perimeter')]);
+  assert.deepEqual(g, ['Window Cleaning', 'Gates & Doors', 'Gates & Doors', 'Pressure Wash'], JSON.stringify(g));
+  await pg.click('#tabs [data-tab="leads"]'); await pg.waitForSelector('#prospBtn', T); await pg.click('#prospBtn');
+  await pg.waitForSelector('[data-pk="bd_rep"]', T);
+  assert.match(await pg.$eval('[data-pk="bd_rep"] option', o => o.textContent), /No BD rep \(house account\)/);
+  await pg.fill('[data-pk="company"]', 'House Account Test Co'); await pg.click('#prSave'); await pg.waitForTimeout(600);
+  const row = await pg.evaluate(() => DBX.prospects.find(x => x.company === 'House Account Test Co'));
+  assert.ok(row && !row.bd_rep, 'saved with no BD rep: ' + JSON.stringify(row));
+  assert.match(await pg.textContent('#prosRows'), /House Account Test Co[\s\S]*House/);
+  await pg.close();
+}
+
+// 85. Arturo 11/10: paste a staff list → prospects in one go (no BD rep), then the Introduction email one by one
+{
+  const pg = await b.newPage({ viewport: { width: 1300, height: 900 } }); pg.on('pageerror', e => errs.push('t85 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(() => { try { sessionStorage.clear(); } catch (_) {} window.open = u => { window.__opened = (window.__opened || []).concat(u); return null; }; });
+  pg.on('dialog', d => d.accept());
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="leads"]'); await pg.waitForSelector('#listBtn', T); await pg.click('#listBtn');
+  await pg.fill('#plCo', 'Example Life'); await pg.fill('#plName', 'Example staff');
+  await pg.fill('#plTxt', 'Jane Doe – jdoe@example.com\nJohn Q. Sample – JSAMPLE@example.com\n(no name listed) – nobody@example.com\nnot a person line\nJane Doe – jdoe@example.com');
+  await pg.waitForFunction(() => /Save 3 as prospects/.test(document.querySelector('.cardscan [data-a="save"]').textContent), null, T);
+  assert.match(await pg.textContent('#plMsg'), /3 to add · 1 listed twice/);
+  await pg.click('.cardscan [data-a="save"]'); await pg.waitForSelector('#efList', T);
+  const rows = await pg.evaluate(() => DBX.prospects.filter(x => x.company === 'Example Life').map(x => [x.contact_name, x.email, x.bd_rep || null, x.notes]));
+  assert.deepEqual(rows, [['Jane Doe', 'jdoe@example.com', null, 'From list: Example staff.'], ['John Q. Sample', 'jsample@example.com', null, 'From list: Example staff.'], [null, 'nobody@example.com', null, 'From list: Example staff.']], JSON.stringify(rows));
+  assert.equal(await pg.$eval('#efTpl option:checked', o => o.textContent), 'Introduction');
+  await pg.click('.cardscan [data-a="next"]'); await pg.waitForTimeout(300);
+  const op = await pg.evaluate(() => window.__opened || []);
+  assert.ok(op.length === 1 && /to=jdoe%40example\.com/.test(op[0]) && /Hi%20Jane%2C/.test(op[0]), op[0]);
+  assert.match(await pg.textContent('#efMsg'), /3 met · 1 emailed · 2 to go/);
+  const st = await pg.evaluate(() => DBX.prospects.find(x => x.email === 'jdoe@example.com'));
+  assert.equal(st.stage, 'Contacted'); assert.match(st.touches[0].note, /^Group email \(Example staff\)/);
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');
