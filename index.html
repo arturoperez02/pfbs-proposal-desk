@@ -5266,8 +5266,8 @@ async function fixTechNames(){ if(!isManager() || !VISOK) return 0; let n=0;
 const EQUIP_SKILL={'Swing Stage':'Swing Stage','Boom Lift':'Lift Cleaning (Boom/Scissor)','Scissor Lift':'Lift Cleaning (Boom/Scissor)','Bosun Chair':'Chair Work'};
 const workTypes = () => S.workTypes&&S.workTypes.length?S.workTypes:WORK_DEF;
 const equipList = () => S.equipment&&S.equipment.length?S.equipment:EQUIP_DEF;
-const I18 = { en:{when:'When',time:'Time',address:'Address',work:'Work',equipment:'Equipment',team:'Team',notes:'Notes',vehicle:'Vehicle',rental:'Lift / rental',scope:'Scope of work',job:'Job #',weekdays:'weekdays only',questions:'Questions? Just reply to this email.',thanks:'Thanks,',weekOf:'week of',yourSchedule:'Your schedule',noWork:'You have no work scheduled for the week of',sup:'Supervisor'},
-  es:{when:'Fecha',time:'Hora',address:'Dirección',work:'Trabajo',equipment:'Equipo',team:'Técnicos asignados',notes:'Notas',vehicle:'Vehículo',rental:'Elevador / renta',scope:'Alcance del trabajo',job:'Trabajo #',weekdays:'solo días hábiles',questions:'¿Preguntas? Solo responda a este correo.',thanks:'Gracias,',weekOf:'semana del',yourSchedule:'Tu horario',noWork:'No tienes trabajo asignado para la semana del',sup:'Supervisor'} };
+const I18 = { en:{when:'When',time:'Time',address:'Address',work:'Work',equipment:'Equipment',team:'Team',notes:'Notes',vehicle:'Vehicle',rental:'Lift / rental',scope:'Scope of work',job:'Job #',weekdays:'weekdays only',questions:'Questions? Just reply to this email.',thanks:'Thanks,',weekOf:'week of',yourSchedule:'Your schedule',noWork:'You have no work scheduled for the week of',sup:'Supervisor',project:'Project dates',yourDay:'Your work day',yourDays:'Your work days',byTech:'Work days by tech'},
+  es:{when:'Fecha',time:'Hora',address:'Dirección',work:'Trabajo',equipment:'Equipo',team:'Técnicos asignados',notes:'Notas',vehicle:'Vehículo',rental:'Elevador / renta',scope:'Alcance del trabajo',job:'Trabajo #',weekdays:'solo días hábiles',questions:'¿Preguntas? Solo responda a este correo.',thanks:'Gracias,',weekOf:'semana del',yourSchedule:'Tu horario',noWork:'No tienes trabajo asignado para la semana del',sup:'Supervisor',project:'Fechas del proyecto',yourDay:'Tu día de trabajo',yourDays:'Tus días de trabajo',byTech:'Días de trabajo por técnico'} };
 const WORK_ES={'Exterior Window Cleaning':'Limpieza de ventanas (exterior)','Interior Window Cleaning':'Limpieza de ventanas (interior)','Interior & Exterior Window Cleaning':'Limpieza de ventanas (interior y exterior)','Pressure Washing':'Lavado a presión','Ground Pressure Washing':'Lavado a presión (planta baja)','Swing Stage Work':'Trabajo en andamio colgante (swing stage)','Boom Lift Work':'Trabajo con grúa elevadora (boom lift)','Bosun Chair':'Silla de contramaestre (bosun chair)','Monthly Window Washing':'Limpieza de ventanas mensual','Solar Panel Cleaning':'Limpieza de paneles solares','Janitorial':'Limpieza (janitorial)','Gates & Doors':'Puertas y portones'};
 const EQUIP_ES={'Boom Lift':'Grúa elevadora (boom lift)','Scissor Lift':'Elevador de tijera','Swing Stage':'Andamio colgante (swing stage)','Pressure Washer':'Hidrolavadora','Water Tank':'Tanque de agua'};
 const t12 = (t,lang) => { if(!t) return ''; const [h,m]=String(t).split(':').map(Number); const s=`${(h%12)||12}:${String(m||0).padStart(2,'0')} ${h<12?'AM':'PM'}`; return lang==='es'?s.replace('AM','a.m.').replace('PM','p.m.'):s; };
@@ -5649,7 +5649,7 @@ function visPop(v, anchor){ visPopClose();
     ${(rq=>rq.length?`<div class="vp-r"><span>📌</span><span style="color:#b42318"><b>Client requests:</b> ${esc(rq.map(r=>r.text).join(' · '))}</span></div>`:'')(visReqs(v))}
     ${!p&&v.kind==='job'?`<div class="vp-r vpwarn"><span>⚠</span><span>Not linked to a CRM job${v.job_no?' (Job #'+esc(v.job_no)+')':''}, so it can't be invoiced or opened as a job yet.${mgr?' Link it to its job, or make it a job.':''}</span></div>`:''}
     ${p&&canMoney()?`<div class="vp-r" data-vpinv><span>💵</span><span>${money(isRecurring(p)?num(p.amount):wonAmt(p))}${isRecurring(p)?' /visit':''} · <span class="note" style="margin:0">invoice…</span></span></div>`:''}
-    <div class="toolbar" style="margin:8px 0 0;gap:6px;flex-wrap:wrap"><span style="flex:1"></span>${p?'<button type="button" class="btn ghost small" data-vp="job">Open job</button>':''}${p&&canMoney()&&v.kind==='job'?'<button type="button" class="btn ghost small" data-vp="inv">Invoice</button>':''}${!p&&v.kind==='job'&&mgr?'<button type="button" class="btn ghost small" data-vp="link">Link to a job</button><button type="button" class="btn ghost small" data-vp="mkjob">Make it a job</button>':''}<button type="button" class="btn small" data-vp="edit">${mgr?'Edit':'View'}</button></div>`;
+    <div class="toolbar" style="margin:8px 0 0;gap:6px;flex-wrap:wrap"><span style="flex:1"></span>${p?'<button type="button" class="btn ghost small" data-vp="job">Open job</button>':''}${p&&canMoney()&&v.kind==='job'?'<button type="button" class="btn ghost small" data-vp="inv">Invoice</button>':''}${v.kind==='job'&&(v.techs||[]).length?'<button type="button" class="btn ghost small" data-vp="mail">✉ Email crew</button>':''}${!p&&v.kind==='job'&&mgr?'<button type="button" class="btn ghost small" data-vp="link">Link to a job</button><button type="button" class="btn ghost small" data-vp="mkjob">Make it a job</button>':''}<button type="button" class="btn small" data-vp="edit">${mgr?'Edit':'View'}</button></div>`;
   document.body.appendChild(el);
   const r=anchor.getBoundingClientRect(), w=el.offsetWidth, h=el.offsetHeight;
   let x=r.right+6, y=r.top; if(x+w>innerWidth-8) x=Math.max(8, r.left-w-6); if(y+h>innerHeight-8) y=Math.max(8, innerHeight-h-8);
@@ -5659,6 +5659,7 @@ function visPop(v, anchor){ visPopClose();
     else { row.textContent='not invoiced yet'; if(btn) btn.textContent='Invoice'; } })();
   el.addEventListener('click', e=>{ const a=e.target.closest('[data-vp]')?.dataset.vp; if(!a) return; visPopClose();
     if(a==='edit') visEdit(v);
+    if(a==='mail') visMail(v, {day:anchor.closest('[data-day]')?.dataset.day});
     if(a==='inv') invForVisit(v);
     if(a==='link') linkVisitJob(v);
     if(a==='mkjob') jobFromVisit(v);
@@ -5835,20 +5836,45 @@ window.pfbsToEs=toEs;   // used by the tests
 window.pfbsGuess=guessService;   // used by the tests
 // ---- crew emails (same wording as TechSched) ----
 const crewOf = n => crew().find(c=>c[0]===crewName(n)) || [crewName(n),'','es'];
-function visMailText(v, tech, lang){ const t=I18[lang], dts=dLong(v.visit_date,lang)+(v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang)+(v.skip_weekends?` (${t.weekdays})`:''):'');
+// Arturo 11/11: a multi-day job keeps the project dates but each tech's email says the exact day(s) THEY work.
+// The project = every visit of the same job # (one-time jobs split into several visits); a repeat visit is its own project.
+function projVisits(v){ if(!v.num || v.kind==='event' || (v.series_id && !v.job_no)) return [v];
+  const L=VIS.filter(x=>x.num===v.num && x.kind!=='event' && x.status!=='Skipped' && String(x.job_no||'')===String(v.job_no||''));
+  return L.some(x=>x.id===v.id) ? L : [v, ...L]; }
+const projSpan = v => { const L=projVisits(v); return [L.map(x=>x.visit_date).sort()[0], L.map(visEnd).sort().pop(), L.some(x=>x.skip_weekends)]; };
+// the days a tech (null = anyone) is on, from these visits, optionally only from..to
+function techDays(list, tech, from, to){ const out=new Set();
+  for(const x of list){ if(tech && !(x.techs||[]).includes(tech)) continue; for(let d=x.visit_date; d<=visEnd(x); d=addDays(d,1)) if((!from||d>=from) && (!to||d<=to) && visOn(x,d)) out.add(d); }
+  return [...out].sort(); }
+// "Monday, November 10, 2026 – Wednesday, November 12, 2026; Friday, November 14, 2026": days in a row (weekends / holidays between don't break it) become one range
+function dayRanges(days, lang){ const R=[];
+  for(const d of days){ const last=R[R.length-1]; let gap=!!last; if(last) for(let x=addDays(last[1],1); x<d; x=addDays(x,1)) if(!isOff(x)){ gap=false; break; } if(last && (gap || addDays(last[1],1)===d)) last[1]=d; else R.push([d,d]); }
+  return R.map(([a,b])=>a===b?dLong(a,lang):dLong(a,lang)+' – '+dLong(b,lang)).join('; '); }
+const spanText = (v, lang) => { const [a,b,wk]=projSpan(v); return a===b ? dLong(a,lang) : dLong(a,lang)+' – '+dLong(b,lang)+(wk?` (${I18[lang].weekdays})`:''); };
+// o.day = only that day (Email crew from a day on the Schedule)
+function visMailText(v, tech, lang, o={}){ const t=I18[lang], PV=projVisits(v), [pa,pb]=projSpan(v), multi=pa!==pb;
   const team=(v.techs||[]).filter(x=>x!==tech), addr=String(v.address||'').replace(/\n/g,', ');
-  const L=[...(v.job_no?[`${t.job}: ${v.job_no}`]:[]), `${t.when}: ${dts}`, `${t.time}: ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)}`, `${t.address}: ${addr}`];
+  const daysOf=n=>o.day?[o.day]:techDays(PV, n), mine=daysOf(tech);
+  const L=[...(v.job_no?[`${t.job}: ${v.job_no}`]:[])];
+  if(!multi) L.push(`${t.when}: ${dLong(pa,lang)}`);
+  else { L.push(`${t.project}: ${spanText(v,lang)}`);
+    if(tech) L.push(`>> ${mine.length===1?t.yourDay:t.yourDays}: ${dayRanges(mine,lang)||'—'}`);
+    else { const by=(v.techs||[]).map(n=>[n, daysOf(n)]); L.push(`${t.byTech}:`, ...by.map(([n,d])=>`- ${n}: ${dayRanges(d,lang)||'—'}`)); } }
+  L.push(`${t.time}: ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)}`, `${t.address}: ${addr}`);
   if(team.length) L.push(`${t.team}: ${team.join(', ')}`); if(v.supervisor) L.push(`${t.sup}: ${v.supervisor}`);
   { const R=jobRentals(visJob(v)); if(R.length) L.push(`${t.rental}: ${R.map(x=>x.desc||'Lift').join(', ')}`); } if(v.vehicle) L.push(`${t.vehicle}: ${v.vehicle}`); if(v.notes) L.push(`${t.notes}: ${v.notes}`);
   const sc=scopeLines(visJob(v)).map(x=>lang==='es'?toEs(x):x); if(sc.length) L.push('', `${t.scope}:`, ...sc.map(x=>'- '+x));
   L.push('', t.questions, '', t.thanks, 'PFBS');
-  return {subject:(lang==='es'?'Detalles del trabajo':'Job details')+` — ${addr.split(',')[0]} — ${fmtD(v.visit_date)}`, body:L.join('\n')}; }
+  const first=(tech&&mine[0]) || o.day || v.visit_date;
+  return {subject:(lang==='es'?'Detalles del trabajo':'Job details')+` — ${addr.split(',')[0]} — ${fmtD(first)}`, body:L.join('\n')}; }
 function weekText(tech, monday, lang){ const t=I18[lang], sun=addDays(monday,6), first=tech.split(' ')[0];
   const L=VIS.filter(v=>v.status==='Scheduled' && (v.techs||[]).includes(tech) && v.visit_date<=sun && visEnd(v)>=monday && [0,1,2,3,4,5,6].some(k=>visOn(v,addDays(monday,k)))).sort((a,b)=>(a.visit_date+(a.start_time||'')).localeCompare(b.visit_date+(b.start_time||'')));
   if(!L.length) return {subject:`${t.yourSchedule} — ${first} — ${t.weekOf} ${fmtD(monday)}`, body:[`${lang==='es'?'Hola':'Hi'} ${first},`,'',`${t.noWork} ${dLong(monday,lang)}.`,'',t.questions,'',t.thanks,'PFBS'].join('\n'), n:0};
   const out=[`${lang==='es'?'Hola':'Hi'} ${first},`, '', `${t.yourSchedule}, ${t.weekOf} ${dLong(monday,lang)}:`, ''];
   for(const v of L){ const team=(v.techs||[]).filter(x=>x!==tech), addr=String(v.address||'').replace(/\n/g,', ');
-    out.push(`${dLong(v.visit_date,lang)}${v.end_date&&v.end_date!==v.visit_date?' – '+dLong(v.end_date,lang)+(v.skip_weekends?` (${t.weekdays})`:''):''}${v.job_no?` — ${t.job} ${v.job_no}`:''}`, `  ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)} — ${v.kind==='event'?(v.title||''):addr}`);
+    const [pa,pb]=projSpan(v), mine=techDays([v], tech, monday, sun);
+    out.push(`${dayRanges(mine,lang)||dLong(v.visit_date,lang)}${v.job_no?` — ${t.job} ${v.job_no}`:''}`); if(pa!==pb) out.push(`  ${t.project}: ${spanText(v,lang)}`);
+    out.push(`  ${t12(v.start_time,lang)} – ${t12(v.end_time,lang)} — ${v.kind==='event'?(v.title||''):addr}`);
     if(team.length) out.push(`  ${t.team}: ${team.join(', ')}`); if(v.supervisor) out.push(`  ${t.sup}: ${v.supervisor}`);
     { const R=jobRentals(visJob(v)); if(R.length) out.push(`  ${t.rental}: ${R.map(x=>x.desc||'Lift').join(', ')}`); } if(v.vehicle) out.push(`  ${t.vehicle}: ${v.vehicle}`); if(v.notes) out.push(`  ${t.notes}: ${v.notes}`); const sc=scopeLines(visJob(v)).map(x=>lang==='es'?toEs(x):x); if(sc.length) out.push(`  ${t.scope}: ${sc.join('; ')}`); out.push(''); }
   out.push(t.questions, '', t.thanks, 'PFBS');
@@ -5865,10 +5891,14 @@ function mailBox(title, to, txt, relang){ const d=document.createElement('dialog
     if(a==='copy'){ try{ await navigator.clipboard.writeText(`To: ${to2}\nSubject: ${s}\n\n${m}`); toast('Copied'); }catch(_){ toast('Select the text and copy it'); } return; }
     if(a==='owa') window.open(`https://outlook.office.com/mail/deeplink/compose?to=${enc(to2)}&subject=${enc(s)}&body=${enc(m)}`,'_blank','noopener'); else location.href=`mailto:${enc(to2)}?subject=${enc(s)}&body=${enc(m)}`; });
   d.showModal(); }
-function visMail(v){ const techs=v.techs||[]; if(!techs.length){ toast('No techs on this visit yet.'); return; }
-  const pick=async ()=>{ if(techs.length===1) return techs[0]; const r=await formDialog('Email about this visit', `<label class="f">Who<select name="who"><option value="ALL">Everyone on it (${techs.length})</option>${techs.map(t=>`<option>${esc(t)}</option>`).join('')}</select></label>`, 'Next'); return r&&r.who; };
-  pick().then(who=>{ if(!who) return; const one=who!=='ALL', lang=one?crewOf(who)[2]||'en':'en', to=(one?[who]:techs).map(t=>crewOf(t)[1]).filter(Boolean).join(', ');
-    mailBox(`Email — ${one?who:'All techs'}`, to, {...visMailText(v, one?who:null, lang), lang}, l=>({...visMailText(v, one?who:null, l), lang:l})); }); }
+function visMail(v, o={}){ const techs=v.techs||[]; if(!techs.length){ toast('No techs on this visit yet.'); return; }
+  const [pa,pb]=projSpan(v), day=o.day && visEnd(v)>v.visit_date && visOn(v,o.day) ? o.day : null;   // only a visit that itself runs several days offers "only this day"
+  const pick=async ()=>{ if(techs.length===1 && !day) return {who:techs[0]};
+    return formDialog('Email crew', `${techs.length>1?`<label class="f">Who<select name="who"><option value="ALL">Everyone on it (${techs.length})</option>${techs.map(t=>`<option>${esc(t)}</option>`).join('')}</select></label>`:`<input type="hidden" name="who" value="${esc(techs[0])}">`}
+      ${day?`<div class="f">Work day in the email<label style="font-weight:400;display:block"><input type="radio" name="days" value="sched" checked> Their day(s) on the schedule</label><label style="font-weight:400;display:block"><input type="radio" name="days" value="day"> Only ${esc(dLong(day,'en'))} (the day you clicked)</label></div>`:''}
+      <div class="note" style="margin:0">${pa!==pb?`Project dates ${esc(fmtD(pa))} – ${esc(fmtD(pb))} stay in the email; each tech also sees the exact day(s) they work.`:''}</div>`, 'Next'); };
+  pick().then(r=>{ if(!r||!r.who) return; const who=r.who, one=who!=='ALL', lang=one?crewOf(who)[2]||'en':'en', to=(one?[who]:techs).map(t=>crewOf(t)[1]).filter(Boolean).join(', '), oo=r.days==='day'?{day}:{};
+    mailBox(`Email — ${one?who:'All techs'}`, to, {...visMailText(v, one?who:null, lang, oo), lang}, l=>({...visMailText(v, one?who:null, l, oo), lang:l})); }); }
 const initials = n => String(n||'').split(/\s+/).filter(Boolean).map(w=>w[0]).join('').slice(0,3).toUpperCase();
 // which visits the Schedule shows for the tech / supervisor picked ("sup:Name" = that supervisor's projects)
 const schShow = v => !schTech || (schTech.startsWith('sup:') ? v.supervisor===schTech.slice(4) : (v.techs||[]).includes(schTech));

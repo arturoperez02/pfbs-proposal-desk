@@ -220,7 +220,7 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.click('dialog.ask [data-l="en"]'); assert.ok((await pg.$eval('#cmBody', e => e.value)).startsWith('Hi Rigo,'), 'switch to English');
   await pg.locator('dialog.ask').last().locator('[data-a="x"]').click(); await pg.click('dialog.ask [data-t="Ana Tech"]'); await pg.waitForTimeout(200);
   const en = await pg.$eval('#cmBody', e => e.value);
-  assert.ok(/Wednesday, November 4, 2026 – Tuesday, November 17, 2026 \(weekdays only\)/.test(en) && !/Equipment:/.test(en) && /Check in at security/.test(en) && /Scope of work: Swing stage glass/.test(en), 'weekday job, notes and scope in the email (no equipment: the warehouse packs it)');
+  assert.ok(/^Wednesday, November 4, 2026 – Friday, November 6, 2026/m.test(en) && /Project dates: Wednesday, November 4, 2026 – Tuesday, November 17, 2026 \(weekdays only\)/.test(en) && !/Equipment:/.test(en) && /Check in at security/.test(en) && /Scope of work: Swing stage glass/.test(en), 'weekday job, notes and scope in the email (no equipment: the warehouse packs it)');
   await pg.locator('dialog.ask').last().locator('[data-a="x"]').click(); await pg.locator('dialog.ask').last().locator('[data-a="x"]').click();
   await pg.click('#schToday'); for (let i = 0; i < 24; i++) { if ((await pg.$eval('#schedBody b', e => e.textContent)).startsWith('November 2026')) break; await pg.click('#schNext'); await pg.waitForTimeout(80); }
   assert.equal(await pg.$$eval('[data-day="2026-11-07"] .vchip', c => c.filter(x => /Demo Plaza/.test(x.textContent)).length), 0, 'not on Saturday');
@@ -2519,6 +2519,41 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   assert.match(await pg.textContent('#efMsg'), /3 met · 1 emailed · 2 to go/);
   const st = await pg.evaluate(() => DBX.prospects.find(x => x.email === 'jdoe@example.com'));
   assert.equal(st.stage, 'Contacted'); assert.match(st.touches[0].note, /^Group email \(Example staff\)/);
+  await pg.close();
+}
+
+// 86. Arturo 11/11: a multi-day job's crew email keeps the project dates and says each tech's own day; Email crew on the Schedule card
+{
+  const now = new Date(), ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`, D = n => `${ym}-${String(n).padStart(2, '0')}`;
+  const jj = { num: 'PFBS-1386', date_sent: '2026-10-01', sent_by: 'Arturo', client: 'Span Co', property: '5 Span St', site_address: '5 Span St\nOakland, CA 94607', amount: 900, status: 'Scheduled', date_resolved: '2026-10-10', hcp_job: '20500', contract_on: '2026-10-01', items: [{ type: 'Service', qty: 1, description: 'Windows', amount: 900 }] };
+  const vis = [{ id: 'm1', num: 'PFBS-1386', job_no: '20500', kind: 'job', status: 'Scheduled', visit_date: D(10), end_date: D(12), start_time: '06:00', end_time: '14:30', address: '5 Span St, Oakland, CA 94607', techs: ['Rigo Perez', 'Ana Tech'], work: [], equipment: [] },
+               { id: 'm2', num: 'PFBS-1386', job_no: '20500', kind: 'job', status: 'Scheduled', visit_date: D(13), start_time: '06:00', end_time: '14:30', address: '5 Span St, Oakland, CA 94607', techs: ['Ana Tech'], work: [], equipment: [] }];
+  const crewS = { crew: [['Rigo Perez', 'rigo@example.com', 'en', []], ['Ana Tech', 'ana@example.com', 'en', []]] };
+  const pg = await b.newPage({ viewport: { width: 1300, height: 950 } }); pg.on('pageerror', e => errs.push('t86 ' + e.message));
+  await pg.route(/fonts\.googleapis|fonts\.gstatic|jsdelivr|open-meteo/, r => r.abort());
+  await pg.addInitScript(([x, v, s]) => { window.MOCK_EXTRA = [x]; window.MOCK_VIS = v; window.MOCK_SETTINGS = s; sessionStorage.clear(); }, [jj, vis, crewS]);
+  await pg.goto(BASE); await pg.waitForTimeout(900);
+  await pg.click('#tabs [data-tab="schedule"]'); await pg.waitForSelector('[data-vis="m1"]', T);
+  const long = async d => { const [y, mo, da] = d.split('-').map(Number); return new Date(y, mo - 1, da).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); };
+  // Rigo is only on the first visit (days 10–12); the project runs 10–13
+  await pg.click(`[data-day="${D(11)}"] [data-vis="m1"]`); await pg.waitForSelector('.vpop [data-vp="mail"]', T); await pg.click('.vpop [data-vp="mail"]');
+  await pg.waitForSelector('dialog.ask [name="who"]', T); await pg.selectOption('dialog.ask [name="who"]', 'Rigo Perez'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForSelector('#cmBody', T);
+  let m = await pg.$eval('#cmBody', e => e.value);
+  assert.ok(m.includes(`Project dates: ${await long(D(10))} – ${await long(D(13))}`), m);
+  assert.ok(m.includes(`>> Your work days: ${await long(D(10))} – ${await long(D(12))}`), m);
+  assert.equal(await pg.$eval('#cmTo', e => e.value), 'rigo@example.com');
+  await pg.locator('dialog.ask').last().locator('[data-a="x"]').click();
+  // Ana on the one-day visit: her email names that day only, project dates kept
+  await pg.click('[data-vis="m2"]'); await pg.click('.vpop [data-vp="mail"]'); await pg.waitForSelector('#cmBody', T);
+  m = await pg.$eval('#cmBody', e => e.value);
+  assert.ok(m.includes(`Project dates: ${await long(D(10))} – ${await long(D(13))}`) && m.includes(`>> Your work days: ${await long(D(10))} – ${await long(D(13))}`), 'Ana is on both visits: every day ' + m);
+  await pg.locator('dialog.ask').last().locator('[data-a="x"]').click();
+  // "Only the day you clicked", everyone on it
+  await pg.click(`[data-day="${D(11)}"] [data-vis="m1"]`); await pg.click('.vpop [data-vp="mail"]'); await pg.waitForSelector('dialog.ask [name="days"]', T);
+  await pg.check('dialog.ask [name="days"][value="day"]'); await pg.click('dialog.ask [data-a="ok"]'); await pg.waitForSelector('#cmBody', T);
+  m = await pg.$eval('#cmBody', e => e.value);
+  assert.ok(m.includes(`Work days by tech:\n- Rigo Perez: ${await long(D(11))}\n- Ana Tech: ${await long(D(11))}`), m);
+  assert.equal(await pg.$eval('#cmTo', e => e.value), 'rigo@example.com, ana@example.com');
   await pg.close();
 }
 
