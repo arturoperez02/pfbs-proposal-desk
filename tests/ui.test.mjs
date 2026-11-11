@@ -2557,6 +2557,22 @@ pg = await page('reports.html?u=e@x.com', { email: 'e@x.com' }); assert.match(aw
   await pg.close();
 }
 
+// 87. Arturo 11/11: drag & drop photos into the service report's Job photos box → they upload right away; non-photos are skipped
+{
+  const pg = await page('reports.html?num=PFBS-0963', { width: 1100 }); await pg.waitForSelector('#phcard', T);
+  assert.match(await pg.textContent('#phcard .addph'), /drag & drop/);
+  await pg.evaluate(async () => { const b = await (await fetch('logo.jpg')).blob(), dt = new DataTransfer();
+    dt.items.add(new File([b], 'roof.jpg', { type: 'image/jpeg' })); dt.items.add(new File(['x'], 'notes.txt', { type: 'text/plain' }));
+    const box = document.querySelector('#phcard'); for (const ev of ['dragenter', 'dragover']) box.dispatchEvent(new DragEvent(ev, { dataTransfer: dt, bubbles: true, cancelable: true }));
+    window.__hl = box.classList.contains('phdrop'); box.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); });
+  assert.ok(await pg.evaluate(() => window.__hl), 'box lights up while dragging');
+  await pg.waitForSelector('#photos .ph', T);
+  assert.equal(await pg.$$eval('#photos .ph', e => e.length), 1, 'only the photo uploaded');
+  assert.match(await pg.textContent('#phcard h2'), /Job photos \(1\)/);
+  assert.ok(!(await pg.$eval('#phcard', e => e.classList.contains('phdrop'))), 'highlight cleared');
+  await pg.close();
+}
+
 await b.close(); srv.close();
 assert.deepEqual(errs, [], 'no page errors');
 console.log('ui: CRM tabs, report from job, approve & email, HCP report, access checks, invoicing, home board passed');

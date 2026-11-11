@@ -55,6 +55,8 @@ textarea{min-height:84px;resize:vertical}
 .ph .row button.del{color:var(--bad)}
 .addph{border:2px dashed #c9cfdd;border-radius:10px;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--navy2);font-weight:700;background:#fff;cursor:pointer}
 .addph span{font-size:30px;line-height:1}
+.addph small{font-weight:400;color:#667;margin-top:4px;text-align:center}
+#phcard.phdrop{outline:3px dashed var(--navy2);outline-offset:-6px;background:#eef3ff}
 .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 16px;padding-bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:10px;justify-content:center;z-index:6}
 .bar .in{max-width:760px;width:100%;display:flex;gap:10px}
 .btn{border:0;border-radius:12px;padding:13px 14px;font-weight:700;cursor:pointer}
@@ -674,14 +676,14 @@ async function showReport(id) {
     <div class="card"><h2>Work performed</h2>${list('work', 'Services completed', 'One item per line. Each line becomes a numbered item.')}</div>
     <div class="card"><h2>Site conditions & observations</h2>${list('observations', 'Access limitations, pre-existing damage, compliance issues, etc.', 'One item per line.')}</div>
     <div class="card"><h2>Recommendations / action items</h2>${list('recommendations', 'Recommendations', 'One item per line.')}</div>
-    <div class="card"><h2>Job photos (${(r.photos || []).length})</h2>
+    <div class="card" id="phcard"><h2>Job photos (${(r.photos || []).length})</h2>
       <div class="photos" id="photos">${(r.photos || []).map((ph, i) => `
         <div class="ph" data-pid="${esc(ph.id)}"><img loading="lazy" src="${esc(PH_URL[ph.id] || '')}" alt="">
         <input type="text" placeholder="Caption (optional)" data-cap="${esc(ph.id)}" value="${esc(ph.caption)}">
         <div class="row"><button data-mv="-1" ${i === 0 ? 'disabled' : ''}>◀</button><button data-mv="1" ${i === r.photos.length - 1 ? 'disabled' : ''}>▶</button><button class="del" data-del="${esc(ph.id)}">Remove</button></div></div>`).join('')}
-        <label class="addph" for="file"><span>+</span>Add photos</label></div>
+        <label class="addph" for="file"><span>+</span>Add photos<small>or drag &amp; drop them here</small></label></div>
       <input type="file" id="file" accept="image/*" multiple hidden>
-      <div class="hint" id="uphint">Photos go at the end of the report, 2 per row.</div></div>
+      <div class="hint" id="uphint">Drag photos from your computer onto this box (or paste with Ctrl+V); they upload right away. Photos go at the end of the report, 2 per row.</div></div>
     <div class="card"><h2>Email to client</h2>
       <label for="f_contact_first">Greeting name</label><input id="f_contact_first" data-k="contact_first" type="text" value="${esc(r.contact_first)}">
       <label for="f_email_subject">Subject</label><input id="f_email_subject" data-k="email_subject" type="text" value="${esc(r.email_subject)}" placeholder="${esc(defaultSubject(r))}">
@@ -722,6 +724,7 @@ async function showReport(id) {
     await flushSave(); state.report = await api(`/api/reports/${r.id}/photos/${b.dataset.del}`, { method: 'DELETE' }); showReport(r.id);
   });
   $('#file').onchange = e => uploadPhotos([...e.target.files]);
+  dropPhotos($('#phcard'));
   $('#prev').onclick = preview;
   $('#approve').onclick = approveFlow;
   $('#delrep').onclick = async () => {
@@ -752,6 +755,24 @@ async function flushSave() {
 window.addEventListener('beforeunload', e => { if (state.dirty) { flushSave(); e.preventDefault(); } });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
 
+// Arturo 11/11: drag & drop (or paste) photos straight into Job photos; they upload right away, same as + Add photos
+const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+function addDropped(list) {
+  const all = [...(list || [])], imgs = all.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(f.name || ''));
+  if (all.length > imgs.length) toast(`${all.length - imgs.length} file(s) skipped: only photos can go in the report`, 4000);
+  if (imgs.length) uploadPhotos(imgs);
+}
+function dropPhotos(box) {
+  if (!box) return; let depth = 0;
+  box.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); depth++; box.classList.add('phdrop'); });
+  box.addEventListener('dragover', e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  box.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; box.classList.remove('phdrop'); } });
+  box.addEventListener('drop', e => { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); depth = 0; box.classList.remove('phdrop'); addDropped(e.dataTransfer.files); });
+}
+// a photo dropped anywhere else on the page would make the browser open it and leave the report: stop that and point to the box
+window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('drop', e => { if (!hasFiles(e)) return; e.preventDefault(); if ($('#phcard')) toast('Drop the photos on the Job photos box', 3000); });
+document.addEventListener('paste', e => { if (!$('#phcard') || !state.report) return; const fl = [...(e.clipboardData?.files || [])]; if (!fl.length) return; e.preventDefault(); addDropped(fl); });
 function uploadPhotos(files) {
   const job = doUpload(files).finally(() => { if (state.uploading === job) state.uploading = null; });
   state.uploading = job; return job;
